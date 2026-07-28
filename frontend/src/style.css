@@ -1,0 +1,156 @@
+/* CSS Variables based on desain.md */
+:root {
+  --kertas: #EEF1EC;
+  --kertas-kartu: #FFFFFF;
+  --tinta: #1C2420;
+  --tinta-pudar: #5B655F;
+  --garis: #D6DBD3;
+  --aksen: #0F6E56;
+  
+  --status-hadir: #3F7D45;
+  --status-izin: #B8862E;
+  --status-sakit: #3A6EA5;
+  --status-alpha: #A23B2E;
+  --status-terlambat: #C97A2B;
+}
+
+/* Reset & Base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--kertas);
+  color: var(--tinta);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography Utility Classes */
+.ui-text-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.ui-text-name {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tinta);
+}
+
+.ui-text-label {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--tinta);
+}
+
+.ui-text-tabular {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-pudar);
+}
+
+.ui-text-body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--tinta);
+}
+
+/* Components Specific */
+.app-container {
+  max-width: 768px;
+  margin: 0 auto;
+  background-color: var(--kertas-kartu);
+  min-height: 100vh;
+  position: relative;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  background-color: var(--kertas-kartu);
+  z-index: 10;
+  padding: 16px;
+  border-bottom: 1px solid var(--garis);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ledger-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* PillStatus Animation */
+.pill-status {
+  border-radius: 999px;
+  min-height: 44px;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff; /* or --kertas-kartu for contrast */
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 120ms ease;
+  border: none;
+  padding: 0 16px;
+}
+
+/* Indikator Sinkron */
+.indikator-sinkron {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.indikator-sinkron.tersinkron {
+  background-color: var(--tinta-pudar);
+}
+
+.indikator-sinkron.offline {
+  background-color: var(--status-terlambat); /* Orange */
+  animation: pulseOffline 1.5s infinite;
+}
+
+.indikator-sinkron.error {
+  background-color: var(--status-alpha); /* Red */
+}
+
+@keyframes pulseOffline {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indikator-sinkron.offline {
+    animation: none;
+  }
+}
+
+/* Dashboard Grid */
+.dashboard-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}

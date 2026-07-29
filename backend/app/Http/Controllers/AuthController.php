@@ -28,7 +28,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'The provided credentials do not match our records.'
+            'message' => 'Username atau password yang Anda masukkan salah.'
         ], 401);
     }
 

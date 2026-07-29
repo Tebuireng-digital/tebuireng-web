@@ -96,33 +96,19 @@ class PerizinanController extends Controller
             return response()->json(['message' => 'Jenis izin tidak ditemukan'], 404);
         }
 
-        $urutanDefault = $jenisIzin->urutan_tahap_default; // 'Pembina Kamar,Keamanan'
-        $tahapan = array_map('trim', explode(',', $urutanDefault));
-
-        DB::transaction(function () use ($data, $petugas, $tahapan) {
-            $data['status'] = 'Diajukan';
+        DB::transaction(function () use ($data, $petugas) {
+            $data['status'] = 'Disetujui';
             $data['diajukan_oleh'] = $petugas->petugas_id;
             $data['created_at'] = now();
             $data['updated_at'] = now();
 
             $perizinanId = DB::table('perizinan')->insertGetId($data);
-
-            $approvalData = [];
-            foreach ($tahapan as $index => $jabatan) {
-                $approvalData[] = [
-                    'perizinan_id' => $perizinanId,
-                    'tahap' => $index + 1,
-                    'jabatan_approver' => $jabatan,
-                    'keputusan' => 'Menunggu',
-                ];
-            }
-
-            if (!empty($approvalData)) {
-                DB::table('perizinan_approval')->insert($approvalData);
-            }
+            
+            // Note: Sistem approval berjenjang telah ditiadakan sesuai instruksi terbaru.
+            // Perizinan yang diajukan oleh Admin/Keamanan langsung berstatus 'Disetujui'.
         });
 
-        return response()->json(['message' => 'Perizinan berhasil diajukan'], 201);
+        return response()->json(['message' => 'Perizinan berhasil ditambahkan'], 201);
     }
 
     public function approve(Request $request, $id, $tahap)

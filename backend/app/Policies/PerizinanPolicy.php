@@ -17,9 +17,9 @@ class PerizinanPolicy
         return true;
     }
 
-    public function create(Petugas $petugas, $santriId)
+    public function create(Petugas $petugas, $perizinan)
     {
-        return $this->checkAccess($petugas, $santriId);
+        return in_array($petugas->jabatan, ['Admin', 'Keamanan']);
     }
 
     public function update(Petugas $petugas, $perizinan)

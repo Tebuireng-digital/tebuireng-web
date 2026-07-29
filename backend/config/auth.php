@@ -42,6 +42,10 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'santri' => [
+            'driver' => 'session',
+            'provider' => 'santri',
+        ],
     ],
 
     /*
@@ -65,6 +69,10 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\Petugas::class),
+        ],
+        'santri' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Santri::class,
         ],
 
         // 'users' => [

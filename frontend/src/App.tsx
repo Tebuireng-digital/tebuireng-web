@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { BulkInputPage } from './pages/BulkInputPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -9,10 +10,13 @@ import { DataMasterPage } from './pages/DataMasterPage';
 import { LaporanPage } from './pages/LaporanPage';
 import { GantiPasswordPage } from './pages/GantiPasswordPage';
 import { LoginPage } from './pages/LoginPage';
+import { SantriDashboardPage } from './pages/SantriDashboardPage';
+import { SantriRiwayatPage } from './pages/SantriRiwayatPage';
 import { useAuth } from './AuthContext';
 
 function Layout() {
   const { user, logout, loading } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--kertas)' }}>Loading...</div>;
@@ -22,58 +26,139 @@ function Layout() {
     return <LoginPage />;
   }
 
+  const closeMenu = () => setIsMobileMenuOpen(false);
+
+  const isSantri = user.role === 'santri';
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--kertas)' }}>
+    <div className="premium-layout">
+      {/* Mobile Header */}
+      <div className="mobile-header">
+        <h2 className="mobile-header-title">Sistem Absensi</h2>
+        <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+      </div>
+
+      {/* Sidebar Overlay for Mobile */}
+      <div className={`sidebar-overlay ${isMobileMenuOpen ? 'open' : ''}`} onClick={closeMenu}></div>
+
       {/* Sidebar / Navigation */}
-      <div style={{ width: '220px', backgroundColor: 'var(--kertas-kartu)', borderRight: '1px solid var(--garis)', padding: '16px', display: 'flex', flexDirection: 'column' }}>
-        <h2 className="ui-text-title" style={{ marginBottom: '16px' }}>Sistem Absensi</h2>
-        
-        <div style={{ marginBottom: '24px', padding: '12px', backgroundColor: 'var(--latar)', borderRadius: '8px' }}>
-          <p className="ui-text-label" style={{ marginBottom: '4px' }}>Login sebagai:</p>
-          <p className="ui-text-body" style={{ fontWeight: 'bold' }}>{user.nama}</p>
-          <p className="ui-text-label" style={{ color: 'var(--status-alpha)' }}>{user.jabatan}</p>
+      <div className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+          <h2 className="sidebar-title" style={{ marginBottom: 0 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+            Sistem Absensi
+          </h2>
+          <button className="mobile-close-btn" onClick={closeMenu}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto' }}>
-          <Link to="/dashboard" className="ui-text-body">Dashboard</Link>
-          <Link to="/pelanggaran/baru" className="ui-text-body">Input Pelanggaran</Link>
-          <Link to="/perizinan/1" className="ui-text-body">Cek Izin (Santri 1)</Link>
-          <hr style={{ border: 'none', borderTop: '1px solid var(--garis)', margin: '8px 0' }} />
-          <Link to="/persetujuan-izin" className="ui-text-body">Persetujuan Izin</Link>
-          <Link to="/catat-gerbang" className="ui-text-body">Catat Gerbang</Link>
-          <Link to="/data-master" className="ui-text-body">Data Master</Link>
-          <Link to="/laporan/detail" className="ui-text-body">Laporan Detail</Link>
-          <Link to="/ganti-kata-sandi" className="ui-text-body">Ganti Password</Link>
-          <hr style={{ border: 'none', borderTop: '1px solid var(--garis)', margin: '8px 0' }} />
-          <Link to="/absensi/kamar/1" className="ui-text-body">Absensi Kamar 1</Link>
-          <Link to="/absensi/sekolah/1" className="ui-text-body">Absensi Sekolah 1</Link>
+        <div className="sidebar-user-box">
+          <p className="ui-text-label" style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Login sebagai:</p>
+          <p style={{ fontWeight: 'bold', fontSize: '15px', color: '#FFF' }}>{user.nama}</p>
+          <p style={{ fontSize: '12px', color: '#A7F3D0', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            {isSantri ? 'Wali Santri / Santri' : (user as any).jabatan}
+          </p>
+        </div>
+
+        <nav className="sidebar-nav">
+          {isSantri ? (
+            <>
+              <Link to="/santri/dashboard" className="sidebar-nav-link" onClick={closeMenu}>Beranda</Link>
+              <Link to="/santri/riwayat" className="sidebar-nav-link" onClick={closeMenu}>Riwayat Ananda</Link>
+            </>
+          ) : (
+            <>
+              <Link to="/dashboard" className="sidebar-nav-link" onClick={closeMenu}>Dashboard</Link>
+              <Link to="/pelanggaran/baru" className="sidebar-nav-link" onClick={closeMenu}>Input Pelanggaran</Link>
+              <Link to="/perizinan/1" className="sidebar-nav-link" onClick={closeMenu}>Cek Izin (Santri)</Link>
+
+              <hr className="sidebar-nav-divider" />
+
+              {['Admin', 'Keamanan'].includes((user as any).jabatan) && (
+                <Link to="/catat-gerbang" className="sidebar-nav-link" onClick={closeMenu}>Catat Gerbang</Link>
+              )}
+
+              {(user as any).jabatan === 'Admin' && (
+                <Link to="/data-master" className="sidebar-nav-link" onClick={closeMenu}>Data Master</Link>
+              )}
+
+              {['Admin', 'Pengasuh'].includes((user as any).jabatan) && (
+                <Link to="/laporan/detail" className="sidebar-nav-link" onClick={closeMenu}>Laporan Detail</Link>
+              )}
+
+              <Link to="/ganti-kata-sandi" className="sidebar-nav-link" onClick={closeMenu}>Ganti Password</Link>
+
+              <hr className="sidebar-nav-divider" />
+
+              {['Admin', 'Pengasuh', 'Pembina Kamar'].includes((user as any).jabatan) && (
+                <Link to="/absensi/kamar/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Kamar</Link>
+              )}
+
+              {['Admin', 'Pengasuh', 'Wali Kelas'].includes((user as any).jabatan) && (
+                <Link to="/absensi/sekolah/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Sekolah</Link>
+              )}
+
+              {['Admin', 'Pengasuh', 'Ustadz'].includes((user as any).jabatan) && (
+                <>
+                  <Link to="/absensi/pbs/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Pembelajaran Subuh</Link>
+                  <Link to="/absensi/pbm/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Pembelajaran Maghrib</Link>
+                  <Link to="/absensi/diniyah/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Diniyah</Link>
+                </>
+              )}
+            </>
+          )}
         </nav>
 
-        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--garis)' }}>
-          <button 
-            onClick={logout} 
-            className="ui-btn" 
-            style={{ width: '100%', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #f87171' }}
-          >
+        <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
+          <button onClick={logout} className="sidebar-logout-btn">
             Logout
           </button>
         </div>
       </div>
 
-      <div style={{ flex: 1, height: '100vh', overflowY: 'auto' }}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
-          <Route path="/pelanggaran/baru" element={<PelanggaranFormPage />} />
-          <Route path="/perizinan/:santriId" element={<PerizinanPage />} />
-          <Route path="/persetujuan-izin" element={<PersetujuanIzinPage />} />
-          <Route path="/catat-gerbang" element={<CatatGerbangPage />} />
-          <Route path="/data-master" element={<DataMasterPage />} />
-          <Route path="/laporan/detail" element={<LaporanPage />} />
-          <Route path="/ganti-kata-sandi" element={<GantiPasswordPage />} />
-          <Route path="*" element={<Navigate to="/dashboard" />} />
-        </Routes>
+      <div className="dashboard-content">
+        {isSantri ? (
+          <Routes>
+            <Route path="/" element={<Navigate to="/santri/dashboard" />} />
+            <Route path="/santri/dashboard" element={<SantriDashboardPage />} />
+            <Route path="/santri/riwayat" element={<SantriRiwayatPage />} />
+            <Route path="*" element={<Navigate to="/santri/dashboard" />} />
+          </Routes>
+        ) : (
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/pelanggaran/baru" element={<PelanggaranFormPage />} />
+            <Route path="/perizinan/:santriId" element={<PerizinanPage />} />
+            <Route path="/ganti-kata-sandi" element={<GantiPasswordPage />} />
+            
+            {/* Protected Routes based on Jabatan */}
+            <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
+            
+            <Route path="/catat-gerbang" element={
+              ['Admin', 'Keamanan'].includes((user as any).jabatan) 
+                ? <CatatGerbangPage /> 
+                : <Navigate to="/dashboard" />
+            } />
+            
+            <Route path="/data-master" element={
+              (user as any).jabatan === 'Admin' 
+                ? <DataMasterPage /> 
+                : <Navigate to="/dashboard" />
+            } />
+            
+            <Route path="/laporan/detail" element={
+              ['Admin', 'Pengasuh'].includes((user as any).jabatan) 
+                ? <LaporanPage /> 
+                : <Navigate to="/dashboard" />
+            } />
+
+            <Route path="*" element={<Navigate to="/dashboard" />} />
+          </Routes>
+        )}
       </div>
     </div>
   );

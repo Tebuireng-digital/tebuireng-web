@@ -17,9 +17,9 @@ class PelanggaranPolicy
         return true;
     }
 
-    public function create(Petugas $petugas, $santriId)
+    public function create(Petugas $petugas, $pelanggaran)
     {
-        return $this->checkAccess($petugas, $santriId);
+        return $this->checkAccess($petugas, $pelanggaran->santri_id);
     }
 
     public function update(Petugas $petugas, $pelanggaran)

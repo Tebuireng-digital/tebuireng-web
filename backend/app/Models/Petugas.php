@@ -43,7 +43,8 @@ class Petugas extends Authenticatable
             return true;
         }
 
-        return \Illuminate\Support\Facades\DB::table('petugas_penugasan')
+        // Cek tabel petugas_penugasan
+        $hasPenugasan = \Illuminate\Support\Facades\DB::table('petugas_penugasan')
             ->where('petugas_id', $this->petugas_id)
             ->where('tipe_target', $tipeTarget)
             ->where('target_id', $targetId)
@@ -52,5 +53,24 @@ class Petugas extends Authenticatable
                   ->orWhere('tanggal_selesai', '>=', now()->toDateString());
             })
             ->exists();
+
+        if ($hasPenugasan) return true;
+
+        // Fallback untuk Kamar dan Kelas karena di-import di tabel utamanya
+        if ($tipeTarget === 'Kamar') {
+            return \Illuminate\Support\Facades\DB::table('kamar')
+                ->where('kamar_id', $targetId)
+                ->where('pembina_id', $this->petugas_id)
+                ->exists();
+        }
+
+        if ($tipeTarget === 'KelasFormal') {
+            return \Illuminate\Support\Facades\DB::table('kelas_formal')
+                ->where('kelas_formal_id', $targetId)
+                ->where('wali_kelas_id', $this->petugas_id)
+                ->exists();
+        }
+
+        return false;
     }
 }

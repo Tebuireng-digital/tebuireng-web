@@ -6,6 +6,17 @@ use App\Http\Controllers\AuthController;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
+// Portal Santri
+Route::post('/santri/login', [\App\Http\Controllers\SantriPortalController::class, 'login'])->middleware('throttle:login');
+
+Route::middleware(['auth:santri'])->group(function () {
+    Route::post('/santri/logout', [\App\Http\Controllers\SantriPortalController::class, 'logout']);
+    Route::get('/santri/me', [\App\Http\Controllers\SantriPortalController::class, 'me']);
+    Route::get('/santri/me/kehadiran', [\App\Http\Controllers\SantriPortalController::class, 'kehadiran']);
+    Route::get('/santri/me/pelanggaran', [\App\Http\Controllers\SantriPortalController::class, 'pelanggaran']);
+    Route::get('/santri/me/perizinan', [\App\Http\Controllers\SantriPortalController::class, 'perizinan']);
+});
+
 // Temporarily removed auth:sanctum for frontend testing
 Route::group([], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -17,6 +28,7 @@ Route::group([], function () {
     Route::patch('/absensi/{id}', [\App\Http\Controllers\AbsensiController::class, 'update']);
 
     Route::get('/pelanggaran', [\App\Http\Controllers\PelanggaranController::class, 'index']);
+    Route::get('/pelanggaran/kategori', [\App\Http\Controllers\PelanggaranController::class, 'getKategori']);
     Route::post('/pelanggaran', [\App\Http\Controllers\PelanggaranController::class, 'store']);
     Route::post('/pelanggaran/{id}/lampiran', [\App\Http\Controllers\PelanggaranController::class, 'uploadLampiran']);
     Route::get('/santri/{id}/poin', [\App\Http\Controllers\PelanggaranController::class, 'getPoin']);

@@ -13,6 +13,15 @@ use Illuminate\Support\Str;
 
 class PelanggaranController extends Controller
 {
+    public function getKategori()
+    {
+        $kategori = DB::table('kategori_pelanggaran')
+            ->where('status_aktif', 'Aktif')
+            ->orderBy('poin_maks', 'asc')
+            ->get();
+        return response()->json($kategori);
+    }
+
     public function index(Request $request)
     {
         $query = DB::table('pelanggaran')
@@ -60,7 +69,7 @@ class PelanggaranController extends Controller
         $model = new Pelanggaran();
         $model->santri_id = $data['santri_id'];
         if (Gate::forUser($petugas)->denies('create', $model)) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
         }
 
         // Validate kategori
@@ -71,6 +80,14 @@ class PelanggaranController extends Controller
 
         if (!$kategori) {
             return response()->json(['message' => 'Kategori pelanggaran tidak valid atau tidak aktif'], 400);
+        }
+
+        // Validasi Role
+        if ($petugas->jabatan === 'Pembina Kamar' && strtolower(trim($kategori->kategori)) !== 'ringan') {
+            return response()->json(['message' => 'Pembina Kamar hanya dapat menginput pelanggaran Ringan'], 403);
+        }
+        if ($petugas->jabatan === 'Keamanan' && !in_array(strtolower(trim($kategori->kategori)), ['sedang', 'berat'])) {
+            return response()->json(['message' => 'Keamanan hanya dapat menginput pelanggaran Sedang dan Berat'], 403);
         }
 
         $data['petugas_pencatat_id'] = $petugas->petugas_id;

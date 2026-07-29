@@ -26,39 +26,59 @@ export function GantiPasswordPage() {
   };
 
   return (
-    <div className="app-container" style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}>
-      <div style={{ backgroundColor: 'var(--kertas-kartu)', padding: '32px', borderRadius: '8px', width: '100%', maxWidth: '400px' }}>
-        <h1 className="ui-text-title" style={{ marginBottom: '16px', color: 'var(--status-alpha)' }}>Perhatian</h1>
-        <p className="ui-text-body" style={{ marginBottom: '24px' }}>Kata sandi Anda telah di-reset oleh Admin. Anda <strong>wajib</strong> mengganti kata sandi sekarang sebelum dapat menggunakan aplikasi.</p>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 80px)' }}>
+      <div className="stat-card" style={{ width: '100%', maxWidth: '480px', padding: '40px', alignItems: 'stretch' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>Ganti Kata Sandi</h1>
+        <p style={{ color: '#64748B', marginBottom: '32px', fontSize: '15px' }}>
+          Untuk keamanan akun Anda, silakan perbarui kata sandi Anda secara berkala.
+        </p>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div>
-            <label className="ui-text-label" style={{ display: 'block', marginBottom: '8px' }}>Kata Sandi Saat Ini</label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Kata Sandi Saat Ini</label>
             <input 
               type="password" 
-              className="ui-text-body"
-              style={{ width: '100%', padding: '12px', boxSizing: 'border-box', border: '1px solid var(--garis)', borderRadius: '4px' }}
+              style={{ width: '100%', padding: '14px 16px', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: '12px', fontSize: '15px', transition: 'all 0.3s ease', outline: 'none' }}
               value={oldPassword}
               onChange={e => setOldPassword(e.target.value)}
+              onFocus={e => e.target.style.borderColor = '#0F6E56'}
+              onBlur={e => e.target.style.borderColor = '#E2E8F0'}
+              placeholder="••••••••"
               required
             />
           </div>
           <div>
-            <label className="ui-text-label" style={{ display: 'block', marginBottom: '8px' }}>Kata Sandi Baru</label>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Kata Sandi Baru</label>
             <input 
               type="password" 
-              className="ui-text-body"
-              style={{ width: '100%', padding: '12px', boxSizing: 'border-box', border: '1px solid var(--garis)', borderRadius: '4px' }}
+              style={{ width: '100%', padding: '14px 16px', boxSizing: 'border-box', border: '1px solid #E2E8F0', borderRadius: '12px', fontSize: '15px', transition: 'all 0.3s ease', outline: 'none' }}
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
+              onFocus={e => e.target.style.borderColor = '#0F6E56'}
+              onBlur={e => e.target.style.borderColor = '#E2E8F0'}
+              placeholder="••••••••"
               required
             />
           </div>
           <button 
             type="submit" 
             disabled={loading}
-            style={{ width: '100%', padding: '16px', backgroundColor: 'var(--aksen)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '16px' }}
-            className="ui-text-title"
+            style={{ 
+              width: '100%', 
+              padding: '16px', 
+              background: 'linear-gradient(90deg, #0F6E56, #1A4D41)', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '12px', 
+              cursor: 'pointer', 
+              marginTop: '8px',
+              fontWeight: 700,
+              fontSize: '16px',
+              boxShadow: '0 4px 12px rgba(15, 110, 86, 0.2)',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
           >
             {loading ? 'Memproses...' : 'Simpan Kata Sandi Baru'}
           </button>

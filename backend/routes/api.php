@@ -10,6 +10,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/ganti-password', [AuthController::class, 'changePassword']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    Route::middleware('password.changed')->group(function () {
     
     Route::get('/absensi', [\App\Http\Controllers\AbsensiController::class, 'index']);
     Route::get('/absensi-options', [\App\Http\Controllers\AbsensiController::class, 'options']);
@@ -42,8 +44,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/petugas/{id}/reset-password', [\App\Http\Controllers\PetugasController::class, 'resetPassword'])->middleware('role:Admin');
     Route::get('/master/petugas', [\App\Http\Controllers\MasterController::class, 'getPetugas'])->middleware('role:Admin');
     Route::get('/master/kamar', [\App\Http\Controllers\MasterController::class, 'getKamar'])->middleware('role:Admin');
+    Route::post('/master/kamar', [\App\Http\Controllers\MasterController::class, 'storeKamar'])->middleware('role:Admin');
     Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
     Route::get('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'getPenugasan'])->middleware('role:Admin');
     Route::post('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'storePenugasan'])->middleware('role:Admin');
     Route::delete('/master/penugasan/{id}', [\App\Http\Controllers\MasterController::class, 'deletePenugasan'])->middleware('role:Admin');
+    Route::post('/master/import-reviews/sync', [\App\Http\Controllers\ImportReviewController::class, 'sync'])->middleware('role:Admin');
+    Route::get('/master/import-reviews', [\App\Http\Controllers\ImportReviewController::class, 'index'])->middleware('role:Admin');
+    Route::post('/master/import-reviews/{id}/merge', [\App\Http\Controllers\ImportReviewController::class, 'merge'])->middleware('role:Admin');
+    Route::post('/master/import-reviews/{id}/separate', [\App\Http\Controllers\ImportReviewController::class, 'markSeparate'])->middleware('role:Admin');
+    Route::get('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'mappings'])->middleware('role:Admin');
+    Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
+    });
 });

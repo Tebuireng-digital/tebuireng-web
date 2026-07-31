@@ -120,7 +120,7 @@ export function PelanggaranFormPage() {
   };
 
   return (
-    <div style={{ padding: '32px', maxWidth: '800px', margin: '0 auto', position: 'relative' }}>
+    <div className="violation-page">
       
       {/* Modal Pesan Sukses / Error */}
       {modalState.isOpen && (
@@ -149,13 +149,15 @@ export function PelanggaranFormPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>Input Pelanggaran Santri</h1>
-        <p style={{ color: '#64748B', fontSize: '15px' }}>Catat pelanggaran tata tertib santri secara rinci beserta bukti lampirannya.</p>
+      <div className="page-heading">
+        <span className="page-eyebrow">Kedisiplinan santri</span>
+        <h1>Input Pelanggaran</h1>
+        <p>Catat pelanggaran tata tertib secara rinci dan sertakan bukti pendukung.</p>
       </div>
 
-      <div className="stat-card" style={{ padding: '32px' }}>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="stat-card violation-card">
+        <div className="form-section-heading"><span>1</span><div><h2>Data pelanggaran</h2><p>Lengkapi informasi kejadian di bawah ini.</p></div></div>
+        <form onSubmit={handleSubmit} className="violation-form">
           
           {/* Autocomplete Pencarian Santri */}
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
@@ -202,7 +204,7 @@ export function PelanggaranFormPage() {
 
           {/* Info Detail Santri (Muncul setelah dipilih) */}
           {selectedSantri && (
-            <div style={{ padding: '16px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="selected-student" style={{ padding: '16px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', fontSize: '14px' }}>
                 <span style={{ color: '#166534', fontWeight: 600 }}>Unit</span>
                 <span style={{ color: '#14532D' }}>: {selectedSantri.nama_unit || '-'}</span>
@@ -254,7 +256,7 @@ export function PelanggaranFormPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 600, color: '#475569' }}>Bukti Foto (Kamera / File)</label>
-            <div style={{ border: '1px dashed #CBD5E1', borderRadius: '12px', padding: '16px', backgroundColor: '#F8FAFC' }}>
+            <div className="file-dropzone" style={{ border: '1px dashed #CBD5E1', borderRadius: '12px', padding: '16px', backgroundColor: '#F8FAFC' }}>
               <input 
                 type="file"
                 accept="image/*"
@@ -284,6 +286,7 @@ export function PelanggaranFormPage() {
           <button 
             type="submit" 
             disabled={isSubmitting || !selectedSantri}
+            className="violation-submit"
             style={{ 
               width: '100%', 
               padding: '16px', 

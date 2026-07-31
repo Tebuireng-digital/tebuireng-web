@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Absensi;
+use App\Support\KamarName;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,7 +22,6 @@ class AbsensiController extends Controller
             'target_table' => 'kelas_formal',
             'target_pk' => 'kelas_formal_id',
             'target_label' => 'nama_kelas',
-            'owner_column' => 'wali_kelas_id',
         ],
         'kamar' => [
             'kode' => 'KAMAR',
@@ -32,7 +32,6 @@ class AbsensiController extends Controller
             'target_table' => 'kamar',
             'target_pk' => 'kamar_id',
             'target_label' => 'nama',
-            'owner_column' => 'pembina_id',
         ],
         'pbs' => [
             'kode' => 'PBS',
@@ -43,7 +42,6 @@ class AbsensiController extends Controller
             'target_table' => 'kelompok_pbs',
             'target_pk' => 'kelompok_pbs_id',
             'target_label' => 'nama_kelompok',
-            'owner_column' => 'ustadz_id',
         ],
         'diniyah' => [
             'kode' => 'DINIYAH',
@@ -54,7 +52,6 @@ class AbsensiController extends Controller
             'target_table' => 'kelompok_madin',
             'target_pk' => 'kelompok_madin_id',
             'target_label' => 'nama_kelas_madin',
-            'owner_column' => 'ustadz_id',
         ],
         'pbm' => [
             'kode' => 'PBM',
@@ -65,7 +62,6 @@ class AbsensiController extends Controller
             'target_table' => 'kelompok_pbm',
             'target_pk' => 'kelompok_pbm_id',
             'target_label' => 'nama_kelompok',
-            'owner_column' => 'ustadz_id',
         ],
     ];
 
@@ -98,6 +94,16 @@ class AbsensiController extends Controller
                     $config['target_label'].' as nama_target',
                 ]);
 
+            $this->constrainTargetQuery($targetQuery, $config);
+
+            if ($config['tipe_target'] === 'KelasFormal') {
+                $targetQuery->addSelect('tingkat');
+            }
+
+            if ($config['target_table'] === 'kelompok_pbs') {
+                $targetQuery->addSelect('kategori as kategori_target');
+            }
+
             if ($petugas->jabatan !== 'Admin') {
                 $assignedIds = DB::table('petugas_penugasan')
                     ->where('petugas_id', $petugas->petugas_id)
@@ -109,10 +115,7 @@ class AbsensiController extends Controller
                     })
                     ->pluck('target_id');
 
-                $targetQuery->where(function ($query) use ($config, $petugas, $assignedIds) {
-                    $query->whereIn($config['target_pk'], $assignedIds)
-                        ->orWhere($config['owner_column'], $petugas->petugas_id);
-                });
+                $targetQuery->whereIn($config['target_pk'], $assignedIds);
             }
 
             if ($config['target_table'] === 'kamar') {
@@ -120,6 +123,29 @@ class AbsensiController extends Controller
             }
 
             $targets = $targetQuery->orderBy($config['target_label'])->get();
+            if ($config['target_table'] === 'kamar') {
+                $targets->each(function ($target) {
+                    $name = KamarName::parse($target->nama_target);
+                    $target->nama_target_asli = $target->nama_target;
+                    $target->nama_target = $name['standar'];
+                    $target->kategori_target = $name['kategori'];
+                    $target->nomor_target = $name['nomor'];
+                });
+                $targets = $targets->sort(function ($left, $right) {
+                    $categoryComparison = strcasecmp($left->kategori_target, $right->kategori_target);
+                    return $categoryComparison !== 0
+                        ? $categoryComparison
+                        : strnatcasecmp((string) $left->nomor_target, (string) $right->nomor_target);
+                })->values();
+            }
+            if ($config['target_table'] === 'kelompok_pbs') {
+                $targets = $targets->sort(function ($left, $right) {
+                    $kategoriComparison = strcasecmp($left->kategori_target, $right->kategori_target);
+                    return $kategoriComparison !== 0
+                        ? $kategoriComparison
+                        : strnatcasecmp($left->nama_target, $right->nama_target);
+                })->values();
+            }
             if ($targets->isEmpty() && $petugas->jabatan !== 'Admin') {
                 continue;
             }
@@ -155,9 +181,10 @@ class AbsensiController extends Controller
             'tanggal' => 'required|date_format:Y-m-d',
         ]);
 
-        $target = DB::table($config['target_table'])
-            ->where($config['target_pk'], $data['target_id'])
-            ->first();
+        $targetQuery = DB::table($config['target_table'])
+            ->where($config['target_pk'], $data['target_id']);
+        $this->constrainTargetQuery($targetQuery, $config);
+        $target = $targetQuery->first();
         if (!$target) {
             return response()->json(['message' => 'Kelompok absensi tidak ditemukan'], 404);
         }
@@ -201,7 +228,9 @@ class AbsensiController extends Controller
             'nama_kegiatan' => $config['nama'],
             'target' => [
                 'target_id' => $data['target_id'],
-                'nama_target' => $target->{$config['target_label']},
+                'nama_target' => $config['target_table'] === 'kamar'
+                    ? KamarName::parse($target->{$config['target_label']})['standar']
+                    : $target->{$config['target_label']},
             ],
             'jadwal' => $jadwal,
             'tanggal' => $data['tanggal'],
@@ -251,6 +280,13 @@ class AbsensiController extends Controller
             'absensi.*.menit_terlambat' => 'nullable|integer|min:0|max:1440',
             'absensi.*.keterangan' => 'nullable|string|max:255',
         ]);
+
+        $targetQuery = DB::table($config['target_table'])
+            ->where($config['target_pk'], $data['target_id']);
+        $this->constrainTargetQuery($targetQuery, $config);
+        if (!$targetQuery->exists()) {
+            return response()->json(['message' => 'Kelompok absensi tidak termasuk sumber data kegiatan ini'], 422);
+        }
 
         if (!$this->canAccessTarget($request->user(), $config, $data['target_id'])) {
             return response()->json(['message' => 'Anda tidak ditugaskan pada kelompok ini'], 403);
@@ -417,6 +453,21 @@ class AbsensiController extends Controller
 
         $kegiatan = DB::table('jenis_kegiatan')->where('kode', $config['kode'])->first();
         return $kegiatan ? [$config, $kegiatan] : [null, null];
+    }
+
+    /**
+     * Kelas sekolah bersumber eksklusif dari workbook Database Siswa Kelas 7/8/9.
+     * Baris kelas dari workbook Madin tidak boleh menjadi target absensi sekolah.
+     */
+    private function constrainTargetQuery($query, array $config): void
+    {
+        if ($config['tipe_target'] !== 'KelasFormal') {
+            return;
+        }
+
+        $smpUnitId = DB::table('unit_pendidikan')->where('kode', 'SMP')->value('unit_id');
+        $query->where('unit_id', $smpUnitId)
+            ->whereIn('tingkat', ['7', '8', '9']);
     }
 
     private function canAccessTarget($petugas, array $config, int $targetId): bool

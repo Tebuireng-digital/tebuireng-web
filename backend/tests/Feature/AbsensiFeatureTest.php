@@ -104,6 +104,81 @@ class AbsensiFeatureTest extends TestCase
             ->assertJsonPath('santri.0.nama', 'Santri Test');
     }
 
+    public function test_form_teacher_cannot_access_a_different_class_roster(): void
+    {
+        $unitId = DB::table('unit_pendidikan')->where('kode', 'SMP')->value('unit_id');
+        $wali = Petugas::create([
+            'nama' => 'Wali Kelas 7B',
+            'username' => 'wali-7b',
+            'password_hash' => Hash::make('password'),
+            'jabatan' => 'Wali Kelas',
+            'status_aktif' => 1,
+        ]);
+        $kelas7A = DB::table('kelas_formal')->insertGetId([
+            'unit_id' => $unitId,
+            'tingkat' => '7',
+            'nama_kelas' => '7A',
+            'tahun_ajaran' => '2026/2027',
+            // Metadata pemilik tidak boleh menggantikan penugasan eksplisit.
+            'wali_kelas_id' => $wali->petugas_id,
+        ]);
+        $kelas7B = DB::table('kelas_formal')->insertGetId([
+            'unit_id' => $unitId,
+            'tingkat' => '7',
+            'nama_kelas' => '7B',
+            'tahun_ajaran' => '2026/2027',
+        ]);
+        $santri7A = DB::table('santri')->insertGetId([
+            'nama' => 'Santri 7A',
+            'unit_id' => $unitId,
+            'kelas_formal_id' => $kelas7A,
+        ]);
+        $kegiatanSekolahId = DB::table('jenis_kegiatan')->insertGetId([
+            'kode' => 'SEKOLAH',
+            'nama' => 'Absensi Sekolah',
+        ]);
+        $jadwalSekolahId = DB::table('jadwal_kegiatan')->insertGetId([
+            'jenis_kegiatan_id' => $kegiatanSekolahId,
+            'nama_jadwal' => 'Sekolah Pagi',
+            'jam_mulai' => '07:00:00',
+            'jam_selesai' => '07:30:00',
+        ]);
+        DB::table('petugas_penugasan')->insert([
+            'petugas_id' => $wali->petugas_id,
+            'tipe_target' => 'KelasFormal',
+            'target_id' => $kelas7B,
+            'tanggal_mulai' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($wali, 'sanctum');
+
+        $this->getJson('/api/absensi-options')
+            ->assertOk()
+            ->assertJsonPath('0.jenis', 'sekolah')
+            ->assertJsonPath('0.targets.0.target_id', $kelas7B)
+            ->assertJsonMissing(['target_id' => $kelas7A]);
+
+        $query = http_build_query([
+            'target_id' => $kelas7A,
+            'jadwal_id' => $jadwalSekolahId,
+            'tanggal' => now()->toDateString(),
+        ]);
+        $this->getJson('/api/absensi/sekolah/session?'.$query)
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Anda tidak ditugaskan pada kelompok ini');
+
+        $this->postJson('/api/absensi/sekolah/bulk', [
+            'target_id' => $kelas7A,
+            'jadwal_id' => $jadwalSekolahId,
+            'tanggal' => now()->toDateString(),
+            'absensi' => [[
+                'santri_id' => $santri7A,
+                'status' => 'Hadir',
+            ]],
+        ])->assertForbidden()
+            ->assertJsonPath('message', 'Anda tidak ditugaskan pada kelompok ini');
+    }
+
     public function test_monthly_report_uses_real_attendance_totals()
     {
         DB::table('absensi')->insert([

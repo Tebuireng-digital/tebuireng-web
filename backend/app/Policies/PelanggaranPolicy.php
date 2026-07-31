@@ -3,23 +3,33 @@
 namespace App\Policies;
 
 use App\Models\Petugas;
-use Illuminate\Support\Facades\DB;
+use App\Support\SantriAccess;
 
 class PelanggaranPolicy
 {
     public function viewAny(Petugas $petugas)
     {
-        return true;
+        return in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan', 'Pembina Kamar'], true);
     }
 
     public function view(Petugas $petugas, $pelanggaran)
     {
-        return true;
+        if (in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true)) {
+            return true;
+        }
+
+        return $petugas->jabatan === 'Pembina Kamar'
+            && SantriAccess::canAccess($petugas, (int) $pelanggaran->santri_id);
     }
 
     public function create(Petugas $petugas, $pelanggaran)
     {
-        return $this->checkAccess($petugas, $pelanggaran->santri_id);
+        if (in_array($petugas->jabatan, ['Admin', 'Keamanan'], true)) {
+            return true;
+        }
+
+        return $petugas->jabatan === 'Pembina Kamar'
+            && SantriAccess::canAccess($petugas, (int) $pelanggaran->santri_id);
     }
 
     public function update(Petugas $petugas, $pelanggaran)
@@ -36,13 +46,7 @@ class PelanggaranPolicy
     {
         if (in_array($petugas->jabatan, ['Admin', 'Keamanan'], true)) return true;
 
-        $santri = DB::table('santri')->where('santri_id', $santriId)->first();
-        if (!$santri) return false;
-
-        return $petugas->hasAccess('Kamar', $santri->kamar_id) ||
-               $petugas->hasAccess('KelasFormal', $santri->kelas_formal_id) ||
-               $petugas->hasAccess('KelompokMadin', $santri->kelompok_madin_id) ||
-               $petugas->hasAccess('KelompokPBS', $santri->kelompok_pbs_id) ||
-               $petugas->hasAccess('KelompokPBM', $santri->kelompok_pbm_id);
+        return $petugas->jabatan === 'Pembina Kamar'
+            && SantriAccess::canAccess($petugas, (int) $santriId);
     }
 }

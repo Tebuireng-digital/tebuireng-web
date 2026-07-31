@@ -32,8 +32,12 @@ class PerizinanController extends Controller
         return response()->json(DB::table('jenis_izin')->orderBy('nama')->get());
     }
 
-    public function getSantriPerizinan($santriId)
+    public function getSantriPerizinan(Request $request, $santriId)
     {
+        if (!in_array($request->user()->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         return response()->json(DB::table('perizinan')
             ->join('jenis_izin', 'perizinan.jenis_izin_id', '=', 'jenis_izin.jenis_izin_id')
             ->where('perizinan.santri_id', $santriId)

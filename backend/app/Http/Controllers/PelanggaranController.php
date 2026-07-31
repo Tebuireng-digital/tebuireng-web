@@ -9,12 +9,17 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Pelanggaran;
+use App\Support\SantriAccess;
 use Illuminate\Support\Str;
 
 class PelanggaranController extends Controller
 {
-    public function getKategori()
+    public function getKategori(Request $request)
     {
+        if (Gate::forUser($request->user())->denies('viewAny', Pelanggaran::class)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         $kategori = DB::table('kategori_pelanggaran')
             ->where('status_aktif', 'Aktif')
             ->orderBy('poin_maks', 'asc')
@@ -24,9 +29,19 @@ class PelanggaranController extends Controller
 
     public function index(Request $request)
     {
+        $petugas = $request->user();
+        if (Gate::forUser($petugas)->denies('viewAny', Pelanggaran::class)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         $query = DB::table('pelanggaran')
             ->join('kategori_pelanggaran', 'pelanggaran.kategori_pelanggaran_id', '=', 'kategori_pelanggaran.kategori_pelanggaran_id')
-            ->select('pelanggaran.*', 'kategori_pelanggaran.uraian_pelanggaran', 'kategori_pelanggaran.kategori', 'kategori_pelanggaran.poin_maks');
+            ->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id')
+            ->select('pelanggaran.*', 'santri.nama as nama_santri', 'kategori_pelanggaran.uraian_pelanggaran', 'kategori_pelanggaran.kategori', 'kategori_pelanggaran.poin_maks');
+
+        if ($petugas->jabatan === 'Pembina Kamar') {
+            SantriAccess::scopeAssigned($query, $petugas);
+        }
 
         if ($request->has('santri_id')) {
             $query->where('pelanggaran.santri_id', $request->santri_id);
@@ -42,7 +57,6 @@ class PelanggaranController extends Controller
         }
 
         if ($request->has('kamar_id') || $request->has('kelas_id')) {
-            $query->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id');
             if ($request->has('kamar_id')) {
                 $query->where('santri.kamar_id', $request->kamar_id);
             }
@@ -166,8 +180,16 @@ class PelanggaranController extends Controller
         return response()->json(['message' => 'Lampiran berhasil diunggah', 'path' => $path]);
     }
 
-    public function getPoin($santriId)
+    public function getPoin(Request $request, $santriId)
     {
+        $petugas = $request->user();
+        if (!in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan', 'Pembina Kamar'], true)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+        if ($petugas->jabatan === 'Pembina Kamar' && !SantriAccess::canAccess($petugas, (int) $santriId)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         $poin = $this->getPoinSantri($santriId);
         return response()->json(['santri_id' => $santriId, 'total_poin' => $poin]);
     }

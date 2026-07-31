@@ -122,4 +122,7 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    // Development may disable the first-login gate without changing account data.
+    'force_password_change' => env('FORCE_PASSWORD_CHANGE', true),
+
 ];

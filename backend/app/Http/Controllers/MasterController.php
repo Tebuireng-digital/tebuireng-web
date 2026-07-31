@@ -2,29 +2,121 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\KamarName;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class MasterController extends Controller
 {
     private const PENUGASAN = [
-        'sekolah' => ['tipe' => 'KelasFormal', 'table' => 'kelas_formal', 'pk' => 'kelas_formal_id', 'label' => 'nama_kelas', 'jabatan' => 'Wali Kelas'],
-        'kamar' => ['tipe' => 'Kamar', 'table' => 'kamar', 'pk' => 'kamar_id', 'label' => 'nama', 'jabatan' => 'Pembina Kamar'],
-        'pbs' => ['tipe' => 'KelompokPBS', 'table' => 'kelompok_pbs', 'pk' => 'kelompok_pbs_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz'],
-        'diniyah' => ['tipe' => 'KelompokMadin', 'table' => 'kelompok_madin', 'pk' => 'kelompok_madin_id', 'label' => 'nama_kelas_madin', 'jabatan' => 'Ustadz'],
-        'pbm' => ['tipe' => 'KelompokPBM', 'table' => 'kelompok_pbm', 'pk' => 'kelompok_pbm_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz'],
+        'sekolah' => ['tipe' => 'KelasFormal', 'table' => 'kelas_formal', 'pk' => 'kelas_formal_id', 'label' => 'nama_kelas', 'jabatan' => 'Wali Kelas', 'prefix' => 'Kelas'],
+        'kamar' => ['tipe' => 'Kamar', 'table' => 'kamar', 'pk' => 'kamar_id', 'label' => 'nama', 'jabatan' => 'Pembina Kamar', 'prefix' => 'Kamar'],
+        'pbs' => ['tipe' => 'KelompokPBS', 'table' => 'kelompok_pbs', 'pk' => 'kelompok_pbs_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz', 'prefix' => 'PBS'],
+        'diniyah' => ['tipe' => 'KelompokMadin', 'table' => 'kelompok_madin', 'pk' => 'kelompok_madin_id', 'label' => 'nama_kelas_madin', 'jabatan' => 'Ustadz', 'prefix' => 'Madin'],
+        'pbm' => ['tipe' => 'KelompokPBM', 'table' => 'kelompok_pbm', 'pk' => 'kelompok_pbm_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz', 'prefix' => 'PBM'],
     ];
 
     public function getPetugas()
     {
-        return response()->json(DB::table('petugas')
+        $petugas = DB::table('petugas')
             ->select('petugas_id', 'nama', 'username', 'no_hp', 'jabatan', 'status_aktif', 'wajib_ganti_password')
-            ->get());
+            ->orderBy('nama')
+            ->get();
+        $today = now()->toDateString();
+        $assignments = DB::table('petugas_penugasan')
+            ->where('tanggal_mulai', '<=', $today)
+            ->where(function ($query) use ($today) {
+                $query->whereNull('tanggal_selesai')
+                    ->orWhere('tanggal_selesai', '>=', $today);
+            })
+            ->get()
+            ->groupBy('petugas_id');
+
+        foreach ($petugas as $staff) {
+            $labels = collect($assignments->get($staff->petugas_id, []))
+                ->map(function ($assignment) {
+                    $config = collect(self::PENUGASAN)->firstWhere('tipe', $assignment->tipe_target);
+                    if (!$config) {
+                        return null;
+                    }
+                    $target = DB::table($config['table'])
+                        ->where($config['pk'], $assignment->target_id)
+                        ->value($config['label']);
+
+                    if ($target && $assignment->tipe_target === 'Kamar') {
+                        $target = KamarName::parse($target)['standar'];
+                    }
+
+                    return $target ? $config['prefix'].' '.$target : null;
+                })
+                ->filter()
+                ->unique()
+                ->values();
+
+            $staff->tanggung_jawab_absensi = $labels->isEmpty() ? '-' : $labels->join(', ');
+        }
+
+        return response()->json($petugas);
     }
 
     public function getKamar()
     {
-        return response()->json(DB::table('kamar')->get());
+        return response()->json(DB::table('kamar')->orderBy('nama')->get());
+    }
+
+    /** Membuat kamar resmi dan, bila diberi, langsung mengikat kode dari workbook sumber. */
+    public function storeKamar(Request $request)
+    {
+        $data = $request->validate([
+            'nama' => 'required|string|max:100',
+            'kode_sumber' => 'nullable|string|max:100',
+        ]);
+        $nama = trim($data['nama']);
+        $kode = strtoupper(trim($data['kode_sumber'] ?? ''));
+
+        $result = DB::transaction(function () use ($nama, $kode) {
+            $kamar = DB::table('kamar')->where('nama', $nama)->first();
+            if (!$kamar) {
+                $id = DB::table('kamar')->insertGetId([
+                    'nama' => $nama,
+                    'kode_singkat' => $kode ?: null,
+                    'status_aktif' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $kamar = DB::table('kamar')->where('kamar_id', $id)->first();
+            }
+            if ($kode) {
+                if (!$kamar->kode_singkat) {
+                    DB::table('kamar')->where('kamar_id', $kamar->kamar_id)->update([
+                        'kode_singkat' => $kode,
+                        'updated_at' => now(),
+                    ]);
+                    $kamar->kode_singkat = $kode;
+                }
+                DB::table('kamar_kode_mappings')->updateOrInsert(['kode_sumber' => $kode], [
+                    'kamar_id' => $kamar->kamar_id,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]);
+            }
+            $updated = 0;
+            if ($kode) {
+                $santriIds = DB::table('santri_import_reviews')->where('kode_kamar_sumber', $kode)
+                    ->whereNotNull('santri_otomatis_id')->pluck('santri_otomatis_id')->unique();
+                $updated = DB::table('santri')->whereIn('santri_id', $santriIds)->whereNull('kamar_id')
+                    ->update(['kamar_id' => $kamar->kamar_id]);
+                DB::table('santri_import_reviews')->where('kode_kamar_sumber', $kode)
+                    ->where('status', 'perlu_mapping_kamar')->update(['status' => 'perlu_tinjau', 'updated_at' => now()]);
+            }
+            return ['kamar' => $kamar, 'santri_diperbarui' => $updated];
+        });
+
+        return response()->json([
+            'message' => $kode ? 'Kamar resmi dan mapping kode berhasil disimpan.' : 'Kamar resmi berhasil disimpan.',
+            'kamar' => $result['kamar'],
+            'santri_diperbarui' => $result['santri_diperbarui'],
+        ], 201);
     }
 
     public function getSantri()
@@ -65,33 +157,79 @@ class MasterController extends Controller
                 'message' => "Kegiatan ini hanya dapat ditugaskan kepada petugas berjabatan {$config['jabatan']}",
             ], 422);
         }
-        if (!DB::table($config['table'])->where($config['pk'], $data['target_id'])->exists()) {
+        $targetQuery = DB::table($config['table'])->where($config['pk'], $data['target_id']);
+        if ($data['jenis'] === 'sekolah') {
+            $smpUnitId = DB::table('unit_pendidikan')->where('kode', 'SMP')->value('unit_id');
+            $targetQuery->where('unit_id', $smpUnitId)->whereIn('tingkat', ['7', '8', '9']);
+        }
+        if (!$targetQuery->exists()) {
             return response()->json(['message' => 'Kelompok tujuan tidak ditemukan'], 422);
         }
 
-        $existing = DB::table('petugas_penugasan')
-            ->where('petugas_id', $data['petugas_id'])
-            ->where('tipe_target', $config['tipe'])
-            ->where('target_id', $data['target_id'])
-            ->first();
+        $result = DB::transaction(function () use ($data, $config) {
+            $today = now()->toDateString();
 
-        if ($existing) {
-            DB::table('petugas_penugasan')->where('penugasan_id', $existing->penugasan_id)->update([
-                'tanggal_mulai' => now()->toDateString(),
-                'tanggal_selesai' => null,
-            ]);
-            $id = $existing->penugasan_id;
-        } else {
-            $id = DB::table('petugas_penugasan')->insertGetId([
+            // Kelas formal hanya boleh memiliki satu penugasan aktif. wali_kelas_id
+            // tetap metadata kepemilikan dan tidak memberikan akses tanpa penugasan.
+            if ($data['jenis'] === 'sekolah') {
+                $kelas = DB::table('kelas_formal')
+                    ->where('kelas_formal_id', $data['target_id'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($kelas?->wali_kelas_id && (int) $kelas->wali_kelas_id !== $data['petugas_id']) {
+                    $wali = DB::table('petugas')->where('petugas_id', $kelas->wali_kelas_id)->value('nama');
+                    return ['error' => "Kelas {$kelas->nama_kelas} sudah dikelola oleh {$wali} sebagai wali kelas."];
+                }
+
+                $collision = DB::table('petugas_penugasan')
+                    ->join('petugas', 'petugas_penugasan.petugas_id', '=', 'petugas.petugas_id')
+                    ->where('petugas_penugasan.tipe_target', 'KelasFormal')
+                    ->where('petugas_penugasan.target_id', $data['target_id'])
+                    ->where('petugas_penugasan.petugas_id', '!=', $data['petugas_id'])
+                    ->where(function ($query) use ($today) {
+                        $query->whereNull('petugas_penugasan.tanggal_selesai')
+                            ->orWhere('petugas_penugasan.tanggal_selesai', '>=', $today);
+                    })
+                    ->lockForUpdate()
+                    ->first(['petugas.nama as nama_petugas']);
+
+                if ($collision) {
+                    return ['error' => "Kelas {$kelas->nama_kelas} sudah memiliki penugasan aktif untuk {$collision->nama_petugas}."];
+                }
+            }
+
+            $existing = DB::table('petugas_penugasan')
+                ->where('petugas_id', $data['petugas_id'])
+                ->where('tipe_target', $config['tipe'])
+                ->where('target_id', $data['target_id'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                DB::table('petugas_penugasan')->where('penugasan_id', $existing->penugasan_id)->update([
+                    'sumber' => 'manual',
+                    'tanggal_mulai' => $today,
+                    'tanggal_selesai' => null,
+                ]);
+                return ['id' => $existing->penugasan_id];
+            }
+
+            return ['id' => DB::table('petugas_penugasan')->insertGetId([
                 'petugas_id' => $data['petugas_id'],
                 'tipe_target' => $config['tipe'],
                 'target_id' => $data['target_id'],
-                'tanggal_mulai' => now()->toDateString(),
+                'sumber' => 'manual',
+                'tanggal_mulai' => $today,
                 'created_at' => now(),
-            ]);
+            ])];
+        });
+
+        if (isset($result['error'])) {
+            return response()->json(['message' => $result['error']], 422);
         }
 
-        return response()->json(['message' => 'Penugasan berhasil disimpan', 'penugasan_id' => $id], 201);
+        return response()->json(['message' => 'Penugasan berhasil disimpan', 'penugasan_id' => $result['id']], 201);
     }
 
     public function deletePenugasan($id)

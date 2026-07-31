@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Absensi Tebuireng</string>
+    <string name="title_activity_main">Absensi Tebuireng</string>
+    <string name="package_name">id.or.tebuireng.absensi</string>
+    <string name="custom_url_scheme">id.or.tebuireng.absensi</string>
+</resources>

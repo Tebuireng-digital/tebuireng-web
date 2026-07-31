@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\SantriAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -9,6 +10,11 @@ class SantriController extends Controller
 {
     public function index(Request $request)
     {
+        $petugas = $request->user();
+        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pengasuh', 'Pembina Kamar'], true)) {
+            return response()->json(['message' => 'Role Anda tidak dapat membuka direktori santri.'], 403);
+        }
+
         $query = DB::table('santri')
             ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
             ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
@@ -17,12 +23,14 @@ class SantriController extends Controller
                 'santri.nama', 
                 'santri.nis', 
                 'santri.status_aktif',
-                'santri.nama_wali',
-                'santri.no_hp_wali',
                 'kamar.nama as nama_kamar',
                 'unit_pendidikan.nama as nama_unit'
             )
             ->where('santri.status_aktif', 1);
+
+        if ($petugas->jabatan === 'Pembina Kamar') {
+            SantriAccess::scopeAssigned($query, $petugas);
+        }
 
         if ($request->has('q')) {
             $q = $request->q;

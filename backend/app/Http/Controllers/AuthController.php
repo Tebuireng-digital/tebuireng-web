@@ -5,27 +5,37 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
     public function login(Request $request)
     {
+        if (!$request->hasSession()) {
+            return response()->json([
+                'message' => 'Sesi login tidak tersedia. Muat ulang aplikasi lalu coba kembali.',
+                'code' => 'STATEFUL_REQUEST_REQUIRED',
+            ], 419);
+        }
+
         $credentials = $request->validate([
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        // Attempt login using the web guard
         if (Auth::guard('web')->attempt([
             'username' => $credentials['username'],
             'password' => $credentials['password'],
             'status_aktif' => 1,
         ])) {
             $request->session()->regenerate();
+
+            $user = $this->userForResponse(Auth::user());
             
             return response()->json([
                 'message' => 'Logged in successfully',
-                'user' => Auth::user(),
+                'user' => $user,
             ]);
         }
 
@@ -60,7 +70,7 @@ class AuthController extends Controller
             ->get();
 
         return response()->json([
-            'user' => $user,
+            'user' => $this->userForResponse($user),
             'penugasan' => $penugasan
         ]);
     }
@@ -69,20 +79,35 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'old_password' => ['required', 'string'],
-            'new_password' => ['required', 'string', 'min:6', 'different:old_password'],
+            'new_password' => [
+                'required',
+                'string',
+                'confirmed',
+                'different:old_password',
+                Password::min(12)->letters()->numbers(),
+            ],
         ]);
 
         $user = $request->user();
 
-        if (!\Illuminate\Support\Facades\Hash::check($data['old_password'], $user->password_hash)) {
+        if (!Hash::check($data['old_password'], $user->password_hash)) {
             return response()->json(['message' => 'Kata sandi lama tidak sesuai'], 400);
         }
 
         DB::table('petugas')->where('petugas_id', $user->petugas_id)->update([
-            'password_hash' => \Illuminate\Support\Facades\Hash::make($data['new_password']),
+            'password_hash' => Hash::make($data['new_password']),
             'wajib_ganti_password' => false,
         ]);
 
         return response()->json(['message' => 'Kata sandi berhasil diubah']);
+    }
+
+    private function userForResponse($user)
+    {
+        if ($user && !config('auth.force_password_change')) {
+            $user->setAttribute('wajib_ganti_password', false);
+        }
+
+        return $user;
     }
 }

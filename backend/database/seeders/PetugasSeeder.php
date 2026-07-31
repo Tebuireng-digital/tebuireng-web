@@ -13,16 +13,20 @@ class PetugasSeeder extends Seeder
      */
     public function run(): void
     {
+        if (!app()->environment(['local', 'testing'])) {
+            throw new \RuntimeException('PetugasSeeder hanya boleh dijalankan pada local/testing.');
+        }
+
         $roles = ['Pengasuh', 'Ustadz', 'Pembina Kamar', 'Wali Kelas', 'Keamanan', 'Admin'];
+        $fixturePassword = (string) env('LOCAL_SEED_PASSWORD', 'masuk123');
 
         foreach ($roles as $role) {
             $username = strtolower(str_replace(' ', '', $role)); // e.g., pengasuh, ustadz, pembinakamar
 
-            DB::table('petugas')->insert([
+            DB::table('petugas')->updateOrInsert(['username' => $username], [
                 'nama' => 'User ' . $role,
-                'username' => $username,
-                'password_hash' => Hash::make('password'),
-                'wajib_ganti_password' => true,
+                'password_hash' => Hash::make($fixturePassword),
+                'wajib_ganti_password' => false,
                 'no_hp' => '0812' . rand(10000000, 99999999),
                 'jabatan' => $role,
                 'status_aktif' => 1,

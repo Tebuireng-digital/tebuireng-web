@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\PbsGroupName;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use OpenSpout\Reader\XLSX\Reader;
@@ -50,7 +51,7 @@ class ImportExcelCommand extends Command
 
         // 1. Petugas
         $this->info("1. Import Petugas...");
-        $this->importPetugas($fileKamar, $fileSiswa, $filePelanggaran);
+        $this->importPetugas($fileKamar, $fileSiswa);
 
         // 2. Kamar & Mapping CSV
         $this->info("2. Import Kamar & Generate Mapping Draft...");
@@ -58,7 +59,7 @@ class ImportExcelCommand extends Command
 
         // 3. Kelas Formal
         $this->info("3. Import Kelas Formal...");
-        $this->importKelasFormal($fileSiswa, $fileMadin);
+        $this->importKelasFormal($fileSiswa);
 
         // 4. Kelompok
         $this->info("4. Import Kelompok Madin, PBS, PBM...");
@@ -124,7 +125,7 @@ class ImportExcelCommand extends Command
         return $data;
     }
 
-    private function importPetugas($fKamar, $fSiswa, $fPelanggaran)
+    private function importPetugas($fKamar, $fSiswa)
     {
         $petugasMap = []; // name => jabatan
         
@@ -140,21 +141,15 @@ class ImportExcelCommand extends Command
             if ($nama && !isset($petugasMap[$nama])) $petugasMap[$nama] = 'Wali Kelas';
         }
 
-        // Pelanggaran doesn't have data, just form
-        $pelanggaranData = $this->readSheet($fPelanggaran, 'Input Pelanggaran Santri');
-        foreach ($pelanggaranData as $row) {
-            if ($row[0] === 'No') continue; // header
-            $nama = strtoupper(trim($row[12] ?? '')); // Petugas Pencatat
-            if ($nama && !isset($petugasMap[$nama])) $petugasMap[$nama] = 'Admin';
-        }
-
         foreach ($petugasMap as $nama => $jabatan) {
             $exists = DB::table('petugas')->where('nama', $nama)->exists();
             if (!$exists) {
                 do {
                     $username = Str::slug($nama) . '-' . random_int(100, 999);
                 } while (DB::table('petugas')->where('username', $username)->exists());
-                $temporaryPassword = Str::password(12);
+                $temporaryPassword = app()->environment(['local', 'testing'])
+                    ? (string) env('LOCAL_SEED_PASSWORD', 'masuk123')
+                    : Str::password(16);
 
                 DB::table('petugas')->insert([
                     'nama' => $nama,
@@ -176,15 +171,25 @@ class ImportExcelCommand extends Command
             return;
         }
 
-        $path = storage_path('app/akun-petugas-baru.csv');
-        $handle = fopen($path, 'w');
+        $directory = storage_path('app/private/credentials');
+        if (!is_dir($directory)) {
+            mkdir($directory, 0700, true);
+        }
+
+        $path = $directory.'/akun-petugas-'.now()->format('Ymd-His').'.csv';
+        $handle = fopen($path, 'x');
+        if ($handle === false) {
+            throw new \RuntimeException('Gagal membuat file kredensial sementara.');
+        }
         fputcsv($handle, ['nama', 'jabatan', 'username', 'password_sementara']);
         foreach ($this->newPetugasCredentials as $credential) {
             fputcsv($handle, $credential);
         }
         fclose($handle);
+        chmod($path, 0600);
 
-        $this->warn('Akun petugas baru: '.$path.' (bagikan secara aman lalu hapus file).');
+        $this->warn('Kredensial sekali pakai: '.$path);
+        $this->warn('Bagikan melalui kanal aman lalu hapus file segera setelah distribusi.');
     }
 
     private function importKamar($fKamar, $fMadin, $fQuran, $fTakhassus)
@@ -214,17 +219,18 @@ class ImportExcelCommand extends Command
                     $kamarId = $exists->kamar_id;
                 }
                 $this->kamarMap[$namaKamar] = $kamarId;
+                $this->ensureRosterAssignment($pembinaId, 'Kamar', $kamarId);
             }
         }
 
         // Generate mapping CSV
         $uniqueKode = [];
         $d1 = $this->readSheet($fMadin, 'Database Siswa Madin');
-        foreach ($d1 as $r) { if (!empty($r[2])) $uniqueKode[trim($r[2])] = 1; }
+        foreach ($d1 as $r) { if (!empty($r[2])) $uniqueKode[$this->normalizeKamarCode($r[2])] = 1; }
         $d2 = $this->readSheet($fQuran, 'Database Al-Qur\'an');
-        foreach ($d2 as $r) { if (!empty($r[2])) $uniqueKode[trim($r[2])] = 1; }
+        foreach ($d2 as $r) { if (!empty($r[2])) $uniqueKode[$this->normalizeKamarCode($r[2])] = 1; }
         $d3 = $this->readSheet($fTakhassus, 'Database Takhassus');
-        foreach ($d3 as $r) { if (!empty($r[2])) $uniqueKode[trim($r[2])] = 1; }
+        foreach ($d3 as $r) { if (!empty($r[2])) $uniqueKode[$this->normalizeKamarCode($r[2])] = 1; }
 
         $csvPath = storage_path('app/mapping-kamar-draft.csv');
         $existingMapping = [];
@@ -232,7 +238,7 @@ class ImportExcelCommand extends Command
             if (($handle = fopen($csvPath, "r")) !== FALSE) {
                 while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
                     if ($data[0] !== 'kode_singkat') {
-                        $existingMapping[$data[0]] = $data[1] ?? '';
+                        $existingMapping[$this->normalizeKamarCode($data[0])] = $data[1] ?? '';
                     }
                 }
                 fclose($handle);
@@ -284,7 +290,7 @@ class ImportExcelCommand extends Command
         return '';
     }
 
-    private function importKelasFormal($fSiswa, $fMadin)
+    private function importKelasFormal($fSiswa)
     {
         $siswaData = $this->readSheet($fSiswa, 'Database Siswa');
         $smpUnitId = $this->units['SMP'] ?? null;
@@ -310,30 +316,33 @@ class ImportExcelCommand extends Command
                     $id = $exists->kelas_formal_id;
                 }
                 $this->kelasMap[$key] = $id;
+                $this->ensureRosterAssignment($waliId, 'KelasFormal', $id);
             }
         }
 
-        // Madin Unit (Formal Class)
-        $madinData = $this->readSheet($fMadin, 'Database Siswa Madin');
-        foreach ($madinData as $row) {
-            $kelas = trim($row[3] ?? '');
-            $jenjang = trim($row[4] ?? ''); // MTS, SMA, etc
-            $unitId = $this->units[$jenjang] ?? null;
-            if (!$kelas || !$unitId) continue;
-            
-            $key = $unitId . '_' . $kelas;
-            if (!isset($this->kelasMap[$key])) {
-                $exists = DB::table('kelas_formal')->where('unit_id', $unitId)->where('nama_kelas', $kelas)->first();
-                if (!$exists) {
-                    $id = DB::table('kelas_formal')->insertGetId([
-                        'unit_id' => $unitId,
-                        'nama_kelas' => $kelas,
-                    ]);
-                } else {
-                    $id = $exists->kelas_formal_id;
-                }
-                $this->kelasMap[$key] = $id;
-            }
+    }
+
+    private function ensureRosterAssignment(?int $petugasId, string $tipeTarget, int $targetId): void
+    {
+        if (!$petugasId) {
+            return;
+        }
+
+        $exists = DB::table('petugas_penugasan')
+            ->where('petugas_id', $petugasId)
+            ->where('tipe_target', $tipeTarget)
+            ->where('target_id', $targetId)
+            ->exists();
+
+        if (!$exists) {
+            DB::table('petugas_penugasan')->insert([
+                'petugas_id' => $petugasId,
+                'tipe_target' => $tipeTarget,
+                'target_id' => $targetId,
+                'sumber' => 'import',
+                'tanggal_mulai' => now()->toDateString(),
+                'created_at' => now(),
+            ]);
         }
     }
 
@@ -344,6 +353,10 @@ class ImportExcelCommand extends Command
             $jenjang = trim($row[0] ?? '');
             $nama = trim($row[1] ?? '');
             if (!$nama) continue;
+            if (strtoupper($nama) === 'TOTAL') continue;
+            // Tujuh baris 2 ULYA diduplikasi lagi oleh sumber ke 2 ULYA (C).
+            // Gunakan roster yang lebih spesifik agar satu santri tidak masuk dua kelas Madin.
+            if (strtoupper($jenjang) === 'SMA' && strtoupper($nama) === '2 ULYA') continue;
             
             $exists = DB::table('kelompok_madin')->where('jenjang', $jenjang)->where('nama_kelas_madin', $nama)->first();
             if (!$exists) {
@@ -362,6 +375,9 @@ class ImportExcelCommand extends Command
             $kategori = trim($row[0] ?? '');
             $nama = trim($row[1] ?? '');
             if (!$nama) continue;
+            // Baris TOTAL pada sheet adalah rekap, bukan kelompok PBS.
+            if (strtoupper($nama) === 'TOTAL') continue;
+            $nama = $this->normalizePbsGroupName($nama);
             $exists = DB::table('kelompok_pbs')->where('kategori', $kategori)->where('nama_kelompok', $nama)->first();
             if (!$exists) {
                 $id = DB::table('kelompok_pbs')->insertGetId([
@@ -377,6 +393,7 @@ class ImportExcelCommand extends Command
             $kategori = trim($row[0] ?? '');
             $nama = trim($row[1] ?? '');
             if (!$nama) continue;
+            if (strtoupper($nama) === 'TOTAL') continue;
             $exists = DB::table('kelompok_pbm')->where('kategori', $kategori)->where('nama_kelompok', $nama)->first();
             if (!$exists) {
                 $id = DB::table('kelompok_pbm')->insertGetId([
@@ -386,6 +403,11 @@ class ImportExcelCommand extends Command
             } else { $id = $exists->kelompok_pbm_id; }
             $this->pbmMap[$kategori.'_'.$nama] = $id;
         }
+    }
+
+    private function normalizePbsGroupName(string $nama): string
+    {
+        return PbsGroupName::normalize($nama);
     }
 
     private function importKategoriPelanggaran($fPelanggaran)
@@ -416,10 +438,19 @@ class ImportExcelCommand extends Command
             if (($handle = fopen($csvPath, "r")) !== FALSE) {
                 while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
                     if ($data[0] !== 'kode_singkat' && !empty($data[1])) {
-                        $this->kamarSingkatanMap[$data[0]] = $data[1];
+                        $this->kamarSingkatanMap[$this->normalizeKamarCode($data[0])] = $data[1];
                     }
                 }
                 fclose($handle);
+            }
+        }
+
+        // Mapping yang telah dikonfirmasi melalui CMS Admin selalu menang atas draft CSV.
+        if (\Illuminate\Support\Facades\Schema::hasTable('kamar_kode_mappings')) {
+            foreach (DB::table('kamar_kode_mappings as mapping')
+                ->join('kamar', 'mapping.kamar_id', '=', 'kamar.kamar_id')
+                ->select('mapping.kode_sumber', 'kamar.nama')->get() as $mapping) {
+                $this->kamarSingkatanMap[$this->normalizeKamarCode($mapping->kode_sumber)] = $mapping->nama;
             }
         }
     }
@@ -471,16 +502,15 @@ class ImportExcelCommand extends Command
             $jenjang = trim($row[4] ?? '');
             $madin = trim($row[5] ?? '');
             $unitId = $this->units[$jenjang] ?? null;
-            $kfId = $this->kelasMap[$unitId.'_'.$kelas] ?? null;
             $mId = $this->madinMap[$jenjang.'_'.$madin] ?? null;
-            return [$nama, $kamarStr, ['unit_id' => $unitId, 'kelas_formal_id' => $kfId, 'kelompok_madin_id' => $mId], "Formal: $kelas, Madin: $madin"];
+            return [$nama, $kamarStr, ['unit_id' => $unitId, 'kelompok_madin_id' => $mId], "Formal sumber Madin: $kelas, Madin: $madin"];
         });
 
         $this->processOtherSheet('Database Al-Qur\'an', $fQuran, function($row) {
             $nama = strtoupper(trim($row[1] ?? ''));
             $kamarStr = trim($row[2] ?? '');
             $kat = trim($row[4] ?? '');
-            $kel = trim($row[5] ?? '');
+            $kel = $this->normalizePbsGroupName(trim($row[5] ?? ''));
             $pbsId = $this->pbsMap[$kat.'_'.$kel] ?? null;
             $unitId = $this->resolveUnitId(trim($row[3] ?? ''));
             return [$nama, $kamarStr, ['unit_id' => $unitId, 'kelompok_pbs_id' => $pbsId], "Kategori: $kat, Al-Qur'an: $kel"];
@@ -506,6 +536,7 @@ class ImportExcelCommand extends Command
         $data = $this->readSheet($file, $sheetName);
         foreach ($data as $row) {
             list($nama, $kamarStr, $updates, $info) = $callback($row);
+            $kamarStr = $this->normalizeKamarCode($kamarStr);
             if (!$nama) continue;
 
             $updates = array_filter($updates, fn ($value) => $value !== null && $value !== '');
@@ -515,12 +546,36 @@ class ImportExcelCommand extends Command
 
             $candidates = DB::table('santri')
                 ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
-                ->select('santri.santri_id', 'santri.nama', 'santri.unit_id', 'santri.kamar_id', 'kamar.nama as nama_kamar')
+                ->select('santri.santri_id', 'santri.nis', 'santri.nama', 'santri.unit_id', 'santri.kamar_id', 'kamar.nama as nama_kamar')
                 ->where('santri.nama', $nama)
                 ->get();
 
+            // NIS adalah identitas paling kuat untuk sumber kelas formal. Dua
+            // santri dengan nama sama tetapi NIS berbeda tidak boleh digabung.
+            $sourceNis = $updates['nis'] ?? null;
+            if ($sourceNis) {
+                $nisCandidate = DB::table('santri')->where('nis', $sourceNis)->first();
+                if ($nisCandidate) {
+                    if ($nisCandidate->unit_id) unset($updates['unit_id']);
+                    if (!$nisCandidate->kamar_id && $mappedKamarId) $updates['kamar_id'] = $mappedKamarId;
+                    DB::table('santri')->where('santri_id', $nisCandidate->santri_id)->update($updates);
+                    $this->stats['santri_a']++;
+                    continue;
+                }
+
+                $candidates = $candidates
+                    ->filter(fn ($candidate) => empty($candidate->nis) || $candidate->nis === $sourceNis)
+                    ->values();
+            }
+
             if ($candidates->isEmpty()) {
-                if (!empty($updates['unit_id'])) {
+                $hasRoster = collect([
+                    'kelas_formal_id',
+                    'kelompok_madin_id',
+                    'kelompok_pbs_id',
+                    'kelompok_pbm_id',
+                ])->contains(fn ($column) => !empty($updates[$column]));
+                if (!empty($updates['unit_id']) || $hasRoster) {
                     DB::table('santri')->insert(array_merge($updates, [
                         'nama' => $nama,
                         'kamar_id' => $mappedKamarId,
@@ -578,6 +633,12 @@ class ImportExcelCommand extends Command
         }
 
         return null;
+    }
+
+    private function normalizeKamarCode(string $code): string
+    {
+        $code = strtoupper(trim($code));
+        return preg_match('/^(\d+)\.0+$/', $code, $matches) ? $matches[1] : $code;
     }
 
     private function writeExcelReview($path, $rows, $headers)

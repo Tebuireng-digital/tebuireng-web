@@ -29,6 +29,7 @@ class Petugas extends Authenticatable
         'nama',
         'username',
         'password_hash',
+        'wajib_ganti_password',
         'jabatan',
         'status_aktif'
     ];
@@ -37,14 +38,21 @@ class Petugas extends Authenticatable
         'password_hash',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'status_aktif' => 'boolean',
+            'wajib_ganti_password' => 'boolean',
+        ];
+    }
+
     public function hasAccess($tipeTarget, $targetId)
     {
         if ($this->jabatan === 'Admin') {
             return true;
         }
 
-        // Cek tabel petugas_penugasan
-        $hasPenugasan = \Illuminate\Support\Facades\DB::table('petugas_penugasan')
+        return \Illuminate\Support\Facades\DB::table('petugas_penugasan')
             ->where('petugas_id', $this->petugas_id)
             ->where('tipe_target', $tipeTarget)
             ->where('target_id', $targetId)
@@ -54,24 +62,5 @@ class Petugas extends Authenticatable
                   ->orWhere('tanggal_selesai', '>=', now()->toDateString());
             })
             ->exists();
-
-        if ($hasPenugasan) return true;
-
-        // Fallback untuk Kamar dan Kelas karena di-import di tabel utamanya
-        if ($tipeTarget === 'Kamar') {
-            return \Illuminate\Support\Facades\DB::table('kamar')
-                ->where('kamar_id', $targetId)
-                ->where('pembina_id', $this->petugas_id)
-                ->exists();
-        }
-
-        if ($tipeTarget === 'KelasFormal') {
-            return \Illuminate\Support\Facades\DB::table('kelas_formal')
-                ->where('kelas_formal_id', $targetId)
-                ->where('wali_kelas_id', $this->petugas_id)
-                ->exists();
-        }
-
-        return false;
     }
 }

@@ -1,0 +1,106 @@
+name: tebuireng-production
+
+x-backend-environment: &backend-environment
+  APP_NAME: "Tebuireng MVP"
+  APP_ENV: production
+  APP_DEBUG: "false"
+  FORCE_PASSWORD_CHANGE: "true"
+  APP_KEY: ${APP_KEY:?APP_KEY wajib diisi}
+  APP_URL: ${APP_URL:?APP_URL wajib diisi}
+  APP_TIMEZONE: Asia/Jakarta
+  FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL wajib diisi}
+  SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:?SANCTUM_STATEFUL_DOMAINS wajib diisi}
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_DATABASE: ${DB_DATABASE:-absensi_santri}
+  DB_USERNAME: ${DB_USERNAME:-tebuireng}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi}
+  SESSION_DRIVER: file
+  SESSION_ENCRYPT: "true"
+  SESSION_SECURE_COOKIE: "true"
+  SESSION_SAME_SITE: lax
+  CACHE_STORE: file
+  QUEUE_CONNECTION: sync
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: warning
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-absensi_santri}
+      MYSQL_USER: ${DB_USERNAME:-tebuireng}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD wajib diisi}
+      TZ: Asia/Jakarta
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    image: ${BACKEND_IMAGE:-tebuireng-backend:production}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    restart: unless-stopped
+    environment: *backend-environment
+    volumes:
+      - backend_storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  backend-web:
+    image: ${BACKEND_WEB_IMAGE:-tebuireng-backend-web:production}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.nginx.production
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  scheduler:
+    image: ${BACKEND_IMAGE:-tebuireng-backend:production}
+    restart: unless-stopped
+    environment: *backend-environment
+    volumes:
+      - backend_storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["php", "artisan", "schedule:work"]
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-tebuireng-frontend:production}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+      args:
+        VITE_API_URL: /
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend-web
+
+  migrate:
+    profiles: ["tools"]
+    image: ${BACKEND_IMAGE:-tebuireng-backend:production}
+    environment: *backend-environment
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["php", "artisan", "migrate", "--force"]
+
+volumes:
+  mysql_data:
+    external: true
+    name: tebuireng_mysql_data
+  backend_storage:

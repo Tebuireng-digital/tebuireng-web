@@ -9,12 +9,12 @@ class PerizinanPolicy
 {
     public function viewAny(Petugas $petugas)
     {
-        return true;
+        return in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true);
     }
 
     public function view(Petugas $petugas, $perizinan)
     {
-        return true;
+        return in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true);
     }
 
     public function create(Petugas $petugas, $perizinan)

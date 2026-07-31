@@ -8,6 +8,8 @@ MVP ini memprioritaskan absensi oleh petugas/pembina. Santri tidak memiliki akun
 4. kelas Madin — Ustadz;
 5. kelompok Takhasus setelah Maghrib — Ustadz.
 
+Dokumentasi perbaikan database, backend, Docker, serta checklist operasional P0–P2 tersedia di [docs/PERBAIKAN_DATABASE_BACKEND_DOCKER_P0_P2.md](docs/PERBAIKAN_DATABASE_BACKEND_DOCKER_P0_P2.md).
+
 Perizinan dibuat sekaligus disetujui oleh Keamanan. Pelanggaran dapat dicatat oleh petugas sesuai hak akses. Keputusan produk lengkap ada di [docs/prd.md](docs/prd.md).
 
 ## Kebutuhan
@@ -23,6 +25,9 @@ Perizinan dibuat sekaligus disetujui oleh Keamanan. Pelanggaran dapat dicatat ol
 Environment lokal sudah disiapkan untuk MySQL 8, Laravel/PHP 8.3, scheduler, dan Vite:
 
 ```bash
+# satu kali per mesin; Compose sengaja tidak membuat database kosong otomatis
+docker volume inspect tebuireng_mysql_data >/dev/null 2>&1 || docker volume create tebuireng_mysql_data
+
 # pertama kali, atau setelah Dockerfile/lockfile berubah
 docker compose build
 
@@ -48,7 +53,7 @@ docker compose exec backend php artisan db:seed --force
 docker compose exec backend php artisan import:excel
 ```
 
-Buka aplikasi di <http://localhost:5173>. API tersedia di <http://localhost:8000> dan MySQL dapat diakses dari host melalui port `3307`. Database disimpan di Docker volume sehingga `docker compose down` tidak menghapus data.
+Buka aplikasi di <http://localhost:5173>. API tersedia di <http://localhost:8000> dan MySQL dapat diakses dari host melalui `127.0.0.1:3307`. Database disimpan di external Docker volume `tebuireng_mysql_data`, sehingga perubahan nama project Compose tidak membuat aplikasi diam-diam memakai database baru. `docker compose down` tidak menghapus data.
 
 Perintah operasional:
 
@@ -67,6 +72,7 @@ docker compose down
 ```
 
 Jangan menjalankan `docker compose down -v` kecuali benar-benar ingin menghapus database lokal beserta seluruh hasil impor.
+Untuk database operasional, gunakan backup logis `mysqldump --single-transaction` dan uji proses restore secara berkala; jangan menyalin direktori `/var/lib/mysql` ketika server sedang aktif.
 
 ## Menjalankan backend
 
@@ -110,7 +116,7 @@ Hasil rekonsiliasi tersimpan di `backend/storage/app/`:
 - `mapping-kamar-draft.csv` untuk pemetaan singkatan kamar;
 - `santri-review-kandidat.xlsx` untuk nama yang masih memiliki lebih dari satu kandidat;
 - `santri-review-baru.xlsx` untuk santri yang dibuat otomatis dan perlu diverifikasi;
-- `akun-petugas-baru.csv` untuk kredensial sementara petugas yang baru diimpor.
+- `private/credentials/akun-petugas-<timestamp>.csv` untuk kredensial sementara petugas yang baru diimpor (permission `0600`).
 
 File kredensial hanya dibuat bila ada akun baru. Bagikan secara aman lalu hapus file tersebut. Semua akun impor wajib mengganti password saat login pertama. Sesuai keputusan data awal, satu kandidat dengan nama persis otomatis digabung; hanya nama yang memiliki lebih dari satu kandidat yang masuk daftar pemeriksaan manual.
 
@@ -118,18 +124,46 @@ Setelah impor, Admin membuka **Data Master**, lalu menetapkan petugas pada kelas
 
 ## Akun seed pengembangan
 
-Password awal seluruh akun berikut adalah `password` dan wajib langsung diganti: `admin`, `pengasuh`, `keamanan`, `walikelas`, `pembinakamar`, dan `ustadz`. Jangan gunakan akun seed tersebut sebagai kredensial produksi.
+Password awal seluruh akun petugas pada environment lokal mengikuti `LOCAL_SEED_PASSWORD` (default `masuk123`). Seeder menolak dijalankan di environment selain `local`/`testing`; jangan gunakan kredensial lokal tersebut di produksi. Impor pada produksi tetap menghasilkan password acak dan mewajibkan penggantian password saat login pertama.
+
+Untuk mempercepat review lokal, `.env.example` menetapkan `FORCE_PASSWORD_CHANGE=false`. Ini hanya melewati gate pada development dan tidak mengubah flag akun di database. Manifest production selalu menetapkan nilainya ke `true`.
+
+## Deployment production
+
+Production memakai manifest terpisah agar proses review/QA lokal tetap cepat dan tidak menyentuh volume database operasional. Salin `.env.production.example`, isi seluruh nilai rahasia, lalu gunakan:
+
+```bash
+# build image immutable
+docker compose --env-file .env.production -f compose.production.yaml build
+
+# migrasi dijalankan eksplisit setelah backup, bukan saat container start
+docker compose --env-file .env.production -f compose.production.yaml --profile tools run --rm migrate
+
+# jalankan aplikasi
+docker compose --env-file .env.production -f compose.production.yaml up -d
+```
+
+Jangan memakai `.env.production` atau `compose.production.yaml` untuk test. Development tetap memakai `compose.yaml`, sedangkan test selalu memakai service SQLite in-memory agar tidak dapat menghapus data MySQL.
 
 ## Verifikasi
 
 ```bash
-cd backend
-php artisan test
-
-cd ../frontend
-npm run build
+# dari root project
+docker compose --profile tools run --rm test
+docker compose exec frontend npm run build
 ```
 
-Pada setup Docker, gunakan `docker compose --profile tools run --rm test` dan `docker compose exec frontend npm run build`.
+Jangan menjalankan `php artisan test` langsung dari container/backend yang memakai konfigurasi MySQL development. Guard test juga akan menolak konfigurasi selain environment `testing` dengan SQLite `:memory:`.
+
+## Aplikasi Android (APK)
+
+Wrapper Android berbasis Capacitor tersedia di `frontend/android`. APK debug dapat dibuat dengan URL website tujuan saat build:
+
+```bash
+cd frontend
+CAPACITOR_SERVER_URL=https://absensi.example.org npm run android:apk
+```
+
+Hasilnya berada di `frontend/android/app/build/outputs/apk/debug/app-debug.apk`. Tanpa `CAPACITOR_SERVER_URL`, wrapper memakai `http://10.0.2.2:5173` untuk mengakses Vite dari emulator Android. Panduan perangkat fisik, development, dan release tersedia di [docs/ANDROID_APK.md](docs/ANDROID_APK.md).
 
 Absensi tetap dapat diisi saat koneksi perangkat terputus. Antrean offline dipisahkan per akun dan dikirim sebagai satu batch ketika koneksi kembali tersedia. Perizinan, pelanggaran, serta perubahan data master membutuhkan koneksi.

@@ -23,7 +23,7 @@ class PetugasController extends Controller
         }
 
         // Generate random password
-        $newPassword = Str::random(8);
+        $newPassword = Str::password(16);
 
         DB::table('petugas')->where('petugas_id', $id)->update([
             'password_hash' => Hash::make($newPassword),

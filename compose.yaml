@@ -11,7 +11,7 @@ services:
       MYSQL_ROOT_PASSWORD: root-local
       TZ: Asia/Jakarta
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -43,7 +43,7 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/ready') === false ? 1 : 0);"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -98,6 +98,10 @@ services:
       HOME: /tmp
       COMPOSER_HOME: /tmp/composer
       SKIP_MIGRATIONS: "true"
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ":memory:"
+      FORCE_PASSWORD_CHANGE: "true"
     volumes:
       - ./backend:/var/www/html
       - backend_vendor:/var/www/html/vendor
@@ -105,5 +109,7 @@ services:
 
 volumes:
   mysql_data:
+    external: true
+    name: tebuireng_mysql_data
   backend_vendor:
   frontend_node_modules:

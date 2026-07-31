@@ -38,8 +38,18 @@ export function LoginPage() {
   return (
     <div className="login-page-container">
       <div className="login-card">
-        <h1 className="login-title">Sistem Absensi</h1>
-        <p className="login-subtitle">Silakan masuk ke akun Anda</p>
+        <div className="login-hero">
+          <div className="login-brand"><span className="brand-mark">TI</span><span>Pondok Pesantren Tebuireng</span></div>
+          <div className="login-illustration" aria-hidden="true">
+            <span className="mosque-dome"></span><span className="mosque-tower left"></span><span className="mosque-tower right"></span>
+          </div>
+          <p>Selamat datang</p>
+          <h1 className="login-title">Sistem Kepesantrenan</h1>
+          <p className="login-hero-copy">Kelola kegiatan dan pendataan santri dalam satu aplikasi.</p>
+        </div>
+
+        <div className="login-form-panel">
+        <p className="login-subtitle">Masuk ke akun petugas</p>
 
         {error && (
           <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fecaca' }}>
@@ -100,10 +110,11 @@ export function LoginPage() {
             </div>
           </div>
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Memproses...' : 'Masuk sebagai Petugas'}
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
-
+        <p className="login-footer">Pondok Pesantren Tebuireng · Jombang</p>
+        </div>
       </div>
     </div>
   );

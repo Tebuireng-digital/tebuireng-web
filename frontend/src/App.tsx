@@ -8,6 +8,7 @@ import { DataMasterPage } from './pages/DataMasterPage';
 import { LaporanPage } from './pages/LaporanPage';
 import { GantiPasswordPage } from './pages/GantiPasswordPage';
 import { LoginPage } from './pages/LoginPage';
+import { RekapKelasPage } from './pages/RekapKelasPage';
 import { useAuth } from './AuthContext';
 
 type IconName = 'home' | 'warning' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more';
@@ -76,6 +77,9 @@ function Layout() {
 
         <nav className="sidebar-nav">
           <Link to="/dashboard" className={`sidebar-nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`} onClick={closeMenu}><NavIcon name="home"/><span>Beranda</span></Link>
+          {user.jabatan === 'Wali Kelas' && (
+            <Link to="/rekap-kelas" className={`sidebar-nav-link ${location.pathname === '/rekap-kelas' ? 'active' : ''}`} onClick={closeMenu}><NavIcon name="report"/><span>Rekap Kelas</span></Link>
+          )}
           {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
             <Link to="/pelanggaran/baru" className={`sidebar-nav-link ${location.pathname === '/pelanggaran/baru' ? 'active' : ''}`} onClick={closeMenu}><NavIcon name="warning"/><span>Input Pelanggaran</span></Link>
           )}
@@ -125,6 +129,7 @@ function Layout() {
 
           {/* Protected Routes based on Jabatan */}
           <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
+          <Route path="/rekap-kelas" element={user.jabatan === 'Wali Kelas' ? <RekapKelasPage /> : <Navigate to="/dashboard" />} />
 
           <Route path="/catat-gerbang" element={
             ['Admin', 'Keamanan'].includes(user.jabatan)
@@ -157,6 +162,12 @@ function Layout() {
         <Link to="/dashboard" className={location.pathname === '/dashboard' ? 'active' : ''} onClick={closeMenu}>
           <NavIcon name="home"/><span>Beranda</span>
         </Link>
+
+        {user.jabatan === 'Wali Kelas' && (
+          <Link to="/rekap-kelas" className={location.pathname === '/rekap-kelas' ? 'active' : ''} onClick={closeMenu}>
+            <NavIcon name="report"/><span>Rekap</span>
+          </Link>
+        )}
 
         {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
           <Link to="/pelanggaran/baru" className={location.pathname === '/pelanggaran/baru' ? 'active' : ''} onClick={closeMenu}>

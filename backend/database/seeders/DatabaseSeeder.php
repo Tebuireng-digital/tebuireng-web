@@ -24,7 +24,7 @@ class DatabaseSeeder extends Seeder
 
         DB::table('jenis_kegiatan')->insert([
             ['kode' => 'KAMAR', 'nama' => 'Kegiatan Kamar'],
-            ['kode' => 'SEKOLAH', 'nama' => 'Kelas Formal 7/8/9'],
+            ['kode' => 'SEKOLAH', 'nama' => 'Kelas Formal'],
             ['kode' => 'PBS', 'nama' => 'Kelompok Al-Qur\'an Subuh'],
             ['kode' => 'PBM', 'nama' => 'Takhasus Maghrib'],
             ['kode' => 'DINIYAH', 'nama' => 'Kelas Madin'],

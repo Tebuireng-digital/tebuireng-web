@@ -311,6 +311,27 @@ body {
 }
 
 .master-page { max-width: 1000px; margin: 0 auto; }
+.rekap-page { max-width: 920px; margin: 0 auto; }
+.rekap-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; padding: 16px; border: 1px solid var(--garis); border-radius: 12px; background: white; }
+.rekap-filters label { display: block; margin-bottom: 6px; color: var(--tinta-pudar); font-size: 12px; font-weight: 600; }
+.rekap-filters select, .rekap-filters input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--garis); border-radius: 7px; background: white; }
+.rekap-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.rekap-heading h2 { font-size: 19px; }
+.rekap-heading p { margin-top: 3px; color: var(--tinta-pudar); font-size: 13px; }
+.rekap-heading > strong { color: var(--aksen); font-size: 13px; }
+.rekap-summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 18px; }
+.rekap-summary-card { padding: 12px 8px; border: 1px solid var(--garis); border-radius: 10px; background: white; text-align: center; }
+.rekap-summary-card strong, .rekap-summary-card span { display: block; }
+.rekap-summary-card strong { font-size: 21px; }
+.rekap-summary-card span { margin-top: 2px; color: var(--tinta-pudar); font-size: 10px; }
+.rekap-table { background: white; }
+.rekap-status { display: inline-block; min-width: 78px; padding: 6px 9px; border-radius: 999px; color: white; font-size: 11px; font-weight: 700; text-align: center; }
+.rekap-status.hadir { background: var(--status-hadir); }
+.rekap-status.izin { background: var(--status-izin); }
+.rekap-status.sakit { background: var(--status-sakit); }
+.rekap-status.alpha { background: var(--status-alpha); }
+.rekap-status.terlambat { background: var(--status-terlambat); }
+.rekap-status.belum { background: var(--tinta-pudar); }
 .master-section { margin-bottom: 24px; padding: 20px; border: 1px solid var(--garis); border-radius: 12px; background: white; }
 .master-section h2 { margin-bottom: 16px; font-size: 17px; }
 .master-section p { color: var(--tinta-pudar); font-size: 13px; margin: -8px 0 16px; }
@@ -346,6 +367,8 @@ body {
 .password-result button { margin-left: auto; padding: 8px 10px; }
 
 @media (max-width: 760px) {
+  .rekap-filters { grid-template-columns: 1fr; }
+  .rekap-summary { grid-template-columns: repeat(3, 1fr); }
   .assignment-form { grid-template-columns: 1fr; }
   .kamar-create-form { grid-template-columns: 1fr; }
   .account-table-controls { grid-template-columns: 1fr; }

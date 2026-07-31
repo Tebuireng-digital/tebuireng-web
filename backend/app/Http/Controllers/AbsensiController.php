@@ -15,7 +15,7 @@ class AbsensiController extends Controller
     private const JENIS = [
         'sekolah' => [
             'kode' => 'SEKOLAH',
-            'nama' => 'Kelas Formal 7/8/9',
+            'nama' => 'Kelas Formal',
             'sumber' => 'Database Siswa Kelas 7/8/9',
             'tipe_target' => 'KelasFormal',
             'santri_column' => 'kelas_formal_id',
@@ -223,6 +223,13 @@ class AbsensiController extends Controller
                 'absensi.waktu_input',
             ]);
 
+        $namaPenanggungJawab = null;
+        if ($config['tipe_target'] === 'KelasFormal' && $target->wali_kelas_id) {
+            $namaPenanggungJawab = DB::table('petugas')
+                ->where('petugas_id', $target->wali_kelas_id)
+                ->value('nama');
+        }
+
         return response()->json([
             'jenis' => $jenis,
             'nama_kegiatan' => $config['nama'],
@@ -231,6 +238,7 @@ class AbsensiController extends Controller
                 'nama_target' => $config['target_table'] === 'kamar'
                     ? KamarName::parse($target->{$config['target_label']})['standar']
                     : $target->{$config['target_label']},
+                'nama_penanggung_jawab' => $namaPenanggungJawab,
             ],
             'jadwal' => $jadwal,
             'tanggal' => $data['tanggal'],

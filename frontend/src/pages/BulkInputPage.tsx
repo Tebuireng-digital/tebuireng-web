@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { BarisLedger } from '../components/BarisLedger';
@@ -21,7 +21,7 @@ interface SantriAbsensi {
 
 interface SesiAbsensi {
   nama_kegiatan: string;
-  target: { target_id: number; nama_target: string };
+  target: { target_id: number; nama_target: string; nama_penanggung_jawab: string | null };
   jadwal: { jadwal_id: number; nama_jadwal: string; jam_mulai: string; jam_selesai: string };
   tanggal: string;
   santri: SantriAbsensi[];
@@ -44,6 +44,7 @@ export function BulkInputPage() {
   const [tanggal, setTanggal] = useState(todayJakarta);
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { syncState, syncData, isSaved, syncError } = useBackgroundSync(user!.petugas_id);
   const [saveModal, setSaveModal] = useState<SaveModal | null>(null);
 
@@ -197,7 +198,10 @@ export function BulkInputPage() {
         <div>
           <Link to="/dashboard" className="back-link">← Dashboard</Link>
           <h1 className="ui-text-title">{session.nama_kegiatan}</h1>
-          <p className="ui-text-body">{session.target.nama_target} · {session.jadwal.nama_jadwal}</p>
+          <p className="ui-text-body">
+            {session.target.nama_target} · {session.jadwal.nama_jadwal}
+            {session.target.nama_penanggung_jawab && ` · ${session.target.nama_penanggung_jawab}`}
+          </p>
         </div>
         <div className="attendance-actions">
           <input
@@ -225,6 +229,7 @@ export function BulkInputPage() {
             <p id="save-modal-message">{saveModal.message}</p>
             <div className="save-modal-actions">
               {saveModal.type === 'error' && <button className="secondary-button" onClick={() => { setSaveModal(null); void handleSave(); }}>Coba lagi</button>}
+              {saveModal.type === 'success' && jenis === 'sekolah' && user?.jabatan === 'Wali Kelas' && <button className="secondary-button" onClick={() => navigate(`/rekap-kelas?kelas=${targetId}&jadwal=${jadwalId}&tanggal=${tanggal}`)}>Lihat rekap</button>}
               <button className="primary-button" onClick={() => setSaveModal(null)}>{saveModal.type === 'success' ? 'Selesai' : 'Tutup'}</button>
             </div>
           </div>

@@ -12,10 +12,61 @@ Perizinan dibuat sekaligus disetujui oleh Keamanan. Pelanggaran dapat dicatat ol
 
 ## Kebutuhan
 
+- Docker Engine dan Docker Compose (cara lokal yang direkomendasikan); atau
 - PHP 8.2+ beserta ekstensi Laravel, GD, dan MySQL;
 - Composer 2;
 - MySQL 8;
 - Node.js 24+ dan npm.
+
+## Menjalankan dengan Docker (direkomendasikan)
+
+Environment lokal sudah disiapkan untuk MySQL 8, Laravel/PHP 8.3, scheduler, dan Vite:
+
+```bash
+# pertama kali, atau setelah Dockerfile/lockfile berubah
+docker compose build
+
+# pemakaian harian
+docker compose up -d
+```
+
+Source backend dan frontend dipasang sebagai bind mount. Perubahan source biasa langsung terbaca oleh Laravel/Vite dan **tidak memerlukan build ulang**. Dependency Composer/npm berada pada layer dan volume terpisah; `backend`, `scheduler`, dan `test` juga memakai satu image backend yang sama. Checksum lockfile memastikan volume dependency hanya disinkronkan ketika lockfile benar-benar berubah.
+
+Build ulang hanya diperlukan setelah mengubah `Dockerfile`, `composer.lock`, atau `package-lock.json`:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Build cache hangat pada setup ini terukur 3,71–5,40 detik. Build pertama terukur 106 detik, termasuk download base image dan pengisian cache awal. Kecepatan build pertama tetap bergantung pada koneksi internet. Hindari `--no-cache`, `docker builder prune`, dan `docker system prune` karena perintah tersebut membuang cache dependency.
+
+Pada database baru, jalankan seed dan impor satu kali:
+
+```bash
+docker compose exec backend php artisan db:seed --force
+docker compose exec backend php artisan import:excel
+```
+
+Buka aplikasi di <http://localhost:5173>. API tersedia di <http://localhost:8000> dan MySQL dapat diakses dari host melalui port `3307`. Database disimpan di Docker volume sehingga `docker compose down` tidak menghapus data.
+
+Perintah operasional:
+
+```bash
+# status service
+docker compose ps
+
+# log aplikasi
+docker compose logs -f backend frontend scheduler
+
+# test aman memakai SQLite in-memory
+docker compose --profile tools run --rm test
+
+# menghentikan service tanpa menghapus database
+docker compose down
+```
+
+Jangan menjalankan `docker compose down -v` kecuali benar-benar ingin menghapus database lokal beserta seluruh hasil impor.
 
 ## Menjalankan backend
 
@@ -78,5 +129,7 @@ php artisan test
 cd ../frontend
 npm run build
 ```
+
+Pada setup Docker, gunakan `docker compose --profile tools run --rm test` dan `docker compose exec frontend npm run build`.
 
 Absensi tetap dapat diisi saat koneksi perangkat terputus. Antrean offline dipisahkan per akun dan dikirim sebagai satu batch ketika koneksi kembali tersedia. Perizinan, pelanggaran, serta perubahan data master membutuhkan koneksi.

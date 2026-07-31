@@ -128,10 +128,15 @@ class LaporanController extends Controller
             ->groupBy('jenis_kegiatan.kode')
             ->orderBy('jenis_kegiatan.kode')
             ->get()
-            ->map(fn ($row) => (object) array_merge((array) $row, [
-                'bulan' => $bulan,
-                'tahun' => $tahun,
-            ]));
+            ->map(function ($row) use ($bulan, $tahun) {
+                foreach (['total_hadir', 'total_izin', 'total_sakit', 'total_alpha', 'total_terlambat'] as $field) {
+                    $row->{$field} = (int) $row->{$field};
+                }
+                $row->bulan = $bulan;
+                $row->tahun = $tahun;
+
+                return $row;
+            });
         
         if ($request->query('format') === 'xlsx') {
             return Excel::download(new LaporanExport($data), 'laporan-bulanan.xlsx');

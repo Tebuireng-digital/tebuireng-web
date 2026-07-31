@@ -27,10 +27,6 @@ class UpsertAbsensiIzin
 
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
             foreach ($jadwals as $jadwal) {
-                // Determine existing record to preserve diinput_oleh if any, or default to system/admin?
-                // For simplicity, we just use 1 (assuming Admin ID 1 exists) or fetch an Admin.
-                $adminId = DB::table('petugas')->where('jabatan', 'Admin')->value('petugas_id') ?? 1;
-
                 $existing = DB::table('absensi')
                     ->where('santri_id', $perizinan->santri_id)
                     ->where('jenis_kegiatan_id', $jadwal->jenis_kegiatan_id)
@@ -47,8 +43,8 @@ class UpsertAbsensiIzin
                     'menit_terlambat' => null,
                     'keterangan' => 'Sistem: Otomatis dari Perizinan ID ' . $perizinan->perizinan_id,
                     'waktu_input' => $existing ? $existing->waktu_input : $now,
-                    'diinput_oleh' => $existing ? $existing->diinput_oleh : $adminId,
-                    'diubah_oleh' => $existing ? $adminId : null,
+                    'diinput_oleh' => $existing ? $existing->diinput_oleh : $perizinan->diajukan_oleh,
+                    'diubah_oleh' => $existing ? $perizinan->diajukan_oleh : null,
                     'updated_at' => $now
                 ];
             }

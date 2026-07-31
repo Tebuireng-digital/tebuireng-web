@@ -15,10 +15,12 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        \Illuminate\Support\Facades\Log::info('Login attempt', ['credentials' => $credentials]);
-
         // Attempt login using the web guard
-        if (Auth::guard('web')->attempt($credentials)) {
+        if (Auth::guard('web')->attempt([
+            'username' => $credentials['username'],
+            'password' => $credentials['password'],
+            'status_aktif' => 1,
+        ])) {
             $request->session()->regenerate();
             
             return response()->json([

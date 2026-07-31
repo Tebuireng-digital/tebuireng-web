@@ -1,143 +1,102 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 
+interface Petugas { petugas_id: number; nama: string; username: string; jabatan: string; status_aktif: boolean }
+interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string }> }
+interface Penugasan { penugasan_id: number; nama_petugas: string; jabatan: string; tipe_target: string; nama_target: string }
+
+const roleForJenis: Record<string, string> = {
+  sekolah: 'Wali Kelas', kamar: 'Pembina Kamar', pbs: 'Ustadz', diniyah: 'Ustadz', pbm: 'Ustadz',
+};
+
 export function DataMasterPage() {
-  const [petugas, setPetugas] = useState<any[]>([]);
+  const [petugas, setPetugas] = useState<Petugas[]>([]);
+  const [opsi, setOpsi] = useState<Opsi[]>([]);
+  const [penugasan, setPenugasan] = useState<Penugasan[]>([]);
+  const [jenis, setJenis] = useState('sekolah');
+  const [petugasId, setPetugasId] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [passwordBaru, setPasswordBaru] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const [resetResult, setResetResult] = useState<{ id: number, newPassword: string, note: string } | null>(null);
-  const [confirmResetId, setConfirmResetId] = useState<number | null>(null);
+
+  const fetchData = async () => {
+    const [petugasResponse, opsiResponse, penugasanResponse] = await Promise.all([
+      api.get('/api/master/petugas'), api.get('/api/absensi-options'), api.get('/api/master/penugasan'),
+    ]);
+    setPetugas(petugasResponse.data);
+    setOpsi(opsiResponse.data);
+    setPenugasan(penugasanResponse.data);
+  };
 
   useEffect(() => {
-    fetchPetugas();
+    fetchData().catch(() => setMessage('Data master gagal dimuat.')).finally(() => setLoading(false));
   }, []);
 
-  const fetchPetugas = async () => {
+  const selectedOption = opsi.find(item => item.jenis === jenis);
+  const eligiblePetugas = useMemo(
+    () => petugas.filter(item => item.status_aktif && item.jabatan === roleForJenis[jenis]),
+    [petugas, jenis],
+  );
+
+  useEffect(() => {
+    setPetugasId(eligiblePetugas[0] ? String(eligiblePetugas[0].petugas_id) : '');
+    setTargetId(selectedOption?.targets[0] ? String(selectedOption.targets[0].target_id) : '');
+  }, [jenis, petugas, opsi]);
+
+  const saveAssignment = async (event: React.FormEvent) => {
+    event.preventDefault();
     try {
-      const res = await api.get('/api/master/petugas');
-      setPetugas(res.data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+      await api.post('/api/master/penugasan', { petugas_id: Number(petugasId), jenis, target_id: Number(targetId) });
+      setMessage('Penugasan berhasil disimpan.');
+      await fetchData();
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Penugasan gagal disimpan.');
     }
   };
 
-  const handleConfirmReset = async () => {
-    if (!confirmResetId) return;
-    const id = confirmResetId;
-    setConfirmResetId(null);
+  const removeAssignment = async (id: number) => {
+    if (!window.confirm('Hapus penugasan ini?')) return;
+    await api.delete(`/api/master/penugasan/${id}`);
+    setMessage('Penugasan dihapus.');
+    await fetchData();
+  };
 
+  const resetPassword = async (id: number) => {
+    if (!window.confirm('Reset password petugas ini?')) return;
     try {
-      const res = await api.post(`/api/petugas/${id}/reset-password`);
-      setResetResult({
-        id,
-        newPassword: res.data.new_password,
-        note: res.data.note
-      });
-    } catch (e: any) {
-      console.error('Gagal reset: ', e.response?.data?.message);
+      const response = await api.post(`/api/petugas/${id}/reset-password`);
+      setPasswordBaru(response.data.new_password);
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Password gagal direset.');
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setResetResult(null); // langsung tutup
-  };
-
-  if (loading) return <div style={{ padding: '24px' }}>Memuat data master...</div>;
+  if (loading) return <div className="empty-state">Memuat data master...</div>;
 
   return (
-    <div className="app-container" style={{ padding: '24px', position: 'relative' }}>
-      
-      {/* Modal Konfirmasi */}
-      {confirmResetId !== null && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#0F172A', fontSize: '18px' }}>Konfirmasi Reset Password</h3>
-            <p style={{ margin: '0 0 24px 0', color: '#64748B', fontSize: '14px', lineHeight: '1.5' }}>
-              Apakah Anda yakin ingin mereset password petugas ini? Password lama tidak akan bisa digunakan lagi.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={() => setConfirmResetId(null)}
-                style={{ padding: '10px 16px', backgroundColor: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Batal
-              </button>
-              <button 
-                onClick={handleConfirmReset}
-                style={{ padding: '10px 16px', backgroundColor: '#DC2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Ya, Reset Password
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="master-page">
+      <header className="dashboard-header"><h1>Data Master</h1><p>Kelola penugasan pembina untuk setiap kegiatan absensi.</p></header>
+      {message && <div className="warning-box" style={{ marginBottom: 16 }}>{message}</div>}
+      {passwordBaru && <div className="password-result">Password baru: <strong>{passwordBaru}</strong><button onClick={() => { void navigator.clipboard.writeText(passwordBaru); setPasswordBaru(''); }}>Salin & tutup</button></div>}
 
-      {/* Modal Hasil Reset */}
-      {resetResult && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#F0FDF4', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #BBF7D0' }}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#16A34A', fontSize: '20px' }}>Password Berhasil Direset!</h3>
-            <p style={{ margin: '0 0 12px 0', fontSize: '15px' }}>
-              Password baru: <strong style={{ letterSpacing: '1px', fontSize: '24px', color: '#0F172A', backgroundColor: '#FFF', padding: '4px 12px', borderRadius: '6px', border: '1px dashed #CBD5E1', display: 'inline-block', marginTop: '8px' }}>{resetResult.newPassword}</strong>
-            </p>
-            <p style={{ margin: '0 0 24px 0', fontSize: '13px', color: '#64748B' }}>{resetResult.note}</p>
-            
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={() => setResetResult(null)}
-                style={{ padding: '10px 16px', backgroundColor: 'transparent', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Tutup
-              </button>
-              <button 
-                onClick={() => copyToClipboard(resetResult.newPassword)}
-                style={{ padding: '10px 16px', backgroundColor: '#0F6E56', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                Salin & Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <section className="master-section">
+        <h2>Tambah penugasan absensi</h2>
+        <form className="assignment-form" onSubmit={saveAssignment}>
+          <div><label>Kegiatan</label><select value={jenis} onChange={event => setJenis(event.target.value)}>{opsi.map(item => <option key={item.jenis} value={item.jenis}>{item.nama}</option>)}</select></div>
+          <div><label>Petugas ({roleForJenis[jenis]})</label><select value={petugasId} onChange={event => setPetugasId(event.target.value)} required>{eligiblePetugas.map(item => <option key={item.petugas_id} value={item.petugas_id}>{item.nama}</option>)}</select></div>
+          <div><label>Kelompok</label><select value={targetId} onChange={event => setTargetId(event.target.value)} required>{selectedOption?.targets.map(target => <option key={target.target_id} value={target.target_id}>{target.nama_target}</option>)}</select></div>
+          <button className="primary-button" disabled={!petugasId || !targetId}>Simpan penugasan</button>
+        </form>
+        {eligiblePetugas.length === 0 && <div className="warning-box">Belum ada petugas aktif dengan jabatan {roleForJenis[jenis]}.</div>}
 
-      <h1 className="ui-text-title" style={{ marginBottom: '24px' }}>Data Master (Admin)</h1>
-      
-      <h2 className="ui-text-name" style={{ marginBottom: '16px' }}>Master Petugas</h2>
-      <div style={{ backgroundColor: 'var(--kertas-kartu)', border: '1px solid var(--garis)', borderRadius: '8px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ backgroundColor: 'var(--garis)' }}>
-              <th style={{ padding: '12px' }} className="ui-text-label">ID</th>
-              <th style={{ padding: '12px' }} className="ui-text-label">Nama</th>
-              <th style={{ padding: '12px' }} className="ui-text-label">Username</th>
-              <th style={{ padding: '12px' }} className="ui-text-label">Jabatan</th>
-              <th style={{ padding: '12px' }} className="ui-text-label">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {petugas.map((p, idx) => (
-              <tr key={p.petugas_id} style={{ borderTop: '1px solid var(--garis)', backgroundColor: idx % 2 === 0 ? 'var(--kertas-kartu)' : 'var(--kertas)' }}>
-                <td style={{ padding: '12px' }} className="ui-text-tabular">{p.petugas_id}</td>
-                <td style={{ padding: '12px' }} className="ui-text-body">{p.nama}</td>
-                <td style={{ padding: '12px' }} className="ui-text-body">{p.username}</td>
-                <td style={{ padding: '12px' }} className="ui-text-body">{p.jabatan}</td>
-                <td style={{ padding: '12px' }}>
-                  <button 
-                    onClick={() => setConfirmResetId(p.petugas_id)}
-                    style={{ backgroundColor: 'var(--status-alpha)', color: 'white', padding: '6px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    Reset Password
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <div className="table-scroll"><table className="master-table"><thead><tr><th>Petugas</th><th>Jabatan</th><th>Jenis</th><th>Kelompok</th><th>Aksi</th></tr></thead><tbody>{penugasan.map(item => <tr key={item.penugasan_id}><td>{item.nama_petugas}</td><td>{item.jabatan}</td><td>{item.tipe_target}</td><td>{item.nama_target ?? `ID ${item.penugasan_id}`}</td><td><button className="danger-button" onClick={() => void removeAssignment(item.penugasan_id)}>Hapus</button></td></tr>)}</tbody></table></div>
+      </section>
+
+      <section className="master-section">
+        <h2>Akun petugas</h2>
+        <div className="table-scroll"><table className="master-table"><thead><tr><th>Nama</th><th>Username</th><th>Jabatan</th><th>Aksi</th></tr></thead><tbody>{petugas.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td><button className="danger-button" onClick={() => void resetPassword(item.petugas_id)}>Reset password</button></td></tr>)}</tbody></table></div>
+      </section>
     </div>
   );
 }

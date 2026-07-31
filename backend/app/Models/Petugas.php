@@ -48,6 +48,7 @@ class Petugas extends Authenticatable
             ->where('petugas_id', $this->petugas_id)
             ->where('tipe_target', $tipeTarget)
             ->where('target_id', $targetId)
+            ->where('tanggal_mulai', '<=', now()->toDateString())
             ->where(function($q) {
                 $q->whereNull('tanggal_selesai')
                   ->orWhere('tanggal_selesai', '>=', now()->toDateString());

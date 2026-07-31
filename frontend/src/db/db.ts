@@ -3,11 +3,15 @@ import type { StatusAbsensi } from '../components/PillStatus';
 
 export interface OfflineAbsensi {
   id?: number; // Auto-incremented primary key for offline tracking
+  petugas_id: number;
   santri_id: number;
   jenis_kegiatan: string; // 'kamar', 'sekolah', etc.
+  target_id: number;
   jadwal_id: number;
   tanggal: string; // YYYY-MM-DD
   status: StatusAbsensi;
+  menit_terlambat?: number | null;
+  keterangan?: string | null;
   sync_status: 'pending' | 'synced';
 }
 
@@ -24,6 +28,13 @@ db.version(1).stores({
   // We just keep the primary key 'id' auto-incremented, and create indexes for querying.
   // [santri_id+jenis_kegiatan+jadwal_id+tanggal] could be a compound index if we want.
   offlineQueue: '++id, santri_id, jenis_kegiatan, jadwal_id, tanggal, sync_status, [santri_id+jenis_kegiatan+jadwal_id+tanggal]'
+});
+
+db.version(2).stores({
+  offlineQueue: '++id, petugas_id, santri_id, jenis_kegiatan, target_id, jadwal_id, tanggal, sync_status, [petugas_id+santri_id+jenis_kegiatan+target_id+jadwal_id+tanggal]'
+}).upgrade(async transaction => {
+  // Antrean versi lama tidak memiliki pemilik akun dan tidak aman untuk diteruskan.
+  await transaction.table('offlineQueue').clear();
 });
 
 export { db };

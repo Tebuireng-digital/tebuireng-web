@@ -3,15 +3,11 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { BulkInputPage } from './pages/BulkInputPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PelanggaranFormPage } from './pages/PelanggaranFormPage';
-import { PerizinanPage } from './pages/PerizinanPage';
-import { PersetujuanIzinPage } from './pages/PersetujuanIzinPage';
 import { CatatGerbangPage } from './pages/CatatGerbangPage';
 import { DataMasterPage } from './pages/DataMasterPage';
 import { LaporanPage } from './pages/LaporanPage';
 import { GantiPasswordPage } from './pages/GantiPasswordPage';
 import { LoginPage } from './pages/LoginPage';
-import { SantriDashboardPage } from './pages/SantriDashboardPage';
-import { SantriRiwayatPage } from './pages/SantriRiwayatPage';
 import { useAuth } from './AuthContext';
 
 function Layout() {
@@ -27,8 +23,6 @@ function Layout() {
   }
 
   const closeMenu = () => setIsMobileMenuOpen(false);
-
-  const isSantri = user.role === 'santri';
 
   return (
     <div className="premium-layout">
@@ -59,57 +53,37 @@ function Layout() {
           <p className="ui-text-label" style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Login sebagai:</p>
           <p style={{ fontWeight: 'bold', fontSize: '15px', color: '#FFF' }}>{user.nama}</p>
           <p style={{ fontSize: '12px', color: '#A7F3D0', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            {isSantri ? 'Wali Santri / Santri' : (user as any).jabatan}
+            {user.jabatan}
           </p>
         </div>
 
         <nav className="sidebar-nav">
-          {isSantri ? (
-            <>
-              <Link to="/santri/dashboard" className="sidebar-nav-link" onClick={closeMenu}>Beranda</Link>
-              <Link to="/santri/riwayat" className="sidebar-nav-link" onClick={closeMenu}>Riwayat Ananda</Link>
-            </>
-          ) : (
-            <>
-              <Link to="/dashboard" className="sidebar-nav-link" onClick={closeMenu}>Dashboard</Link>
+          {user.wajib_ganti_password ? (
+            <Link to="/ganti-kata-sandi" className="sidebar-nav-link" onClick={closeMenu}>Ganti Password</Link>
+          ) : <>
+          <Link to="/dashboard" className="sidebar-nav-link" onClick={closeMenu}>Dashboard</Link>
+              {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
               <Link to="/pelanggaran/baru" className="sidebar-nav-link" onClick={closeMenu}>Input Pelanggaran</Link>
-              <Link to="/perizinan/1" className="sidebar-nav-link" onClick={closeMenu}>Cek Izin (Santri)</Link>
+              )}
 
               <hr className="sidebar-nav-divider" />
 
-              {['Admin', 'Keamanan'].includes((user as any).jabatan) && (
-                <Link to="/catat-gerbang" className="sidebar-nav-link" onClick={closeMenu}>Catat Gerbang</Link>
+              {['Admin', 'Keamanan'].includes(user.jabatan) && (
+                <Link to="/catat-gerbang" className="sidebar-nav-link" onClick={closeMenu}>Perizinan & Gerbang</Link>
               )}
 
-              {(user as any).jabatan === 'Admin' && (
+              {user.jabatan === 'Admin' && (
                 <Link to="/data-master" className="sidebar-nav-link" onClick={closeMenu}>Data Master</Link>
               )}
 
-              {['Admin', 'Pengasuh'].includes((user as any).jabatan) && (
+              {['Admin', 'Pengasuh'].includes(user.jabatan) && (
                 <Link to="/laporan/detail" className="sidebar-nav-link" onClick={closeMenu}>Laporan Detail</Link>
               )}
 
               <Link to="/ganti-kata-sandi" className="sidebar-nav-link" onClick={closeMenu}>Ganti Password</Link>
 
               <hr className="sidebar-nav-divider" />
-
-              {['Admin', 'Pengasuh', 'Pembina Kamar'].includes((user as any).jabatan) && (
-                <Link to="/absensi/kamar/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Kamar</Link>
-              )}
-
-              {['Admin', 'Pengasuh', 'Wali Kelas'].includes((user as any).jabatan) && (
-                <Link to="/absensi/sekolah/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Sekolah</Link>
-              )}
-
-              {['Admin', 'Pengasuh', 'Ustadz'].includes((user as any).jabatan) && (
-                <>
-                  <Link to="/absensi/pbs/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Pembelajaran Subuh</Link>
-                  <Link to="/absensi/pbm/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Pembelajaran Maghrib</Link>
-                  <Link to="/absensi/diniyah/1" className="sidebar-nav-link" onClick={closeMenu}>Absensi Diniyah</Link>
-                </>
-              )}
-            </>
-          )}
+          </>}
         </nav>
 
         <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
@@ -120,39 +94,36 @@ function Layout() {
       </div>
 
       <div className="dashboard-content">
-        {isSantri ? (
+        {user.wajib_ganti_password ? (
           <Routes>
-            <Route path="/" element={<Navigate to="/santri/dashboard" />} />
-            <Route path="/santri/dashboard" element={<SantriDashboardPage />} />
-            <Route path="/santri/riwayat" element={<SantriRiwayatPage />} />
-            <Route path="*" element={<Navigate to="/santri/dashboard" />} />
+            <Route path="/ganti-kata-sandi" element={<GantiPasswordPage />} />
+            <Route path="*" element={<Navigate to="/ganti-kata-sandi" />} />
           </Routes>
         ) : (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/pelanggaran/baru" element={<PelanggaranFormPage />} />
-            <Route path="/perizinan/:santriId" element={<PerizinanPage />} />
             <Route path="/ganti-kata-sandi" element={<GantiPasswordPage />} />
             
             {/* Protected Routes based on Jabatan */}
             <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
             
             <Route path="/catat-gerbang" element={
-              ['Admin', 'Keamanan'].includes((user as any).jabatan) 
-                ? <CatatGerbangPage /> 
+              ['Admin', 'Keamanan'].includes(user.jabatan)
+                ? <CatatGerbangPage />
                 : <Navigate to="/dashboard" />
             } />
             
             <Route path="/data-master" element={
-              (user as any).jabatan === 'Admin' 
-                ? <DataMasterPage /> 
+              user.jabatan === 'Admin'
+                ? <DataMasterPage />
                 : <Navigate to="/dashboard" />
             } />
             
             <Route path="/laporan/detail" element={
-              ['Admin', 'Pengasuh'].includes((user as any).jabatan) 
-                ? <LaporanPage /> 
+              ['Admin', 'Pengasuh'].includes(user.jabatan)
+                ? <LaporanPage />
                 : <Navigate to="/dashboard" />
             } />
 

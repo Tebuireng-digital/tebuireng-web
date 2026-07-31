@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use OpenSpout\Reader\Xlsx\Reader;
+use OpenSpout\Reader\XLSX\Reader;
 
 class ImportReviewCommand extends Command
 {

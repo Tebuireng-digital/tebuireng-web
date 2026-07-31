@@ -7,17 +7,10 @@ export interface PetugasUser {
   nama: string;
   username: string;
   jabatan: string;
+  wajib_ganti_password: boolean;
 }
 
-export interface SantriUser {
-  role: 'santri';
-  santri_id: number;
-  nama: string;
-  nis: string;
-  // you can add more if needed
-}
-
-export type User = PetugasUser | SantriUser;
+export type User = PetugasUser;
 
 interface AuthContextType {
   user: User | null;
@@ -33,21 +26,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in on mount. We try both endpoints.
     const checkAuth = async () => {
       try {
         const petugasRes = await api.get('/api/me');
         setUser({ ...petugasRes.data.user, role: 'petugas' });
-        setLoading(false);
-        return;
-      } catch (e) {
-        // Not a petugas, try santri
-      }
-
-      try {
-        const santriRes = await api.get('/api/santri/me');
-        setUser({ ...santriRes.data.user, role: 'santri' });
-      } catch (e) {
+      } catch {
         setUser(null);
       } finally {
         setLoading(false);
@@ -63,11 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      if (user?.role === 'santri') {
-        await api.post('/api/santri/logout');
-      } else {
-        await api.post('/api/logout');
-      }
+      await api.post('/api/logout');
     } catch (e) {
       console.error('Logout failed', e);
     } finally {

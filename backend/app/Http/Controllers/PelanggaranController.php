@@ -94,7 +94,7 @@ class PelanggaranController extends Controller
         $data['created_at'] = now()->toDateTimeString();
         $data['updated_at'] = now()->toDateTimeString();
 
-        DB::transaction(function () use ($data, $petugas) {
+        $pelanggaranId = DB::transaction(function () use ($data, $petugas) {
             $pelanggaranId = DB::table('pelanggaran')->insertGetId($data);
 
             // Invalidate cache
@@ -123,9 +123,14 @@ class PelanggaranController extends Controller
                     DB::table('notifikasi')->insert($notifications);
                 }
             }
+
+            return $pelanggaranId;
         });
 
-        return response()->json(['message' => 'Pelanggaran berhasil disimpan'], 201);
+        return response()->json([
+            'message' => 'Pelanggaran berhasil disimpan',
+            'pelanggaran_id' => $pelanggaranId,
+        ], 201);
     }
 
     public function uploadLampiran(Request $request, $id)
@@ -133,6 +138,12 @@ class PelanggaranController extends Controller
         $pelanggaran = DB::table('pelanggaran')->where('pelanggaran_id', $id)->first();
         if (!$pelanggaran) {
             return response()->json(['message' => 'Not found'], 404);
+        }
+
+        $model = new Pelanggaran((array) $pelanggaran);
+        $model->exists = true;
+        if (Gate::forUser($request->user())->denies('update', $model)) {
+            return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
         }
 
         $request->validate([
@@ -147,9 +158,8 @@ class PelanggaranController extends Controller
 
         DB::table('lampiran_pelanggaran')->insert([
             'pelanggaran_id' => $id,
-            'file_path' => $path,
-            'file_type' => $file->getClientMimeType(),
-            'diunggah_oleh' => Auth::id(),
+            'path_file' => $path,
+            'diunggah_oleh' => $request->user()->petugas_id,
             'created_at' => now()
         ]);
 

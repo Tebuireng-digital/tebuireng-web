@@ -46,7 +46,8 @@ class AuthPolicyTest extends TestCase
             'jadwal_id' => $jadwalId,
             'tanggal' => now()->toDateString(),
             'status' => 'Hadir',
-            'diinput_oleh' => $petugasInput
+            'diinput_oleh' => $petugasInput,
+            'waktu_input' => now()->toDateTimeString(),
         ]);
 
         $this->absensiB = DB::table('absensi')->insertGetId([
@@ -55,7 +56,8 @@ class AuthPolicyTest extends TestCase
             'jadwal_id' => $jadwalId,
             'tanggal' => now()->toDateString(),
             'status' => 'Hadir',
-            'diinput_oleh' => $petugasInput
+            'diinput_oleh' => $petugasInput,
+            'waktu_input' => now()->toDateTimeString(),
         ]);
     }
 
@@ -70,12 +72,14 @@ class AuthPolicyTest extends TestCase
             'status_aktif' => 1
         ]);
 
-        $this->postJson('/api/login', [
+        $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/'])
+            ->postJson('/api/login', [
             'username' => 'test-user',
             'password' => 'wrong',
         ])->assertStatus(401);
 
-        $this->postJson('/api/login', [
+        $this->withHeaders(['Origin' => 'http://localhost:5173', 'Referer' => 'http://localhost:5173/'])
+            ->postJson('/api/login', [
             'username' => 'test-user',
             'password' => $password,
         ])->assertStatus(200);
@@ -101,10 +105,10 @@ class AuthPolicyTest extends TestCase
         $this->actingAs($petugas, 'sanctum');
 
         // Should succeed for Kamar A
-        $this->putJson('/api/absensi/' . $this->absensiA)->assertStatus(200);
+        $this->patchJson('/api/absensi/' . $this->absensiA, ['status' => 'Sakit'])->assertStatus(200);
 
         // Should fail for Kamar B
-        $this->putJson('/api/absensi/' . $this->absensiB)->assertStatus(403);
+        $this->patchJson('/api/absensi/' . $this->absensiB, ['status' => 'Sakit'])->assertStatus(403);
     }
 
     public function test_policy_admin_can_access_any_kamar()
@@ -119,7 +123,7 @@ class AuthPolicyTest extends TestCase
 
         $this->actingAs($admin, 'sanctum');
 
-        $this->putJson('/api/absensi/' . $this->absensiA)->assertStatus(200);
-        $this->putJson('/api/absensi/' . $this->absensiB)->assertStatus(200);
+        $this->patchJson('/api/absensi/' . $this->absensiA, ['status' => 'Sakit'])->assertStatus(200);
+        $this->patchJson('/api/absensi/' . $this->absensiB, ['status' => 'Sakit'])->assertStatus(200);
     }
 }

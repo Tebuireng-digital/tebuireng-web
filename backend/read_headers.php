@@ -1,9 +1,9 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
-use OpenSpout\Reader\Xlsx\Reader;
+use OpenSpout\Reader\XLSX\Reader;
 
-$dir = __DIR__ . '/../docs/excel';
+$dir = __DIR__ . '/../xlsx';
 $files = glob($dir . '/*.xlsx');
 
 foreach ($files as $file) {

@@ -65,6 +65,7 @@ class AbsensiFeatureTest extends TestCase
         $this->actingAs($this->petugas, 'sanctum');
 
         $payload = [
+            'target_id' => $this->kamarId,
             'jadwal_id' => $this->jadwalId,
             'tanggal' => now()->toDateString(),
             'absensi' => [
@@ -86,6 +87,39 @@ class AbsensiFeatureTest extends TestCase
         // Check DB, should only be 1 record
         $count = DB::table('absensi')->count();
         $this->assertEquals(1, $count);
+    }
+
+    public function test_assigned_staff_can_open_their_attendance_roster()
+    {
+        $this->actingAs($this->petugas, 'sanctum');
+
+        $this->getJson('/api/absensi-options')
+            ->assertOk()
+            ->assertJsonPath('0.jenis', 'kamar')
+            ->assertJsonPath('0.targets.0.target_id', $this->kamarId);
+
+        $this->getJson('/api/absensi/kamar/session?target_id='.$this->kamarId.'&jadwal_id='.$this->jadwalId.'&tanggal='.now()->toDateString())
+            ->assertOk()
+            ->assertJsonPath('santri.0.santri_id', $this->santriId)
+            ->assertJsonPath('santri.0.nama', 'Santri Test');
+    }
+
+    public function test_monthly_report_uses_real_attendance_totals()
+    {
+        DB::table('absensi')->insert([
+            'santri_id' => $this->santriId,
+            'jenis_kegiatan_id' => $this->kegiatanKamarId,
+            'jadwal_id' => $this->jadwalId,
+            'tanggal' => now()->toDateString(),
+            'status' => 'Hadir',
+            'diinput_oleh' => $this->petugas->petugas_id,
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum');
+        $this->getJson('/api/laporan/bulanan?bulan='.now()->month.'&tahun='.now()->year)
+            ->assertOk()
+            ->assertJsonPath('0.jenis_kegiatan', 'KAMAR')
+            ->assertJsonPath('0.total_hadir', 1);
     }
 
     public function test_patch_time_gate()

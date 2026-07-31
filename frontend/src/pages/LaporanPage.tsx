@@ -1,11 +1,32 @@
 import { useState } from 'react';
+import { api } from '../api';
 
 export function LaporanPage() {
   const [laporanType, setLaporanType] = useState('kehadiran');
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState('');
   
-  const handleUnduh = (format: 'pdf' | 'xlsx') => {
-    // Arahkan browser ke endpoint download
-    window.location.href = `http://localhost:8000/api/laporan/${laporanType}?format=${format}`;
+  const handleUnduh = async (format: 'pdf' | 'xlsx') => {
+    setDownloading(true);
+    setError('');
+    try {
+      const response = await api.get(`/api/laporan/${laporanType}`, {
+        params: { format },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `laporan-${laporanType}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Laporan gagal diunduh. Silakan coba kembali.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -32,6 +53,7 @@ export function LaporanPage() {
         <div style={{ display: 'flex', gap: '16px' }}>
           <button 
             onClick={() => handleUnduh('pdf')}
+            disabled={downloading}
             style={{ backgroundColor: 'var(--aksen)', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
             className="ui-text-title"
           >
@@ -39,12 +61,14 @@ export function LaporanPage() {
           </button>
           <button 
             onClick={() => handleUnduh('xlsx')}
+            disabled={downloading}
             style={{ backgroundColor: 'var(--status-hadir)', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
             className="ui-text-title"
           >
             Unduh Excel
           </button>
         </div>
+        {error && <p className="form-error" style={{ marginTop: '16px' }}>{error}</p>}
       </div>
     </div>
   );

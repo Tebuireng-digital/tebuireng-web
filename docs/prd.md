@@ -4,7 +4,7 @@ Versi ini menurunkan PRD produk yang sudah ada menjadi PRD teknis: setiap kebutu
 
 ## 1. Ringkasan
 
-Menggantikan pencatatan manual (buku absen kamar, buku absen kelas, buku keterlambatan, lembar izin kertas) dengan sistem digital yang dipakai musyrif/ustadz dari browser HP di lapangan, dan dipantau pengasuh/keamanan lewat dashboard. Lima kegiatan absensi (Kamar, Sekolah, PBS Subuh, PBM Maghrib, Diniyah) + modul Pelanggaran + modul Perizinan berjenjang dari musyrif ke keamanan, semuanya saling terhubung: santri yang izin otomatis tertandai izin di kelima modul absensi selama rentang izinnya.
+Menggantikan pencatatan manual dengan sistem digital yang dipakai pembina masing-masing kegiatan dari browser HP dan dipantau Pengasuh/Keamanan. Lima roster absensi adalah Kelas Formal 7/8/9, Kamar, Kelompok Al-Qur'an Subuh, Kelas Madin, dan Takhasus Maghrib. Modul Pelanggaran dan Perizinan terhubung dengan absensi: izin yang dibuat sekaligus disetujui Keamanan otomatis menandai santri sebagai `Izin` pada kelima kegiatan selama rentang izinnya. Santri tidak memiliki akun dan tidak melakukan input karena santri tidak memegang HP.
 
 ## 2. Stack Teknis & Alasan Pemilihan
 
@@ -29,25 +29,25 @@ Dipetakan ke `petugas.jabatan` (ENUM: `Pengasuh`, `Ustadz`, `Pembina Kamar`, `Wa
 | Admin/Superadmin | `Admin` | CRUD data master (santri, kamar, kelas, kelompok, pengguna), kelola master jenis pelanggaran & jenis izin, override edit absensi kapan saja |
 | Musyrif Kamar | `Pembina Kamar` | Input absensi Kamar untuk kamar yang diampu |
 | Guru/Wali Kelas | `Wali Kelas` | Input absensi Sekolah untuk kelas yang diampu |
-| Musyrif PBS / PBM | `Ustadz` (dibedakan lewat penugasan, lihat §9.1) | Input absensi PBS/PBM untuk kelompok yang diampu |
-| Ustadz Diniyah | `Ustadz` | Input absensi Diniyah untuk kelompok yang diampu |
-| Keamanan | `Keamanan` | Approve tahap akhir izin, catat keluar/masuk gerbang aktual, catat pelanggaran |
+| Pembina Al-Qur'an / Takhasus | `Ustadz` (dibedakan lewat penugasan) | Input absensi kelompok Al-Qur'an Subuh/Takhasus Maghrib yang diampu |
+| Pembina Madin | `Ustadz` | Input absensi kelas Madin yang diampu |
+| Keamanan | `Keamanan` | Membuat sekaligus menyetujui izin, mencatat keluar/masuk gerbang aktual, dan mencatat pelanggaran |
 | Pengasuh/Pimpinan | `Pengasuh` | Dashboard & laporan rekap semua modul, terima notifikasi ambang poin & overdue |
-| Wali Santri | — (belum ada di skema) | **Di luar cakupan fase 1** (lihat §8). Hanya dicatat sebagai kontak (`santri.nama_wali`, `santri.no_hp_wali`), belum sebagai akun login. |
+| Santri/Wali Santri | — | **Di luar cakupan MVP.** Santri tidak login; data wali hanya disimpan sebagai kontak. Jika portal wali dibuat kelak, gunakan akun wali tersendiri, bukan akun santri. |
 
 Setiap request ke API divalidasi lewat Laravel Policy: petugas hanya boleh mengubah data absensi/pelanggaran/izin untuk kamar/kelas/kelompok yang jadi tanggung jawabnya (lihat gap skema §9.1), kecuali `Admin`.
 
 ## 4. Modul Absensi (5 kegiatan) → Skema & API
 
-Kelima modul berbagi satu tabel inti `absensi` dengan `jenis_kegiatan_id` sebagai pembeda (lihat `jenis_kegiatan`: Kamar, Sekolah, PBS, PBM, Diniyah), jadi UI-nya seragam tapi query-nya difilter per jenis.
+Kelima modul memakai UI dan aturan input yang sama. Kode internal lama (`SEKOLAH`, `KAMAR`, `PBS`, `DINIYAH`, `PBM`) tetap dapat dipakai, tetapi nama yang tampil kepada pengguna harus mengikuti istilah operasional berikut.
 
 | Modul | Jadwal | Sumber daftar santri | Endpoint utama |
 | --- | --- | --- | --- |
-| Absensi Kamar | 20:00–20:30 | `santri.kamar_id` | `POST /api/absensi/kamar/bulk` |
-| Absensi Sekolah | 07:00–07:30 | `santri.kelas_formal_id` | `POST /api/absensi/sekolah/bulk` |
-| Absensi PBS Subuh | 05:00–06:00 | kelompok PBS (lihat gap §9.1 — belum ada tabel `kelompok_pbs`) | `POST /api/absensi/pbs/bulk` |
-| Absensi PBM Maghrib | 18:30–19:30 | `santri.kelas_formal_id` atau kelompok PBS (perlu dikonfirmasi ke pengasuhan) | `POST /api/absensi/pbm/bulk` |
-| Absensi Diniyah | 15:30–16:00 | `santri.kelompok_diniyah_id` | `POST /api/absensi/diniyah/bulk` |
+| Kelas Formal 7/8/9 | 07:00–07:30 | `Database_Siswa_Kelas_7_8_9_2026_2027.xlsx` | `POST /api/absensi/sekolah/bulk` |
+| Kamar | 20:00–20:30 | `Database_Santri_Kamar_MTS_SMP_SMA_SMK.xlsx` | `POST /api/absensi/kamar/bulk` |
+| Kelompok Al-Qur'an Subuh | 05:00–06:00 | `Database_Kelompok_AlQuran (belajar habis subuh)_2026_2027.xlsx` | `POST /api/absensi/pbs/bulk` |
+| Kelas Madin | 15:30–16:00 | `Database_Kelas_Madin_2026_2027.xlsx` | `POST /api/absensi/diniyah/bulk` |
+| Takhasus Maghrib | 18:30–19:30 | `Database_Takhassus (belajar habis maghrib)_2026_2027.xlsx` | `POST /api/absensi/pbm/bulk` |
 
 **Kebutuhan fungsional → implementasi:**
 
@@ -56,7 +56,7 @@ Kelima modul berbagi satu tabel inti `absensi` dengan `jenis_kegiatan_id` sebaga
 - **Status "Terlambat" santri** (bukan input terlambat) — memakai `absensi.status = 'Terlambat'` + `absensi.menit_terlambat`, relevan terutama untuk Kamar/PBS yang berbasis jamaah (mengikuti pola sheet `TERLAMBAT` di data existing).
 - **Notifikasi pengingat H-10 menit** — job terjadwal Laravel yang jalan tiap menit, mengecek `jadwal_kegiatan` yang akan mulai 10 menit lagi dan mengirim notifikasi (channel `database`, dan `broadcast` bila real-time diaktifkan) ke petugas yang bertanggung jawab.
 - **Edit dibatasi rentang waktu** — Policy di backend menolak `PATCH` ke baris `absensi` jika `now() - waktu_input > 60 menit`, kecuali requester adalah `Admin`. Setiap perubahan tercatat di `log_aktivitas`.
-- **Auto-tandai "Izin"** — event listener `PerizinanDisetujui` (dipicu saat tahap approval terakhir di `perizinan_approval` = `Disetujui`) menjalankan job yang meng-upsert baris `absensi` berstatus `Izin` untuk santri tsb, di kelima jenis kegiatan, untuk setiap tanggal antara `tanggal_mulai` dan `rencana_kembali`. Jika petugas mencoba override manual, sistem menampilkan peringatan "santri ini sedang izin" (bukan block keras, karena rencana kembali bisa meleset).
+- **Auto-tandai "Izin"** — setelah Keamanan membuat izin, status langsung `Disetujui` dan event `PerizinanDisetujui` meng-upsert absensi `Izin` pada kelima kegiatan untuk setiap tanggal dalam rentang izin.
 - **Rekap harian dengan filter** — `GET /api/absensi?jenis=&tanggal=&kamar_id=&kelas_id=&status=` memakai view `v_rekap_absensi_harian` sebagai basis query.
 
 ## 5. Modul Pelanggaran → Skema & API
@@ -67,21 +67,21 @@ Kelima modul berbagi satu tabel inti `absensi` dengan `jenis_kegiatan_id` sebaga
 - **Notifikasi ambang batas poin** — job dipicu setiap kali `pelanggaran` baru disimpan: jika akumulasi poin santri melewati ambang (nilai ambang dikonfigurasi Admin, lihat §9.2 `pengaturan_sistem`), kirim notifikasi ke `Pengasuh`.
 - **Filter laporan** — `GET /api/pelanggaran?santri_id=&kamar_id=&kelas_id=&kategori_id=&dari=&sampai=`.
 
-## 6. Modul Perizinan (berjenjang) → Skema & API
+## 6. Modul Perizinan oleh Keamanan → Skema & API
 
-- `POST /api/perizinan` membuat baris `perizinan` (status awal `Diajukan`) sekaligus baris-baris `perizinan_approval` sesuai alur tahap untuk `jenis_izin` terkait (default: `Pembina Kamar` → `Keamanan`).
-- `PATCH /api/perizinan/{id}/approval/{tahap}` — dipanggil petugas terkait untuk mengisi `keputusan` (`Disetujui`/`Ditolak`) + `catatan`. Backend memvalidasi bahwa tahap sebelumnya sudah `Disetujui` sebelum tahap berikutnya bisa diputuskan (mencegah lompat tahap).
-- Begitu tahap terakhir `Disetujui`, backend mengubah `perizinan.status` menjadi `Disetujui` (lalu `Sedang Berjalan` saat `waktu_keluar_aktual` diisi Keamanan). Jika salah satu tahap `Ditolak`, `perizinan.status` langsung `Ditolak` dan tahap sisanya ditandai gugur.
+- `POST /api/perizinan` hanya dapat dipanggil Keamanan atau Admin. Keamanan memilih santri, jenis izin, keperluan, waktu mulai, dan rencana kembali. Izin langsung berstatus `Disetujui`; tidak ada approval berjenjang pada MVP.
+- Sistem menolak rentang izin baru yang bertabrakan dengan izin aktif santri yang sama.
+- Setelah izin tersimpan, sistem otomatis membuat/memperbarui absensi `Izin` pada lima kegiatan.
 - **Catat keluar/masuk aktual** — `PATCH /api/perizinan/{id}/gerbang` (khusus role `Keamanan`) mengisi `waktu_keluar_aktual` / `waktu_masuk_aktual` dan `dicatat_keamanan_oleh`; saat `waktu_masuk_aktual` terisi, `status` → `Selesai`.
 - **Deteksi overdue** — job terjadwal harian mencari `perizinan` dengan `status = 'Sedang Berjalan'` dan `rencana_kembali < now()` tanpa `waktu_masuk_aktual`, lalu mengirim notifikasi ke `Admin` (sesuai PRD produk — bukan ke Keamanan, agar eskalasi jelas).
-- **Riwayat per santri** — `GET /api/santri/{id}/perizinan` memakai view `v_progres_approval_izin` untuk menampilkan progres tahap sekaligus histori.
+- **Riwayat per santri** — `GET /api/santri/{id}/perizinan` menampilkan riwayat izin tanpa progres approval.
 
 ## 7. Kebutuhan Non-Fungsional → Implikasi Desain Sistem
 
 | Kebutuhan | Implikasi teknis |
 | --- | --- |
 | Web-based, browser HP | React PWA, target Chrome/Safari mobile, hindari fitur yang butuh native (kamera pakai `<input type="file" capture>`, bukan native camera API). |
-| Offline-first / koneksi lemah | Service worker cache shell aplikasi; mutasi absensi & izin ditulis dulu ke IndexedDB dengan status `pending`, disinkron via background sync saat online; UI menampilkan indikator "belum tersinkron" per baris. |
+| Offline-first / koneksi lemah | Mutasi absensi ditulis ke IndexedDB per akun petugas dengan status `pending`, lalu disinkron saat online; UI menampilkan status sinkronisasi. Perizinan memerlukan koneksi karena langsung memengaruhi gerbang dan lima roster absensi. |
 | Bulk input ≤ 2 menit untuk 20–40 santri | Satu request `bulk` per sesi (bukan 1 request per santri), UI checkbox/segmented-control per baris tanpa reload halaman. |
 | Kontrol akses per unit tanggung jawab | Laravel Policy per resource, lihat gap skema §9.1. |
 | Audit trail | Semua `INSERT`/`UPDATE`/`DELETE` pada tabel sensitif (`absensi`, `pelanggaran`, `perizinan`, `perizinan_approval`) dicatat lewat model observer ke `log_aktivitas`. |
@@ -95,17 +95,13 @@ Kelima modul berbagi satu tabel inti `absensi` dengan `jenis_kegiatan_id` sebaga
 - `GET /api/laporan/bulanan?bulan=&tahun=&kamar_id=|kelas_id=` — rekap gabungan (kehadiran 5 modul + pelanggaran + perizinan) untuk evaluasi bulanan pengasuhan.
 - Ekspor: setiap endpoint laporan punya varian `?format=xlsx` / `?format=pdf` yang menghasilkan file lewat `maatwebsite/excel` / `dompdf`, diunduh via signed URL sementara (bukan disimpan permanen di server).
 
-## 9. Kesenjangan Skema (perlu keputusan sebelum implementasi)
+## 9. Keputusan Produk yang Sudah Dikonfirmasi
 
-Skema `skema_database_absensi_santri.sql` saat ini sudah menutupi struktur data existing (santri, kamar, kelas, kelompok, absensi, pelanggaran, perizinan berjenjang), tapi PRD produk menuntut beberapa hal yang belum ada tabelnya:
-
-1. **Penugasan petugas ke unit/kamar/kelas/kelompok** — PRD produk poin 6 minta data pengguna mencatat "unit/kamar/kelas yang menjadi tanggung jawabnya". Skema saat ini hanya punya relasi 1-ke-1 (`kamar.pembina_id`, `kelas_formal.wali_kelas_id`), tidak mengakomodasi satu Ustadz mengampu banyak kelompok PBS/PBM/Diniyah sekaligus, atau rotasi petugas. **Rekomendasi**: tabel pivot baru `petugas_penugasan (petugas_id, tipe_target ENUM('Kamar','KelasFormal','KelompokDiniyah','KelompokQuran','KelompokTakhassus'), target_id)`.
-2. **Kelompok PBS** — belum ada tabel setara `kelompok_diniyah`/`kelompok_quran` untuk PBS. Perlu dikonfirmasi: apakah PBS mengikuti pengelompokan kamar, kelas formal, atau kelompok sendiri (mengingat belum ada file contoh PBS saat penyusunan skema awal).
-3. **Bukti foto pelanggaran** — perlu tabel `lampiran_pelanggaran (lampiran_id, pelanggaran_id FK, path_file, diunggah_oleh, created_at)` karena sifatnya bisa lebih dari satu foto per kejadian.
-4. **Konfigurasi ambang & aturan** (ambang poin notifikasi, toleransi menit keterlambatan, durasi jendela edit) — sebaiknya tabel `pengaturan_sistem (key, value)` yang dikelola Admin, bukan hardcode di kode, karena PRD produk poin 12 menyebut ini masih perlu didiskusikan.
-5. **Notifikasi** — perlu tabel `notifikasi` (atau memakai tabel `notifications` bawaan Laravel) untuk menyimpan riwayat notifikasi in-app, terpisah dari job pengirimnya.
-
-Ini bukan blocker untuk mulai membangun modul inti (data master, absensi, pelanggaran, perizinan), tapi perlu disepakati sebelum modul dashboard/notifikasi dikerjakan.
+1. Setiap kegiatan memiliki pelaksana berbeda dan hak input dibatasi oleh jabatan serta penugasan kelompok.
+2. Kelompok Al-Qur'an Subuh dan Takhasus Maghrib mengikuti roster Excel masing-masing, bukan kamar atau kelas formal.
+3. Izin dibuat sekaligus disetujui Keamanan, tanpa approval berjenjang.
+4. Santri tidak memiliki akun dan tidak melakukan input.
+5. Satu petugas dapat menerima lebih dari satu penugasan selama jabatan sesuai jenis kegiatan.
 
 ## 10. Di Luar Cakupan Fase 1
 
@@ -115,10 +111,7 @@ Sama seperti dokumen produk asli: portal/aplikasi wali santri, integrasi pembaya
 
 Dibawa dari dokumen produk, plus tambahan teknis:
 
-- Apakah izin santri memerlukan persetujuan wali santri, atau cukup 3 tahap internal (Wali Kamar → Pengasuh → Keamanan)?
 - Skema poin pelanggaran → sanksi (SP1/SP2) otomatis atau manual di fase 1?
-- **[Teknis]** Struktur kelompok PBS — ikut kamar, kelas, atau kelompok baru? (menentukan apakah perlu tabel `kelompok_pbs`)
-- **[Teknis]** Apakah satu Ustadz/Musyrif memang bisa ditugaskan ke lebih dari satu kamar/kelompok? (menentukan urgensi tabel `petugas_penugasan`)
 - **[Teknis]** Volume data foto bukti pelanggaran — cukup local storage atau perlu object storage (S3-compatible) sejak awal?
 
 ## 12. Metrik Keberhasilan

@@ -10,7 +10,7 @@ class PerizinanApproval extends Model
     use HasFactory;
 
     protected $table = 'perizinan_approval';
-    protected $primaryKey = 'perizinan_approval_id';
-    public $timestamps = true;
+    protected $primaryKey = 'approval_id';
+    public $timestamps = false;
     protected $guarded = [];
 }

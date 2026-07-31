@@ -1,65 +1,60 @@
-import { useEffect, useState, useCallback } from 'react';
-import { db } from '../db/db';
-import type { OfflineAbsensi } from '../db/db';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { SyncState } from '../components/IndikatorSinkron';
+import { db } from '../db/db';
 
-export function useBackgroundSync() {
+export function useBackgroundSync(petugasId: number) {
   const [syncState, setSyncState] = useState<SyncState>('tersinkron');
   const [isSaved, setIsSaved] = useState(false);
+  const isSyncing = useRef(false);
 
   const syncData = useCallback(async () => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+
     try {
-      // Find all pending items
-      const pendingItems = await db.offlineQueue.where('sync_status').equals('pending').toArray();
-      
+      const pendingItems = await db.offlineQueue
+        .where('petugas_id')
+        .equals(petugasId)
+        .and(item => item.sync_status === 'pending')
+        .toArray();
+
       if (pendingItems.length === 0) {
         setSyncState('tersinkron');
         return;
       }
 
-      setSyncState('offline'); // Or 'syncing' if we had one, but offline is used to show orange pulsing
+      if (!navigator.onLine) {
+        setSyncState('offline');
+        return;
+      }
 
-      // Group by jenis_kegiatan to send in batches since API is per-jenis
-      const grouped = pendingItems.reduce((acc, item) => {
-        if (!acc[item.jenis_kegiatan]) acc[item.jenis_kegiatan] = [];
-        acc[item.jenis_kegiatan].push(item);
-        return acc;
-      }, {} as Record<string, OfflineAbsensi[]>);
+      setSyncState('offline');
+      const grouped = pendingItems.reduce<Record<string, typeof pendingItems>>((groups, item) => {
+        const key = [item.jenis_kegiatan, item.target_id, item.jadwal_id, item.tanggal].join('|');
+        (groups[key] ??= []).push(item);
+        return groups;
+      }, {});
 
       let hasError = false;
-
-      for (const [jenis, items] of Object.entries(grouped)) {
-        // Find distinct jadwal & tanggal (assuming one per page usually)
-        // For simplicity, we assume one jadwal and tanggal per sync batch, or we group them further.
-        const byJadwalTanggal = items.reduce((acc, item) => {
-          const key = `${item.jadwal_id}|${item.tanggal}`;
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(item);
-          return acc;
-        }, {} as Record<string, OfflineAbsensi[]>);
-
-        for (const [jt, jtItems] of Object.entries(byJadwalTanggal)) {
-          const [jadwal_id, tanggal] = jt.split('|');
-          
-          const payload = {
-            jadwal_id: parseInt(jadwal_id),
+      for (const [key, items] of Object.entries(grouped)) {
+        const [jenis, targetId, jadwalId, tanggal] = key.split('|');
+        try {
+          await api.post(`/api/absensi/${jenis}/bulk`, {
+            target_id: Number(targetId),
+            jadwal_id: Number(jadwalId),
             tanggal,
-            absensi: jtItems.map(i => ({
-              santri_id: i.santri_id,
-              status: i.status
-            }))
-          };
-
-          try {
-            await api.post(`/api/absensi/${jenis}/bulk`, payload);
-            // Mark as synced or delete
-            const ids = jtItems.map(i => i.id!).filter(id => id !== undefined);
-            await db.offlineQueue.bulkDelete(ids); // delete from queue once synced
-          } catch (e) {
-            console.error(`Failed to sync ${jenis}`, e);
-            hasError = true;
-          }
+            absensi: items.map(item => ({
+              santri_id: item.santri_id,
+              status: item.status,
+              menit_terlambat: item.menit_terlambat ?? null,
+              keterangan: item.keterangan ?? null,
+            })),
+          });
+          await db.offlineQueue.bulkDelete(items.flatMap(item => item.id === undefined ? [] : [item.id]));
+        } catch (error) {
+          console.error(`Gagal menyinkronkan absensi ${jenis}`, error);
+          hasError = true;
         }
       }
 
@@ -68,27 +63,24 @@ export function useBackgroundSync() {
       } else {
         setSyncState('tersinkron');
         setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 3000);
+        window.setTimeout(() => setIsSaved(false), 3000);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error('Gagal membaca antrean absensi', error);
       setSyncState('error');
+    } finally {
+      isSyncing.current = false;
     }
-  }, []);
+  }, [petugasId]);
 
   useEffect(() => {
-    // Check initial state
-    db.offlineQueue.where('sync_status').equals('pending').count().then(c => {
-      if (c > 0) setSyncState('offline');
-    });
+    db.offlineQueue.where('petugas_id').equals(petugasId).and(item => item.sync_status === 'pending').count()
+      .then(count => setSyncState(count > 0 ? 'offline' : 'tersinkron'));
 
-    const handleOnline = () => {
-      syncData();
-    };
-
+    const handleOnline = () => void syncData();
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
-  }, [syncData]);
+  }, [petugasId, syncData]);
 
   return { syncState, syncData, isSaved };
 }

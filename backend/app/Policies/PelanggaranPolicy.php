@@ -34,7 +34,7 @@ class PelanggaranPolicy
 
     private function checkAccess(Petugas $petugas, $santriId)
     {
-        if ($petugas->jabatan === 'Admin') return true;
+        if (in_array($petugas->jabatan, ['Admin', 'Keamanan'], true)) return true;
 
         $santri = DB::table('santri')->where('santri_id', $santriId)->first();
         if (!$santri) return false;

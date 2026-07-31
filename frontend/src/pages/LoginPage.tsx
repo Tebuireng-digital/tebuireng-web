@@ -4,10 +4,8 @@ import { api } from '../api';
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [loginType, setLoginType] = useState<'petugas' | 'santri'>('petugas');
-  
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('password');
+  const [password, setPassword] = useState('');
   
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -22,16 +20,9 @@ export function LoginPage() {
       // Sanctum CSRF protection
       await api.get('/sanctum/csrf-cookie');
 
-      if (loginType === 'petugas') {
-        const response = await api.post('/api/login', { username, password });
-        if (response.data && response.data.user) {
-          login({ ...response.data.user, role: 'petugas' });
-        }
-      } else {
-        const response = await api.post('/api/santri/login', { nis: username, password });
-        if (response.data && response.data.user) {
-          login({ ...response.data.user, role: 'santri' });
-        }
+      const response = await api.post('/api/login', { username, password });
+      if (response.data && response.data.user) {
+        login({ ...response.data.user, role: 'petugas' });
       }
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {
@@ -50,24 +41,6 @@ export function LoginPage() {
         <h1 className="login-title">Sistem Absensi</h1>
         <p className="login-subtitle">Silakan masuk ke akun Anda</p>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', marginBottom: '24px', backgroundColor: '#F1F5F9', borderRadius: '12px', padding: '4px' }}>
-          <button
-            type="button"
-            onClick={() => setLoginType('petugas')}
-            style={{ flex: 1, padding: '10px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', backgroundColor: loginType === 'petugas' ? 'white' : 'transparent', color: loginType === 'petugas' ? '#0F6E56' : '#64748B', boxShadow: loginType === 'petugas' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
-          >
-            Petugas
-          </button>
-          <button
-            type="button"
-            onClick={() => setLoginType('santri')}
-            style={{ flex: 1, padding: '10px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', backgroundColor: loginType === 'santri' ? 'white' : 'transparent', color: loginType === 'santri' ? '#0F6E56' : '#64748B', boxShadow: loginType === 'santri' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
-          >
-            Wali Santri
-          </button>
-        </div>
-
         {error && (
           <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fecaca' }}>
             {error}
@@ -77,14 +50,14 @@ export function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="login-input-group">
             <label className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>
-              {loginType === 'petugas' ? 'Username' : 'NIS (Nomor Induk Santri)'}
+              Username petugas
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="login-input"
-              placeholder={loginType === 'petugas' ? 'Contoh: admin, keamanan...' : 'Masukkan NIS...'}
+              placeholder="Masukkan username"
               required
             />
           </div>
@@ -127,7 +100,7 @@ export function LoginPage() {
             </div>
           </div>
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Memproses...' : (loginType === 'petugas' ? 'Masuk sebagai Petugas' : 'Masuk sebagai Wali Santri')}
+            {loading ? 'Memproses...' : 'Masuk sebagai Petugas'}
           </button>
         </form>
 

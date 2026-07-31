@@ -7,6 +7,8 @@ use Tests\TestCase;
 use App\Models\Petugas;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 use Carbon\Carbon;
 
 class PelanggaranPerizinanFeatureTest extends TestCase
@@ -60,38 +62,51 @@ class PelanggaranPerizinanFeatureTest extends TestCase
         ]);
     }
 
-    public function test_reject_flow()
+    public function test_only_security_or_admin_can_create_permission()
     {
-        $this->actingAs($this->admin, 'sanctum');
-
-        $this->postJson('/api/perizinan', [
+        $payload = [
             'santri_id' => $this->santriId,
             'jenis_izin_id' => $this->jenisIzinId,
             'keperluan' => 'Sakit',
             'tanggal_mulai' => now()->toDateString(),
             'rencana_kembali' => now()->addDays(2)->toDateString(),
-        ])->assertStatus(201);
+        ];
 
-        $perizinanId = DB::table('perizinan')->first()->perizinan_id;
-
-        // Tahap 1: Approve
-        $this->actingAs($this->waliKelas, 'sanctum');
-        $this->patchJson("/api/perizinan/{$perizinanId}/approval/1", [
-            'keputusan' => 'Disetujui'
-        ])->assertStatus(200);
-
-        // Tahap 2: Reject
         $this->actingAs($this->pembina, 'sanctum');
-        $this->patchJson("/api/perizinan/{$perizinanId}/approval/2", [
-            'keputusan' => 'Ditolak'
-        ])->assertStatus(200);
+        $this->postJson('/api/perizinan', $payload)->assertStatus(403);
 
-        // Verify status
+        $this->actingAs($this->keamanan, 'sanctum');
+        $this->postJson('/api/perizinan', $payload)->assertStatus(201);
+
+        $perizinanId = DB::table('perizinan')->value('perizinan_id');
         $perizinan = DB::table('perizinan')->where('perizinan_id', $perizinanId)->first();
-        $this->assertEquals('Ditolak', $perizinan->status);
+        $this->assertEquals('Disetujui', $perizinan->status);
+        $this->assertEquals($this->keamanan->petugas_id, $perizinan->diajukan_oleh);
+    }
 
-        $tahap3 = DB::table('perizinan_approval')->where('perizinan_id', $perizinanId)->where('tahap', 3)->first();
-        $this->assertEquals('Gugur', $tahap3->keputusan);
+    public function test_violation_returns_id_and_accepts_attachment()
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => 'Pelanggaran uji',
+        ])->assertCreated()->assertJsonStructure(['message', 'pelanggaran_id']);
+
+        $pelanggaranId = $response->json('pelanggaran_id');
+        $this->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
+            'file' => UploadedFile::fake()->create('bukti.pdf', 10, 'application/pdf'),
+        ])->assertOk();
+
+        $lampiran = DB::table('lampiran_pelanggaran')
+            ->where('pelanggaran_id', $pelanggaranId)
+            ->first();
+
+        $this->assertNotNull($lampiran);
+        Storage::disk('local')->assertExists($lampiran->path_file);
     }
 
     public function test_success_flow_and_absensi_upsert()
@@ -102,7 +117,7 @@ class PelanggaranPerizinanFeatureTest extends TestCase
             'jenis_kegiatan_id' => $jenisKeg, 'nama_jadwal' => 'Tes', 'jam_mulai' => '07:00:00', 'jam_selesai' => '08:00:00'
         ]);
 
-        $this->actingAs($this->admin, 'sanctum');
+        $this->actingAs($this->keamanan, 'sanctum');
 
         $this->postJson('/api/perizinan', [
             'santri_id' => $this->santriId,
@@ -114,14 +129,7 @@ class PelanggaranPerizinanFeatureTest extends TestCase
 
         $perizinanId = DB::table('perizinan')->first()->perizinan_id;
 
-        // Appove T1
-        $this->actingAs($this->waliKelas, 'sanctum')->patchJson("/api/perizinan/{$perizinanId}/approval/1", ['keputusan' => 'Disetujui']);
-        // Appove T2
-        $this->actingAs($this->pembina, 'sanctum')->patchJson("/api/perizinan/{$perizinanId}/approval/2", ['keputusan' => 'Disetujui']);
-        // Appove T3
-        $this->actingAs($this->keamanan, 'sanctum')->patchJson("/api/perizinan/{$perizinanId}/approval/3", ['keputusan' => 'Disetujui']);
-
-        // Check if event fired and absensi created
+        // Izin langsung disetujui dan event membuat absensi Izin.
         $perizinan = DB::table('perizinan')->where('perizinan_id', $perizinanId)->first();
         $this->assertEquals('Disetujui', $perizinan->status);
 

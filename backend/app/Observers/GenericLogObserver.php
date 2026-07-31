@@ -22,10 +22,11 @@ class GenericLogObserver
         DB::table('log_aktivitas')->insert([
             'petugas_id' => $user->petugas_id,
             'aksi' => $aksi,
-            'tabel_yang_diubah' => $tabel,
+            'nama_tabel' => $tabel,
+            'record_id' => $model->getKey(),
             'data_sebelum' => $dataSebelum,
             'data_sesudah' => $dataSesudah,
-            'waktu_aktivitas' => now()
+            'created_at' => now()
         ]);
     }
 

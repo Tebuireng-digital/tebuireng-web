@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\URL;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LaporanExport;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -42,11 +41,23 @@ class LaporanController extends Controller
 
     public function pelanggaran(Request $request)
     {
-        // Simple query for now
         $query = DB::table('pelanggaran')
             ->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id')
             ->join('kategori_pelanggaran', 'pelanggaran.kategori_pelanggaran_id', '=', 'kategori_pelanggaran.kategori_pelanggaran_id')
-            ->select('pelanggaran.*', 'santri.nama', 'kategori_pelanggaran.nama_kategori', 'kategori_pelanggaran.poin');
+            ->select(
+                'pelanggaran.*',
+                'santri.nama',
+                'kategori_pelanggaran.uraian_pelanggaran',
+                'kategori_pelanggaran.kategori',
+                'kategori_pelanggaran.poin_maks'
+            );
+
+        if ($request->filled('dari')) {
+            $query->whereDate('pelanggaran.tanggal', '>=', $request->query('dari'));
+        }
+        if ($request->filled('sampai')) {
+            $query->whereDate('pelanggaran.tanggal', '<=', $request->query('sampai'));
+        }
             
         $data = $query->get();
 
@@ -85,11 +96,42 @@ class LaporanController extends Controller
 
     public function bulanan(Request $request)
     {
-        // For simplicity, we just aggregate some counts
-        // In real app, this would be a complex query or use a materialized view
-        $data = collect([
-            ['bulan' => $request->query('bulan', date('m')), 'tahun' => $request->query('tahun', date('Y')), 'kamar_id' => $request->query('kamar_id'), 'total_hadir' => 120, 'total_izin' => 5, 'total_sakit' => 2, 'total_alpha' => 1]
+        $bulan = (int) $request->query('bulan', now()->month);
+        $tahun = (int) $request->query('tahun', now()->year);
+
+        $request->merge(['bulan' => $bulan, 'tahun' => $tahun]);
+        $request->validate([
+            'bulan' => ['integer', 'between:1,12'],
+            'tahun' => ['integer', 'between:2020,2100'],
+            'kamar_id' => ['nullable', 'integer', 'exists:kamar,kamar_id'],
         ]);
+
+        $query = DB::table('absensi')
+            ->join('santri', 'absensi.santri_id', '=', 'santri.santri_id')
+            ->join('jenis_kegiatan', 'absensi.jenis_kegiatan_id', '=', 'jenis_kegiatan.jenis_kegiatan_id')
+            ->whereMonth('absensi.tanggal', $bulan)
+            ->whereYear('absensi.tanggal', $tahun);
+
+        if ($request->filled('kamar_id')) {
+            $query->where('santri.kamar_id', $request->integer('kamar_id'));
+        }
+
+        $data = $query
+            ->select(
+                'jenis_kegiatan.kode as jenis_kegiatan',
+                DB::raw("SUM(CASE WHEN absensi.status = 'Hadir' THEN 1 ELSE 0 END) as total_hadir"),
+                DB::raw("SUM(CASE WHEN absensi.status = 'Izin' THEN 1 ELSE 0 END) as total_izin"),
+                DB::raw("SUM(CASE WHEN absensi.status = 'Sakit' THEN 1 ELSE 0 END) as total_sakit"),
+                DB::raw("SUM(CASE WHEN absensi.status = 'Alpha' THEN 1 ELSE 0 END) as total_alpha"),
+                DB::raw("SUM(CASE WHEN absensi.status = 'Terlambat' THEN 1 ELSE 0 END) as total_terlambat")
+            )
+            ->groupBy('jenis_kegiatan.kode')
+            ->orderBy('jenis_kegiatan.kode')
+            ->get()
+            ->map(fn ($row) => (object) array_merge((array) $row, [
+                'bulan' => $bulan,
+                'tahun' => $tahun,
+            ]));
         
         if ($request->query('format') === 'xlsx') {
             return Excel::download(new LaporanExport($data), 'laporan-bulanan.xlsx');

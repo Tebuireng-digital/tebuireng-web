@@ -66,17 +66,6 @@ services:
     depends_on:
       - backend
 
-  scheduler:
-    image: ${BACKEND_IMAGE:-tebuireng-backend:production}
-    restart: unless-stopped
-    environment: *backend-environment
-    volumes:
-      - backend_storage:/var/www/html/storage
-    depends_on:
-      mysql:
-        condition: service_healthy
-    command: ["php", "artisan", "schedule:work"]
-
   frontend:
     image: ${FRONTEND_IMAGE:-tebuireng-frontend:production}
     build:

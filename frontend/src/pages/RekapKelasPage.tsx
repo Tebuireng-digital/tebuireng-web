@@ -60,8 +60,12 @@ export function RekapKelasPage() {
   return (
     <div className="rekap-page">
       <header className="dashboard-header">
-        <h1>Rekap Kelas</h1>
-        <p>Pantau hasil absensi harian hanya untuk kelas yang menjadi tanggung jawab Anda.</p>
+        <div>
+          <span className="page-eyebrow">Absensi kelas</span>
+          <h1>Rekap Kelas</h1>
+          <p>Pantau hasil absensi harian hanya untuk kelas yang menjadi tanggung jawab Anda.</p>
+        </div>
+        <div className="dashboard-mosque" aria-hidden="true"><span></span></div>
       </header>
 
       <div className="rekap-filters">

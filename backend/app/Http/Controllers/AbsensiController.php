@@ -339,12 +339,27 @@ class AbsensiController extends Controller
             ];
         }
 
-        DB::transaction(function () use ($upsertData, $existingRows, $data, $kegiatan, $petugas) {
-            DB::table('absensi')->upsert(
-                $upsertData,
-                ['santri_id', 'jenis_kegiatan_id', 'jadwal_id', 'tanggal'],
-                ['status', 'menit_terlambat', 'keterangan', 'diubah_oleh', 'updated_at']
-            );
+        // Payload identik adalah no-op: jangan menyentuh updated_at/diubah_oleh
+        // dan jangan menghasilkan audit log baru.
+        $writeData = array_values(array_filter($upsertData, function (array $row) use ($existingRows) {
+            $existing = $existingRows->get($row['santri_id']);
+            if (!$existing) {
+                return true;
+            }
+
+            return $existing->status !== $row['status']
+                || $existing->menit_terlambat !== $row['menit_terlambat']
+                || $existing->keterangan !== $row['keterangan'];
+        }));
+
+        DB::transaction(function () use ($upsertData, $writeData, $existingRows, $data, $kegiatan, $petugas) {
+            if ($writeData) {
+                DB::table('absensi')->upsert(
+                    $writeData,
+                    ['santri_id', 'jenis_kegiatan_id', 'jadwal_id', 'tanggal'],
+                    ['status', 'menit_terlambat', 'keterangan', 'diubah_oleh', 'updated_at']
+                );
+            }
 
             $saved = DB::table('absensi')
                 ->whereIn('santri_id', collect($upsertData)->pluck('santri_id'))
@@ -388,6 +403,7 @@ class AbsensiController extends Controller
         return response()->json([
             'message' => 'Absensi berhasil disimpan',
             'jumlah' => count($upsertData),
+            'jumlah_diubah' => count($writeData),
             'input_terlambat' => $now->greaterThan($batasInput),
         ]);
     }

@@ -5,12 +5,14 @@ import { db } from '../db/db';
 
 export function useBackgroundSync(petugasId: number) {
   const [syncState, setSyncState] = useState<SyncState>('tersinkron');
+  const [syncError, setSyncError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const isSyncing = useRef(false);
 
   const syncData = useCallback(async () => {
     if (isSyncing.current) return;
     isSyncing.current = true;
+    setIsSaved(false);
 
     try {
       const pendingItems = await db.offlineQueue
@@ -21,6 +23,7 @@ export function useBackgroundSync(petugasId: number) {
 
       if (pendingItems.length === 0) {
         setSyncState('tersinkron');
+        setSyncError('');
         return;
       }
 
@@ -29,7 +32,8 @@ export function useBackgroundSync(petugasId: number) {
         return;
       }
 
-      setSyncState('offline');
+      setSyncState('menyinkronkan');
+      setSyncError('');
       const grouped = pendingItems.reduce<Record<string, typeof pendingItems>>((groups, item) => {
         const key = [item.jenis_kegiatan, item.target_id, item.jadwal_id, item.tanggal].join('|');
         (groups[key] ??= []).push(item);
@@ -54,6 +58,9 @@ export function useBackgroundSync(petugasId: number) {
           await db.offlineQueue.bulkDelete(items.flatMap(item => item.id === undefined ? [] : [item.id]));
         } catch (error) {
           console.error(`Gagal menyinkronkan absensi ${jenis}`, error);
+          const apiMessage = (error as { response?: { data?: { message?: string } } })
+            .response?.data?.message;
+          setSyncError(apiMessage ?? 'Server tidak dapat menyimpan absensi. Periksa koneksi lalu coba lagi.');
           hasError = true;
         }
       }
@@ -62,11 +69,13 @@ export function useBackgroundSync(petugasId: number) {
         setSyncState('error');
       } else {
         setSyncState('tersinkron');
+        setSyncError('');
         setIsSaved(true);
         window.setTimeout(() => setIsSaved(false), 3000);
       }
     } catch (error) {
       console.error('Gagal membaca antrean absensi', error);
+      setSyncError('Antrean absensi di perangkat tidak dapat dibaca. Muat ulang aplikasi lalu coba lagi.');
       setSyncState('error');
     } finally {
       isSyncing.current = false;
@@ -82,5 +91,5 @@ export function useBackgroundSync(petugasId: number) {
     return () => window.removeEventListener('online', handleOnline);
   }, [petugasId, syncData]);
 
-  return { syncState, syncData, isSaved };
+  return { syncState, syncData, isSaved, syncError };
 }

@@ -76,17 +76,27 @@ class AbsensiFeatureTest extends TestCase
             ]
         ];
 
-        // 1st request
+        Carbon::setTestNow('2026-07-31 08:00:00');
+
+        // Request pertama membuat satu baris.
         $response1 = $this->postJson('/api/absensi/kamar/bulk', $payload);
-        $response1->assertStatus(200);
+        $response1->assertOk()->assertJsonPath('jumlah_diubah', 1);
+        $first = DB::table('absensi')->first();
 
-        // 2nd request
-        $response2 = $this->postJson('/api/absensi/kamar/bulk', $payload);
-        $response2->assertStatus(200);
+        // Kirim payload identik berkali-kali pada waktu berbeda.
+        for ($attempt = 0; $attempt < 20; $attempt++) {
+            Carbon::setTestNow(now()->addMinute());
+            $this->postJson('/api/absensi/kamar/bulk', $payload)
+                ->assertOk()
+                ->assertJsonPath('jumlah_diubah', 0);
+        }
 
-        // Check DB, should only be 1 record
-        $count = DB::table('absensi')->count();
-        $this->assertEquals(1, $count);
+        $after = DB::table('absensi')->first();
+        $this->assertSame(1, DB::table('absensi')->count());
+        $this->assertSame($first->updated_at, $after->updated_at);
+        $this->assertSame($first->waktu_input, $after->waktu_input);
+        $this->assertNull($after->diubah_oleh);
+        $this->assertSame(1, DB::table('log_aktivitas')->where('nama_tabel', 'absensi')->count());
     }
 
     public function test_assigned_staff_can_open_their_attendance_roster()

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -27,6 +27,8 @@ interface SesiAbsensi {
   santri: SantriAbsensi[];
 }
 
+type SaveModal = { type: 'success' | 'error'; title: string; message: string };
+
 const todayJakarta = () => new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Asia/Jakarta',
   year: 'numeric',
@@ -42,7 +44,28 @@ export function BulkInputPage() {
   const [tanggal, setTanggal] = useState(todayJakarta);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { syncState, syncData, isSaved } = useBackgroundSync(user!.petugas_id);
+  const { syncState, syncData, isSaved, syncError } = useBackgroundSync(user!.petugas_id);
+  const [saveModal, setSaveModal] = useState<SaveModal | null>(null);
+
+  useEffect(() => {
+    if (isSaved) {
+      setSaveModal({
+        type: 'success',
+        title: 'Absensi tersimpan',
+        message: 'Seluruh status berhasil disimpan dan sudah tersinkron dengan server.',
+      });
+    }
+  }, [isSaved]);
+
+  useEffect(() => {
+    if (syncState === 'error') {
+      setSaveModal({
+        type: 'error',
+        title: 'Absensi belum tersimpan',
+        message: syncError || 'Server tidak dapat menyimpan absensi. Silakan coba kembali.',
+      });
+    }
+  }, [syncError, syncState]);
 
   const sessionQuery = useQuery<SesiAbsensi>({
     queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal],
@@ -126,26 +149,35 @@ export function BulkInputPage() {
 
   const handleSave = async () => {
     if (!sessionQuery.data) return;
-    await db.transaction('rw', db.offlineQueue, async () => {
-      const latestPending = await db.offlineQueue
-        .where('petugas_id')
-        .equals(user!.petugas_id)
-        .and(item => item.jenis_kegiatan === jenis
-          && item.target_id === targetId
-          && item.jadwal_id === jadwalId
-          && item.tanggal === tanggal
-          && item.sync_status === 'pending')
-        .toArray();
-      const queuedSantri = new Set(latestPending.map(item => item.santri_id));
-      for (const santri of sessionQuery.data!.santri) {
-        if (!queuedSantri.has(santri.santri_id)) {
-          await savePending(santri, santri.status ?? 'Hadir');
+    setSaveModal(null);
+    try {
+      await db.transaction('rw', db.offlineQueue, async () => {
+        const latestPending = await db.offlineQueue
+          .where('petugas_id')
+          .equals(user!.petugas_id)
+          .and(item => item.jenis_kegiatan === jenis
+            && item.target_id === targetId
+            && item.jadwal_id === jadwalId
+            && item.tanggal === tanggal
+            && item.sync_status === 'pending')
+          .toArray();
+        const queuedSantri = new Set(latestPending.map(item => item.santri_id));
+        for (const santri of sessionQuery.data!.santri) {
+          if (!queuedSantri.has(santri.santri_id)) {
+            await savePending(santri, santri.status ?? 'Hadir');
+          }
         }
+      });
+      await syncData();
+      if (navigator.onLine) {
+        await queryClient.invalidateQueries({ queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal] });
       }
-    });
-    await syncData();
-    if (navigator.onLine) {
-      await queryClient.invalidateQueries({ queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal] });
+    } catch {
+      setSaveModal({
+        type: 'error',
+        title: 'Absensi belum tersimpan',
+        message: 'Antrean absensi pada perangkat gagal diproses. Muat ulang halaman lalu coba kembali.',
+      });
     }
   };
 
@@ -175,15 +207,29 @@ export function BulkInputPage() {
             value={tanggal}
             onChange={event => setTanggal(event.target.value)}
           />
-          <button className="primary-button" disabled={session.santri.length === 0} onClick={() => void handleSave()}>
-            Simpan absensi
+          <button className="primary-button" disabled={session.santri.length === 0 || syncState === 'menyinkronkan'} onClick={() => void handleSave()}>
+            {syncState === 'menyinkronkan' ? 'Menyimpan…' : 'Simpan absensi'}
           </button>
           <IndikatorSinkron state={syncState} />
         </div>
       </header>
 
       {syncState === 'offline' && <div className="offline-banner">Belum tersinkron—data aman di HP dan akan dikirim saat koneksi tersedia.</div>}
-      {syncState === 'error' && <div className="error-box compact">Sinkronisasi gagal. Tekan “Simpan absensi” untuk mencoba lagi.</div>}
+      {syncState === 'menyinkronkan' && <div className="sync-banner">Menyimpan absensi ke server…</div>}
+
+      {saveModal && (
+        <div className="save-modal-backdrop" role="presentation">
+          <div aria-describedby="save-modal-message" aria-labelledby="save-modal-title" aria-modal="true" className={`save-modal ${saveModal.type}`} role="dialog">
+            <div className="save-modal-icon" aria-hidden="true">{saveModal.type === 'success' ? '✓' : '!'}</div>
+            <h2 id="save-modal-title">{saveModal.title}</h2>
+            <p id="save-modal-message">{saveModal.message}</p>
+            <div className="save-modal-actions">
+              {saveModal.type === 'error' && <button className="secondary-button" onClick={() => { setSaveModal(null); void handleSave(); }}>Coba lagi</button>}
+              <button className="primary-button" onClick={() => setSaveModal(null)}>{saveModal.type === 'success' ? 'Selesai' : 'Tutup'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="ledger-header">
         <div className="ui-text-label" style={{ width: '40px' }}>No</div>

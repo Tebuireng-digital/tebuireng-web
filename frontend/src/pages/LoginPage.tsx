@@ -39,7 +39,7 @@ export function LoginPage() {
     <div className="login-page-container">
       <div className="login-card">
         <div className="login-hero">
-          <div className="login-brand"><span className="brand-mark"><img src="/app-icon.svg" alt="" aria-hidden="true" /></span><span>Pondok Pesantren Tebuireng</span></div>
+          <div className="login-brand"><span className="brand-mark"><img src="/LOGO_TEBUIRENG_.jpg" alt="Logo Tebuireng" /></span><span>Pondok Pesantren Tebuireng</span></div>
           <div className="login-illustration" aria-hidden="true">
             <span className="mosque-dome"></span><span className="mosque-tower left"></span><span className="mosque-tower right"></span>
           </div>

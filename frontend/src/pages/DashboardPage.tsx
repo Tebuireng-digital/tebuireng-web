@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 
@@ -60,20 +60,47 @@ const pbsCategories = (targets: TargetAbsensi[]) => [...new Set(targets.map(pbsD
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const [selectedJenis, setSelectedJenis] = useState('');
+  const { jenis: routeJenis } = useParams<{ jenis?: string }>();
+  const [searchParams] = useSearchParams();
+  const urlJenis = routeJenis || searchParams.get('jenis') || '';
+
   const [collapsedRosterGroups, setCollapsedRosterGroups] = useState<Set<string>>(() => new Set());
+
   const { data = [], isLoading, error } = useQuery<OpsiAbsensi[]>({
     queryKey: ['absensi-options', user?.petugas_id],
     queryFn: async () => (await api.get('/api/absensi-options')).data,
   });
+
+  const { data: pelanggaranData = [] } = useQuery<any[]>({
+    queryKey: ['pelanggaran-summary'],
+    queryFn: async () => (await api.get('/api/pelanggaran')).data,
+    enabled: ['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user?.jabatan ?? ''),
+  });
+
+  const { data: perizinanData = [] } = useQuery<any[]>({
+    queryKey: ['perizinan-summary'],
+    queryFn: async () => (await api.get('/api/perizinan')).data,
+    enabled: ['Admin', 'Keamanan', 'Pengasuh'].includes(user?.jabatan ?? ''),
+  });
+
   const kelompokTampilan: KelompokTampilan[] = data.map(kegiatan => ({
     ...kegiatan,
     displayKey: kegiatan.jenis,
     nama: kegiatan.jenis === 'sekolah' ? 'Kelas Formal' : kegiatan.nama,
   }));
-  const activeJenis = kelompokTampilan.some(item => item.displayKey === selectedJenis)
-    ? selectedJenis
+
+  const activeJenis = kelompokTampilan.some(item => item.displayKey === urlJenis)
+    ? urlJenis
     : (kelompokTampilan[0]?.displayKey ?? '');
+
+  const activeActivity = kelompokTampilan.find(item => item.displayKey === activeJenis);
+  const headerTitle = urlJenis && activeActivity
+    ? (activeActivity.nama.startsWith('Absensi') ? activeActivity.nama : `Absensi ${activeActivity.nama}`)
+    : 'Absensi Santri';
+
+  const displayedKelompok = urlJenis && activeJenis
+    ? kelompokTampilan.filter(item => item.displayKey === activeJenis)
+    : kelompokTampilan;
 
   const toggleRosterGroup = (key: string) => {
     setCollapsedRosterGroups(current => {
@@ -122,99 +149,181 @@ export function DashboardPage() {
     );
   };
 
+  const isDashboardView = !urlJenis;
+
   return (
     <div>
       <header className="dashboard-header">
         <div>
           <span className="page-eyebrow">Assalamu'alaikum, {user?.nama}</span>
-          <h1>Absensi Santri</h1>
-          <p>Pilih kelompok sesuai penugasan Anda untuk mulai mencatat kehadiran.</p>
+          <h1>{isDashboardView ? 'Beranda Utama' : headerTitle}</h1>
+          <p>
+            {isDashboardView
+              ? 'Selamat datang di Sistem Kepesantrenan Pesantren Tebuireng.'
+              : 'Pilih kelompok sesuai penugasan Anda untuk mulai mencatat kehadiran.'}
+          </p>
         </div>
         <div className="dashboard-mosque" aria-hidden="true"><span></span></div>
       </header>
 
-      {isLoading && <div className="empty-state">Memuat penugasan absensi...</div>}
-      {error && <div className="error-box">Penugasan tidak dapat dimuat. Periksa koneksi lalu muat ulang halaman.</div>}
+      {isLoading && <div className="empty-state">Memuat data beranda...</div>}
+      {error && <div className="error-box">Data tidak dapat dimuat. Periksa koneksi lalu muat ulang halaman.</div>}
 
       {!isLoading && !error && data.length === 0 && (
         <div className="empty-state">
-          Belum ada kelompok absensi yang ditugaskan kepada akun ini. Hubungi Admin untuk mengatur penugasan.
+          Belum ada penugasan yang diatur untuk akun ini. Hubungi Admin jika butuh akses penugasan.
         </div>
       )}
 
-      {kelompokTampilan.length > 1 && (
-        <nav className="dashboard-activity-tabs" aria-label="Pilih kegiatan absensi" role="tablist">
+      {/* OVERVIEW STAT CARDS GRID */}
+      {!isLoading && !error && (
+        <div className="dashboard-grid-premium" style={{ marginBottom: 28 }}>
+          {user?.jabatan === 'Admin' && (
+            <Link to="/data-master/santri" className="stat-card" style={{ textDecoration: 'none' }}>
+              <span className="stat-card-value" style={{ color: '#10b981' }}>5.369</span>
+              <span className="stat-card-label">Data Santri</span>
+              <small style={{ color: '#059669', fontWeight: 600, marginTop: 4 }}>👥 Kelola Santri →</small>
+            </Link>
+          )}
+
           {kelompokTampilan.map(kegiatan => (
-            <button
-              aria-selected={activeJenis === kegiatan.displayKey}
-              className={activeJenis === kegiatan.displayKey ? 'active' : ''}
+            <Link
               key={kegiatan.displayKey}
-              onClick={() => setSelectedJenis(kegiatan.displayKey)}
-              role="tab"
-              type="button"
+              to={`/absensi-kegiatan/${kegiatan.displayKey}`}
+              className={`stat-card${activeJenis === kegiatan.displayKey && !isDashboardView ? ' active-stat-card' : ''}`}
+              style={{ textDecoration: 'none' }}
             >
-              <span>{kegiatan.nama}</span>
-              <small>{kegiatan.targets.length}</small>
-            </button>
+              <span className="stat-card-value">{kegiatan.targets.length}</span>
+              <span className="stat-card-label">{kegiatan.nama}</span>
+              {kegiatan.jadwal[0] && (
+                <small style={{ color: 'var(--aksen-gelap)', fontWeight: 600, marginTop: 4 }}>
+                  ⏱️ {kegiatan.jadwal[0].jam_mulai.slice(0, 5)}–{kegiatan.jadwal[0].jam_selesai.slice(0, 5)} →
+                </small>
+              )}
+            </Link>
           ))}
-        </nav>
+
+          {['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user?.jabatan ?? '') && (
+            <Link to="/pelanggaran/semua" className="stat-card" style={{ textDecoration: 'none' }}>
+              <span className="stat-card-value" style={{ color: '#ef4444' }}>
+                {pelanggaranData.length}
+              </span>
+              <span className="stat-card-label">Pelanggaran</span>
+              <small style={{ color: '#ef4444', fontWeight: 600, marginTop: 4 }}>⚠️ Lihat Rekap →</small>
+            </Link>
+          )}
+
+          {['Admin', 'Keamanan'].includes(user?.jabatan ?? '') && (
+            <Link to="/catat-gerbang" className="stat-card" style={{ textDecoration: 'none' }}>
+              <span className="stat-card-value" style={{ color: '#0284c7' }}>
+                {perizinanData.length}
+              </span>
+              <span className="stat-card-label">Perizinan & Gerbang</span>
+              <small style={{ color: '#0284c7', fontWeight: 600, marginTop: 4 }}>🚪 Catat Gerbang →</small>
+            </Link>
+          )}
+        </div>
       )}
 
-      <div className="attendance-groups">
-        {kelompokTampilan.map(kegiatan => (
-          <section
-            className={`attendance-group${activeJenis === kegiatan.displayKey ? ' mobile-active' : ''}`}
-            key={kegiatan.displayKey}
-            role="tabpanel"
-          >
-            <div className="attendance-group-heading">
-              <div>
-                <h2>{kegiatan.nama}</h2>
-                <p>{kegiatan.sumber}</p>
-              </div>
-              {kegiatan.jadwal[0] && (
-                <span className="schedule-label">
-                  {kegiatan.jadwal[0].jam_mulai.slice(0, 5)}–{kegiatan.jadwal[0].jam_selesai.slice(0, 5)}
-                </span>
-              )}
-            </div>
-
-            {kegiatan.jadwal.length === 0 ? (
-              <div className="warning-box">Jadwal belum diatur oleh Admin.</div>
-            ) : kegiatan.jenis === 'sekolah' ? (
-              <div className="roster-category-groups">
-                {['7', '8', '9'].map(grade => {
-                  const targets = kegiatan.targets.filter(target => String(target.tingkat) === grade);
-                  if (targets.length === 0) return null;
-                  return collapsibleTargetGroup(kegiatan, `sekolah:${grade}`, `Kelas ${grade}`, targets);
-                })}
-              </div>
-            ) : kegiatan.jenis === 'kamar' ? (
-              <div className="roster-category-groups">
-                {[...new Set(kegiatan.targets.map(target => target.kategori_target ?? 'Kamar lainnya'))]
-                  .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))
-                  .map(category => collapsibleTargetGroup(
-                    kegiatan,
-                    `kamar:${category}`,
-                    category,
-                    kegiatan.targets.filter(target => (target.kategori_target ?? 'Kamar lainnya') === category),
-                  ))}
-              </div>
-            ) : kegiatan.jenis === 'pbs' ? (
-              <div className="roster-category-groups">
-                {pbsCategories(kegiatan.targets).map(category => collapsibleTargetGroup(
-                  kegiatan,
-                  `pbs:${category}`,
-                  category,
-                  kegiatan.targets.filter(target => pbsDisplayCategory(target) === category),
-                ))}
-              </div>
-            ) : (
-              targetCards(kegiatan, kegiatan.targets)
+      {/* DASHBOARD PINTASAN APLIKASI (HANYA DITAMPILKAN DI /dashboard UTAMA) */}
+      {isDashboardView && !isLoading && !error && (
+        <section className="master-section">
+          <h2>Pintasan & Akses Cepat Modul</h2>
+          <p style={{ color: '#64748b', marginBottom: 20 }}>Akses langsung ke fitur dan layanan kepesantrenan Tebuireng.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user?.jabatan ?? '') && (
+              <Link to="/pelanggaran/baru" className="target-card" style={{ textDecoration: 'none', borderLeft: '4px solid #ef4444' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>⚠️ Input Pelanggaran</span>
+                <small style={{ color: '#64748b' }}>Catat poin sanksi / pelanggaran santri</small>
+              </Link>
             )}
-          </section>
-        ))}
-      </div>
+            <Link to="/pelanggaran/semua" className="target-card" style={{ textDecoration: 'none', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>📋 Rekap Pelanggaran</span>
+              <small style={{ color: '#64748b' }}>Lihat seluruh daftar riwayat pelanggaran</small>
+            </Link>
+
+            {['Admin', 'Keamanan'].includes(user?.jabatan ?? '') && (
+              <Link to="/catat-gerbang" className="target-card" style={{ textDecoration: 'none', borderLeft: '4px solid #0284c7' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>🚪 Perizinan & Gerbang</span>
+                <small style={{ color: '#64748b' }}>Catat kepulangan dan santri di luar komplek</small>
+              </Link>
+            )}
+
+            {user?.jabatan === 'Admin' && (
+              <Link to="/data-master/santri" className="target-card" style={{ textDecoration: 'none', borderLeft: '4px solid #10b981' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>📦 Data Master Santri</span>
+                <small style={{ color: '#64748b' }}>Kelola 5.369 data santri, penugasan & akun</small>
+              </Link>
+            )}
+
+            {['Admin', 'Pengasuh'].includes(user?.jabatan ?? '') && (
+              <Link to="/laporan/detail" className="target-card" style={{ textDecoration: 'none', borderLeft: '4px solid #8b5cf6' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>📊 Laporan Detail</span>
+                <small style={{ color: '#64748b' }}>Laporan rekapitulasi kepesantrenan</small>
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* RENDER ROSTER ABSENSI TARGETS (HANYA DITAMPILKAN SAAT MEMBUKA SALAH SATU MENU ABSENSI /absensi-kegiatan/:jenis) */}
+      {!isDashboardView && (
+        <div className="attendance-groups">
+          {displayedKelompok.map(kegiatan => (
+            <section
+              className={`attendance-group${activeJenis === kegiatan.displayKey ? ' mobile-active' : ''}`}
+              key={kegiatan.displayKey}
+              role="tabpanel"
+            >
+              <div className="attendance-group-heading">
+                <div>
+                  <h2>{kegiatan.nama}</h2>
+                  <p>{kegiatan.sumber}</p>
+                </div>
+                {kegiatan.jadwal[0] && (
+                  <span className="schedule-label">
+                    {kegiatan.jadwal[0].jam_mulai.slice(0, 5)}–{kegiatan.jadwal[0].jam_selesai.slice(0, 5)}
+                  </span>
+                )}
+              </div>
+
+              {kegiatan.jadwal.length === 0 ? (
+                <div className="warning-box">Jadwal belum diatur oleh Admin.</div>
+              ) : kegiatan.jenis === 'sekolah' ? (
+                <div className="roster-category-groups">
+                  {['7', '8', '9'].map(grade => {
+                    const targets = kegiatan.targets.filter(target => String(target.tingkat) === grade);
+                    if (targets.length === 0) return null;
+                    return collapsibleTargetGroup(kegiatan, `sekolah:${grade}`, `Kelas ${grade}`, targets);
+                  })}
+                </div>
+              ) : kegiatan.jenis === 'kamar' ? (
+                <div className="roster-category-groups">
+                  {[...new Set(kegiatan.targets.map(target => target.kategori_target ?? 'Kamar lainnya'))]
+                    .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))
+                    .map(category => collapsibleTargetGroup(
+                      kegiatan,
+                      `kamar:${category}`,
+                      category,
+                      kegiatan.targets.filter(target => (target.kategori_target ?? 'Kamar lainnya') === category),
+                    ))}
+                </div>
+              ) : kegiatan.jenis === 'pbs' ? (
+                <div className="roster-category-groups">
+                  {pbsCategories(kegiatan.targets).map(category => collapsibleTargetGroup(
+                    kegiatan,
+                    `pbs:${category}`,
+                    category,
+                    kegiatan.targets.filter(target => pbsDisplayCategory(target) === category),
+                  ))}
+                </div>
+              ) : (
+                targetCards(kegiatan, kegiatan.targets)
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

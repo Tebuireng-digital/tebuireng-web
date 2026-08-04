@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/master/kamar', [\App\Http\Controllers\MasterController::class, 'getKamar'])->middleware('role:Admin');
     Route::post('/master/kamar', [\App\Http\Controllers\MasterController::class, 'storeKamar'])->middleware('role:Admin');
     Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
+    Route::post('/master/santri', [\App\Http\Controllers\MasterController::class, 'storeSantri'])->middleware('role:Admin');
     Route::get('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'getPenugasan'])->middleware('role:Admin');
     Route::post('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'storePenugasan'])->middleware('role:Admin');
     Route::delete('/master/penugasan/{id}', [\App\Http\Controllers\MasterController::class, 'deletePenugasan'])->middleware('role:Admin');
@@ -55,5 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/master/import-reviews/{id}/separate', [\App\Http\Controllers\ImportReviewController::class, 'markSeparate'])->middleware('role:Admin');
     Route::get('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'mappings'])->middleware('role:Admin');
     Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
+
+    // Alumni
+    Route::get('/master/alumni', [\App\Http\Controllers\AlumniController::class, 'index'])->middleware('role:Admin');
+    Route::get('/master/alumni/stats', [\App\Http\Controllers\AlumniController::class, 'stats'])->middleware('role:Admin');
     });
 });

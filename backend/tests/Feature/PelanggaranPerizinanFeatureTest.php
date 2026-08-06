@@ -109,6 +109,31 @@ class PelanggaranPerizinanFeatureTest extends TestCase
         Storage::disk('local')->assertExists($lampiran->path_file);
     }
 
+    public function test_violation_accepts_actual_points_up_to_category_maximum(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'poin' => 1,
+            'tanggal' => now()->toDateString(),
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'poin' => 1,
+        ]);
+
+        $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'poin' => 26,
+            'tanggal' => now()->toDateString(),
+        ])->assertStatus(422);
+    }
+
     public function test_success_flow_and_absensi_upsert()
     {
         // Setup Kegiatan to test absensi

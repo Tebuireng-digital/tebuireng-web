@@ -73,6 +73,7 @@ class PelanggaranController extends Controller
         $data = $request->validate([
             'santri_id' => 'required|integer|exists:santri,santri_id',
             'kategori_pelanggaran_id' => 'required|integer',
+            'poin' => 'nullable|integer|min:1',
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string',
         ]);
@@ -95,6 +96,14 @@ class PelanggaranController extends Controller
         if (!$kategori) {
             return response()->json(['message' => 'Kategori pelanggaran tidak valid atau tidak aktif'], 400);
         }
+
+        $poin = (int) ($data['poin'] ?? $kategori->poin_maks);
+        if ($poin > (int) $kategori->poin_maks) {
+            return response()->json([
+                'message' => "Jumlah poin tidak boleh lebih dari {$kategori->poin_maks} poin untuk kategori ini.",
+            ], 422);
+        }
+        $data['poin'] = $poin;
 
         // Validasi Role
         if ($petugas->jabatan === 'Pembina Kamar' && strtolower(trim($kategori->kategori)) !== 'ringan') {
@@ -197,11 +206,9 @@ class PelanggaranController extends Controller
     private function getPoinSantri($santriId)
     {
         return Cache::rememberForever("santri:{$santriId}:poin", function () use ($santriId) {
-            $viewData = DB::table('v_akumulasi_poin_pelanggaran')
+            return (int) DB::table('pelanggaran')
                 ->where('santri_id', $santriId)
-                ->first();
-                
-            return $viewData ? (int) $viewData->total_poin : 0;
+                ->sum('poin');
         });
     }
 }

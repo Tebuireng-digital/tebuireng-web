@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 
 interface PelanggaranRecord {
@@ -9,7 +9,7 @@ interface PelanggaranRecord {
   kategori_pelanggaran_id: number;
   uraian_pelanggaran: string;
   kategori: string;
-  poin: number;
+  poin?: number | null;
   poin_maks: number;
   tanggal: string;
   catatan?: string | null;
@@ -24,10 +24,14 @@ export function PelanggaranListPage() {
   const [kategoriFilter, setKategoriFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [searchParams] = useSearchParams();
+  const selectedSantriId = searchParams.get('santri_id');
 
   const fetchPelanggaran = async () => {
     try {
-      const response = await api.get('/api/pelanggaran');
+      const response = await api.get('/api/pelanggaran', {
+        params: selectedSantriId ? { santri_id: selectedSantriId } : undefined,
+      });
       setPelanggaran(response.data);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Gagal memuat data pelanggaran.');
@@ -38,7 +42,7 @@ export function PelanggaranListPage() {
 
   useEffect(() => {
     fetchPelanggaran();
-  }, []);
+  }, [selectedSantriId]);
 
   const filteredPelanggaran = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -53,6 +57,15 @@ export function PelanggaranListPage() {
   }, [pelanggaran, search, kategoriFilter, startDate, endDate]);
 
   const totalPoin = useMemo(() => filteredPelanggaran.reduce((sum, item) => sum + (item.poin || item.poin_maks || 0), 0), [filteredPelanggaran]);
+  const santriName = pelanggaran[0]?.nama_santri;
+  const levelSummary = useMemo(() => ['Ringan', 'Sedang', 'Berat'].map(level => {
+    const records = filteredPelanggaran.filter(item => item.kategori?.toLowerCase() === level.toLowerCase());
+    return {
+      level,
+      count: records.length,
+      points: records.reduce((sum, item) => sum + (item.poin || item.poin_maks || 0), 0),
+    };
+  }), [filteredPelanggaran]);
 
   if (loading) return <div className="empty-state">Memuat daftar pelanggaran...</div>;
   if (error) return <div className="error-box">{error}</div>;
@@ -63,32 +76,46 @@ export function PelanggaranListPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div>
             <span className="page-eyebrow">Rekap Pelanggaran</span>
-            <h1>Daftar Pelanggaran Santri</h1>
-            <p>Riwayat dan catatan pelanggaran santri yang telah diinputkan oleh petugas.</p>
+            <h1>{selectedSantriId && santriName ? `Detail Pelanggaran ${santriName}` : 'Daftar Pelanggaran Santri'}</h1>
+            <p>{selectedSantriId ? 'Riwayat pelanggaran santri berdasarkan level dan poin.' : 'Riwayat dan catatan pelanggaran santri yang telah diinputkan oleh petugas.'}</p>
           </div>
-          <Link to="/pelanggaran/baru" className="primary-button" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            + Input Pelanggaran
-          </Link>
         </div>
       </header>
 
       {/* Stats Summary Cards */}
-      <div className="dashboard-grid-premium" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <span className="stat-card-value">{filteredPelanggaran.length}</span>
-          <span className="stat-card-label">Total Catatan</span>
+      <div className="violation-summary-row">
+        <div className="dashboard-grid-premium violation-summary-cards">
+          <div className="stat-card">
+            <span className="stat-card-value">{filteredPelanggaran.length}</span>
+            <span className="stat-card-label">Total Catatan</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card-value">{totalPoin}</span>
+            <span className="stat-card-label">Total Poin Sanksi</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card-value">
+              {filteredPelanggaran.filter(p => p.kategori?.toLowerCase() === 'berat').length}
+            </span>
+            <span className="stat-card-label">Pelanggaran Berat</span>
+          </div>
         </div>
-        <div className="stat-card">
-          <span className="stat-card-value">{totalPoin}</span>
-          <span className="stat-card-label">Total Poin Sanksi</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-card-value">
-            {filteredPelanggaran.filter(p => p.kategori?.toLowerCase() === 'berat').length}
-          </span>
-          <span className="stat-card-label">Pelanggaran Berat</span>
-        </div>
+        <Link to="/pelanggaran/baru" className="primary-button violation-add-button">
+          <span aria-hidden="true">＋</span> Input Pelanggaran
+        </Link>
       </div>
+
+      {selectedSantriId && (
+        <div className="violation-level-summary" aria-label="Ringkasan pelanggaran per level">
+          {levelSummary.map(item => (
+            <div className={`violation-level-item level-${item.level.toLowerCase()}`} key={item.level}>
+              <span className="violation-level-name">{item.level}</span>
+              <strong>{item.points} poin</strong>
+              <small>{item.count} catatan</small>
+            </div>
+          ))}
+        </div>
+      )}
 
       <section className="master-section">
         {/* Search & Filter Controls */}
@@ -139,6 +166,12 @@ export function PelanggaranListPage() {
           Menampilkan {filteredPelanggaran.length} dari {pelanggaran.length} rekap pelanggaran.
         </p>
 
+        {selectedSantriId && (
+          <Link to="/pelanggaran/semua" className="secondary-button violation-clear-filter" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', marginBottom: 16 }}>
+            ← Kembali ke semua pelanggaran
+          </Link>
+        )}
+
         {/* Table */}
         <div className="table-scroll">
           <table className="master-table">
@@ -151,6 +184,7 @@ export function PelanggaranListPage() {
                 <th>Uraian Pelanggaran</th>
                 <th>Poin</th>
                 <th>Catatan / Tindakan</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -180,6 +214,15 @@ export function PelanggaranListPage() {
                       </strong>
                     </td>
                     <td>{item.catatan || item.tindakan_sanksi || '—'}</td>
+                    <td>
+                      <Link
+                        to={`/pelanggaran/semua?santri_id=${item.santri_id}`}
+                        className="table-detail-link"
+                        title={`Lihat semua pelanggaran ${item.nama_santri}`}
+                      >
+                        Lihat detail
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}

@@ -50,25 +50,6 @@ services:
       start_period: 30s
     command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
 
-  scheduler:
-    image: tebuireng-local-backend:dev
-    restart: unless-stopped
-    user: "1000:1000"
-    env_file:
-      - ./backend/.env
-    environment:
-      HOME: /tmp
-      COMPOSER_HOME: /tmp/composer
-      SKIP_MIGRATIONS: "true"
-    volumes:
-      - ./backend:/var/www/html
-      - ./xlsx:/var/www/xlsx:ro
-      - backend_vendor:/var/www/html/vendor
-    depends_on:
-      backend:
-        condition: service_healthy
-    command: ["php", "artisan", "schedule:work"]
-
   frontend:
     image: tebuireng-local-frontend:dev
     build:

@@ -569,6 +569,24 @@ body {
   transform: none;
 }
 
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ffffff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* Premium Layout & Sidebar Styles */
 .premium-layout {
   display: flex;
@@ -625,7 +643,16 @@ body {
   font-weight: 500;
   font-size: 14px;
   transition: all 0.3s ease;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-nav-link .nav-icon,
+.sidebar-master-trigger .nav-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .sidebar-nav-link:hover {
@@ -633,7 +660,25 @@ body {
   color: #FFFFFF;
   transform: translateX(4px);
 }
-.sidebar-master-trigger { display: flex; align-items: center; justify-content: space-between; }
+
+.sidebar-master-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sidebar-master-trigger .nav-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .sidebar-subnav { display: grid; gap: 3px; margin: -2px 0 8px 10px; padding-left: 10px; border-left: 1px solid rgba(167, 243, 208, .35); }
 .sidebar-subnav-link { padding: 7px 8px; border-radius: 6px; color: rgba(255,255,255,.74); font-size: 12px; text-decoration: none; }
 .sidebar-subnav-link:hover, .sidebar-subnav-link.active { background: rgba(255,255,255,.12); color: white; }
@@ -972,7 +1017,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .sidebar-nav-link:hover { color: var(--aksen-gelap); background: var(--aksen-lembut); transform: none; }
 .sidebar-nav-link.active { color: #fff; background: linear-gradient(135deg, #31c579, #20ab67); box-shadow: 0 8px 18px rgba(39, 184, 111, .2); }
 .nav-icon { width: 20px; height: 20px; flex: 0 0 20px; }
-.nav-label { display: flex; align-items: center; gap: 12px; }
+.sidebar-nav-section { margin-top: 6px; }
+.sidebar-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8c9e96;
+  margin: 12px 13px 6px;
+}
 .sidebar-nav-divider { border-top-color: var(--garis); margin: 9px 5px; }
 .sidebar-subnav { margin: 2px 0 8px 22px; border-left-color: #d9e9e0; }
 .sidebar-subnav-link { color: var(--tinta-pudar); }

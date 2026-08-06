@@ -121,7 +121,73 @@ class MasterController extends Controller
 
     public function getSantri()
     {
-        return response()->json(DB::table('santri')->get());
+        $santri = DB::table('santri')
+            ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
+            ->select(
+                'santri.santri_id',
+                'santri.nis',
+                'santri.nama',
+                'santri.unit_id',
+                'unit_pendidikan.kode as kode_unit',
+                'unit_pendidikan.nama as nama_unit',
+                'santri.kamar_id',
+                'kamar.nama as nama_kamar',
+                'santri.kelas_formal_id',
+                'kelas_formal.nama_kelas as nama_kelas_formal',
+                'santri.nama_wali',
+                'santri.no_hp_wali',
+                'santri.status_aktif',
+                'santri.catatan_import'
+            )
+            ->orderBy('santri.nama')
+            ->get();
+
+        return response()->json($santri);
+    }
+
+    public function storeSantri(Request $request)
+    {
+        $data = $request->validate([
+            'santri_id' => 'nullable|integer',
+            'nis' => 'nullable|string|max:30',
+            'nama' => 'required|string|max:150',
+            'unit_id' => 'required|integer|exists:unit_pendidikan,unit_id',
+            'kamar_id' => 'nullable|integer',
+            'nama_wali' => 'nullable|string|max:150',
+            'no_hp_wali' => 'nullable|string|max:20',
+        ]);
+
+        $nama = strtoupper(trim($data['nama']));
+        $unitId = (int) $data['unit_id'];
+        $kamarId = !empty($data['kamar_id']) ? (int) $data['kamar_id'] : null;
+
+        if (!empty($data['santri_id'])) {
+            DB::table('santri')->where('santri_id', $data['santri_id'])->update([
+                'nis' => $data['nis'] ?: null,
+                'nama' => $nama,
+                'unit_id' => $unitId,
+                'kamar_id' => $kamarId,
+                'nama_wali' => $data['nama_wali'] ?: null,
+                'no_hp_wali' => $data['no_hp_wali'] ?: null,
+                'updated_at' => now(),
+            ]);
+            return response()->json(['message' => 'Data santri berhasil diperbarui']);
+        } else {
+            $id = DB::table('santri')->insertGetId([
+                'nis' => $data['nis'] ?: null,
+                'nama' => $nama,
+                'unit_id' => $unitId,
+                'kamar_id' => $kamarId,
+                'nama_wali' => $data['nama_wali'] ?: null,
+                'no_hp_wali' => $data['no_hp_wali'] ?: null,
+                'status_aktif' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            return response()->json(['message' => 'Santri baru berhasil ditambahkan', 'santri_id' => $id], 201);
+        }
     }
 
     public function getPenugasan()

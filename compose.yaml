@@ -38,6 +38,7 @@ services:
     volumes:
       - ./backend:/var/www/html
       - ./xlsx:/var/www/xlsx:ro
+      - ./docs:/var/www/docs:ro
       - backend_vendor:/var/www/html/vendor
     depends_on:
       mysql:

@@ -120,6 +120,25 @@ export function CatatGerbangPage() {
     }
   };
 
+  const handleDownloadPdf = async (perizinanId: number, namaSantri: string) => {
+    try {
+      const response = await api.get(`/api/perizinan/${perizinanId}/pdf`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Surat_Izin_Pulang_${namaSantri.replace(/\s+/g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Gagal mengunduh PDF:', error);
+      setMessage('Gagal mengunduh file PDF.');
+    }
+  };
+
   if (loading) return <div className="empty-state">Memuat perizinan...</div>;
 
   return (
@@ -176,12 +195,21 @@ export function CatatGerbangPage() {
                   Status: {item.status}
                 </span>
               </div>
-              <button
-                className="primary-button"
-                onClick={() => void handleGerbang(item.perizinan_id, item.status === 'Disetujui' ? 'keluar' : 'masuk')}
-              >
-                {item.status === 'Disetujui' ? 'Catat keluar' : 'Catat kembali'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="download-pdf-btn"
+                  onClick={() => handleDownloadPdf(item.perizinan_id, item.nama_santri)}
+                >
+                  📄 PDF
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => void handleGerbang(item.perizinan_id, item.status === 'Disetujui' ? 'keluar' : 'masuk')}
+                >
+                  {item.status === 'Disetujui' ? 'Catat keluar' : 'Catat kembali'}
+                </button>
+              </div>
             </article>
           ))
         )}
@@ -237,6 +265,7 @@ export function CatatGerbangPage() {
                 <th>Rencana Kembali</th>
                 <th>Kembali Real</th>
                 <th>Status</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -262,6 +291,16 @@ export function CatatGerbangPage() {
                       }}>
                         {item.status}
                       </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="download-pdf-btn"
+                        style={{ padding: '4px 8px', borderRadius: '8px', fontSize: '11px' }}
+                        onClick={() => handleDownloadPdf(item.perizinan_id, item.nama_santri)}
+                      >
+                        📄 PDF
+                      </button>
                     </td>
                   </tr>
                 );

@@ -1218,3 +1218,24 @@ html {
   .dashboard-mosque { display: none; }
   .target-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.download-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #f1f5f9;
+  color: #138653;
+  border: 1px solid var(--garis);
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.download-pdf-btn:hover {
+  background-color: #e2e8f0;
+  border-color: #b6ddc8;
+}

@@ -136,4 +136,74 @@ class PerizinanController extends Controller
 
         return response()->json(['message' => 'Tidak ada perubahan data gerbang'], 400);
     }
+
+    public function downloadPdf($id)
+    {
+        $perizinan = DB::table('perizinan')
+            ->join('santri', 'perizinan.santri_id', '=', 'santri.santri_id')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->join('jenis_izin', 'perizinan.jenis_izin_id', '=', 'jenis_izin.jenis_izin_id')
+            ->leftJoin('petugas as pengaju', 'perizinan.diajukan_oleh', '=', 'pengaju.petugas_id')
+            ->leftJoin('petugas as keamanan_petugas', 'perizinan.dicatat_keamanan_oleh', '=', 'keamanan_petugas.petugas_id')
+            ->select(
+                'perizinan.*',
+                'santri.nama as nama_santri',
+                'santri.nis',
+                'kamar.nama as nama_kamar',
+                'jenis_izin.nama as nama_jenis_izin',
+                'pengaju.nama as nama_pengaju',
+                'keamanan_petugas.nama as nama_keamanan'
+            )
+            ->where('perizinan.perizinan_id', $id)
+            ->first();
+
+        if (!$perizinan) {
+            return response()->json(['message' => 'Data perizinan tidak ditemukan'], 404);
+        }
+
+        \Carbon\Carbon::setLocale('id');
+
+        // Dynamic Title and Labels
+        $namaJenis = strtolower($perizinan->nama_jenis_izin);
+        $title = 'SURAT IZIN';
+        $labelKeluar = 'Waktu Keluar';
+        $labelMasuk = 'Harus Kembali';
+
+        if (str_contains($namaJenis, 'pulang')) {
+            $title = 'SURAT IZIN PULANG';
+            $labelKeluar = 'Waktu Pulang';
+            $labelMasuk = 'Harus Kembali';
+        } elseif (str_contains($namaJenis, 'sakit')) {
+            $title = 'SURAT IZIN SAKIT';
+            $labelKeluar = 'Mulai Izin Sakit';
+            $labelMasuk = 'Harus Kembali';
+        } elseif (str_contains($namaJenis, 'keluar')) {
+            $title = 'SURAT IZIN KELUAR KOMPLEK';
+            $labelKeluar = 'Waktu Keluar';
+            $labelMasuk = 'Harus Kembali';
+        }
+
+        $waktuKeluarStr = \Carbon\Carbon::parse($perizinan->tanggal_mulai)->locale('id')->isoFormat('D MMMM YYYY, HH:mm') . ' WIB';
+        $waktuMasukStr = \Carbon\Carbon::parse($perizinan->rencana_kembali)->locale('id')->isoFormat('D MMMM YYYY, HH:mm') . ' WIB';
+
+        // QR Code Data
+        $qrData = "Nama: " . $perizinan->nama_santri . "\n"
+                . "Keluar: " . $waktuKeluarStr . "\n"
+                . "Masuk: " . $waktuMasukStr;
+        
+        $qrCodeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=" . urlencode($qrData);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.surat_izin', compact(
+            'perizinan', 
+            'title', 
+            'labelKeluar', 
+            'labelMasuk', 
+            'waktuKeluarStr', 
+            'waktuMasukStr', 
+            'qrCodeUrl'
+        ));
+        
+        $filename = 'Surat_Izin_' . str_replace(' ', '_', $perizinan->nama_santri) . '.pdf';
+        return $pdf->download($filename);
+    }
 }

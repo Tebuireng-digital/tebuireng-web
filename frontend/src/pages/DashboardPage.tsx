@@ -176,7 +176,7 @@ export function DashboardPage() {
       )}
 
       {/* OVERVIEW STAT CARDS GRID */}
-      {!isLoading && !error && (
+      {isDashboardView && !isLoading && !error && (
         <div className="dashboard-grid-premium" style={{ marginBottom: 28 }}>
           {user?.jabatan === 'Admin' && (
             <Link to="/data-master/santri" className="stat-card" style={{ textDecoration: 'none' }}>

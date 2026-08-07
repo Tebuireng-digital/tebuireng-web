@@ -64,6 +64,13 @@ class AbsensiFeatureTest extends TestCase
     {
         $this->actingAs($this->petugas, 'sanctum');
 
+        Carbon::setTestNow('2026-07-31 08:00:00');
+
+        // Update penugasan agar aktif pada waktu tiruan test
+        DB::table('petugas_penugasan')
+            ->where('petugas_id', $this->petugas->petugas_id)
+            ->update(['tanggal_mulai' => now()->toDateString()]);
+
         $payload = [
             'target_id' => $this->kamarId,
             'jadwal_id' => $this->jadwalId,
@@ -75,8 +82,6 @@ class AbsensiFeatureTest extends TestCase
                 ]
             ]
         ];
-
-        Carbon::setTestNow('2026-07-31 08:00:00');
 
         // Request pertama membuat satu baris.
         $response1 = $this->postJson('/api/absensi/kamar/bulk', $payload);

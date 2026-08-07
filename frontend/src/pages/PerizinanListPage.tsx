@@ -35,6 +35,25 @@ export function PerizinanListPage() {
     }
   };
 
+  const handleDownloadPdf = async (perizinanId: number, namaSantri: string) => {
+    try {
+      const response = await api.get(`/api/perizinan/${perizinanId}/pdf`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Surat_Izin_Pulang_${namaSantri.replace(/\s+/g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Gagal mengunduh PDF:', error);
+      alert('Gagal mengunduh file PDF.');
+    }
+  };
+
   useEffect(() => {
     fetchPerizinan();
   }, []);
@@ -152,6 +171,7 @@ export function PerizinanListPage() {
                 <th>Rencana Kembali</th>
                 <th>Waktu Real Keluar/Kembali</th>
                 <th>Status</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -187,6 +207,16 @@ export function PerizinanListPage() {
                       }}>
                         {item.status}
                       </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="download-pdf-btn"
+                        style={{ padding: '4px 8px', borderRadius: '8px', fontSize: '11px' }}
+                        onClick={() => handleDownloadPdf(item.perizinan_id, item.nama_santri)}
+                      >
+                        📄 PDF
+                      </button>
                     </td>
                   </tr>
                 );

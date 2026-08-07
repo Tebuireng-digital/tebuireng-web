@@ -190,4 +190,23 @@ class PelanggaranPerizinanFeatureTest extends TestCase
         $this->assertNotNull($notif);
         $this->assertStringContainsString('belum kembali', $notif->pesan);
     }
+
+    public function test_download_pdf_success()
+    {
+        $perizinanId = DB::table('perizinan')->insertGetId([
+            'santri_id' => $this->santriId,
+            'jenis_izin_id' => $this->jenisIzinId,
+            'keperluan' => 'Tes PDF',
+            'tanggal_mulai' => now()->toDateString(),
+            'rencana_kembali' => now()->addDays(2)->toDateString(),
+            'status' => 'Disetujui',
+            'diajukan_oleh' => $this->admin->petugas_id,
+        ]);
+
+        $this->actingAs($this->keamanan, 'sanctum');
+
+        $response = $this->get('/api/perizinan/' . $perizinanId . '/pdf');
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'application/pdf');
+    }
 }

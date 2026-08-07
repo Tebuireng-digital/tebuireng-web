@@ -135,24 +135,22 @@ function Layout() {
                 <span className="nav-label"><NavIcon name="quran"/><span>Menu Absensi</span></span>
                 <span aria-hidden="true">{isAbsensiMenuOpen ? '⌃' : '⌄'}</span>
               </button>
-              {isAbsensiMenuOpen && (
-                <div className="sidebar-subnav">
-                  {userAbsensiMenus.map(item => {
-                    const isActive = (location.pathname === '/dashboard' && currentJenis === item.jenis) ||
-                                     (location.pathname === `/absensi-kegiatan/${item.jenis}`);
-                    return (
-                      <Link
-                        key={item.jenis}
-                        to={`/absensi-kegiatan/${item.jenis}`}
-                        className={`sidebar-subnav-link ${isActive ? 'active' : ''}`}
-                        onClick={closeMenu}
-                      >
-                        {item.nama}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+              <div className={`sidebar-subnav ${isAbsensiMenuOpen ? 'open' : ''}`}>
+                {userAbsensiMenus.map(item => {
+                  const isActive = (location.pathname === '/dashboard' && currentJenis === item.jenis) ||
+                                   (location.pathname === `/absensi-kegiatan/${item.jenis}`);
+                  return (
+                    <Link
+                      key={item.jenis}
+                      to={`/absensi-kegiatan/${item.jenis}`}
+                      className={`sidebar-subnav-link ${isActive ? 'active' : ''}`}
+                      onClick={closeMenu}
+                    >
+                      {item.nama}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -167,26 +165,24 @@ function Layout() {
                 <span className="nav-label"><NavIcon name="warning"/><span>Pelanggaran</span></span>
                 <span aria-hidden="true">{isPelanggaranMenuOpen ? '⌃' : '⌄'}</span>
               </button>
-              {isPelanggaranMenuOpen && (
-                <div className="sidebar-subnav">
-                  {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
-                    <Link
-                      to="/pelanggaran/baru"
-                      className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/baru' ? 'active' : ''}`}
-                      onClick={closeMenu}
-                    >
-                      Input Pelanggaran
-                    </Link>
-                  )}
+              <div className={`sidebar-subnav ${isPelanggaranMenuOpen ? 'open' : ''}`}>
+                {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
                   <Link
-                    to="/pelanggaran/semua"
-                    className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/semua' || location.pathname === '/pelanggaran' ? 'active' : ''}`}
+                    to="/pelanggaran/baru"
+                    className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/baru' ? 'active' : ''}`}
                     onClick={closeMenu}
                   >
-                    Daftar Pelanggaran
+                    Input Pelanggaran
                   </Link>
-                </div>
-              )}
+                )}
+                <Link
+                  to="/pelanggaran/semua"
+                  className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/semua' || location.pathname === '/pelanggaran' ? 'active' : ''}`}
+                  onClick={closeMenu}
+                >
+                  Daftar Pelanggaran
+                </Link>
+              </div>
             </div>
           )}
 
@@ -201,26 +197,24 @@ function Layout() {
                 <span className="nav-label"><NavIcon name="gate"/><span>Perizinan & Gerbang</span></span>
                 <span aria-hidden="true">{isPerizinanMenuOpen ? '⌃' : '⌄'}</span>
               </button>
-              {isPerizinanMenuOpen && (
-                <div className="sidebar-subnav">
-                  {['Admin', 'Keamanan'].includes(user.jabatan) && (
-                    <Link
-                      to="/catat-gerbang"
-                      className={`sidebar-subnav-link ${location.pathname === '/catat-gerbang' ? 'active' : ''}`}
-                      onClick={closeMenu}
-                    >
-                      Catat Izin & Gerbang
-                    </Link>
-                  )}
+              <div className={`sidebar-subnav ${isPerizinanMenuOpen ? 'open' : ''}`}>
+                {['Admin', 'Keamanan'].includes(user.jabatan) && (
                   <Link
-                    to="/perizinan/semua"
-                    className={`sidebar-subnav-link ${location.pathname === '/perizinan/semua' || location.pathname === '/perizinan' ? 'active' : ''}`}
+                    to="/catat-gerbang"
+                    className={`sidebar-subnav-link ${location.pathname === '/catat-gerbang' ? 'active' : ''}`}
                     onClick={closeMenu}
                   >
-                    Daftar Perizinan
+                    Catat Izin & Gerbang
                   </Link>
-                </div>
-              )}
+                )}
+                <Link
+                  to="/perizinan/semua"
+                  className={`sidebar-subnav-link ${location.pathname === '/perizinan/semua' || location.pathname === '/perizinan' ? 'active' : ''}`}
+                  onClick={closeMenu}
+                >
+                  Daftar Perizinan
+                </Link>
+              </div>
             </div>
           )}
 
@@ -240,14 +234,14 @@ function Layout() {
                 <span className="nav-label"><NavIcon name="database"/><span>Data Master</span></span>
                 <span aria-hidden="true">{isMasterMenuOpen ? '⌃' : '⌄'}</span>
               </button>
-              {isMasterMenuOpen && <div className="sidebar-subnav">
+              <div className={`sidebar-subnav ${isMasterMenuOpen ? 'open' : ''}`}>
                 <Link to="/data-master/santri" className={`sidebar-subnav-link ${location.pathname === '/data-master/santri' ? 'active' : ''}`} onClick={closeMenu}>Data santri</Link>
                 <Link to="/data-master/alumni" className={`sidebar-subnav-link ${location.pathname === '/data-master/alumni' ? 'active' : ''}`} onClick={closeMenu}>Data alumni</Link>
                 <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
                 <Link to="/data-master/review" className={`sidebar-subnav-link ${location.pathname === '/data-master/review' ? 'active' : ''}`} onClick={closeMenu}>Review impor</Link>
                 <Link to="/data-master/kamar" className={`sidebar-subnav-link ${location.pathname === '/data-master/kamar' ? 'active' : ''}`} onClick={closeMenu}>Kamar & mapping</Link>
                 <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
-              </div>}
+              </div>
             </div>
           )}
 

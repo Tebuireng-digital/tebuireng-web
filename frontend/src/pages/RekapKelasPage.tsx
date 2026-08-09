@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import type { StatusAbsensi } from '../components/PillStatus';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 interface TargetKelas { target_id: number; nama_target: string }
 interface JadwalKelas { jadwal_id: number; nama_jadwal: string }
@@ -21,6 +22,11 @@ const todayJakarta = () => new Intl.DateTimeFormat('sv-SE', {
 const statuses: Array<StatusAbsensi | 'Belum diisi'> = ['Hadir', 'Izin', 'Sakit', 'Alpha', 'Terlambat', 'Belum diisi'];
 
 export function RekapKelasPage() {
+  usePageMeta({
+    title: 'Rekap Kelas Formal',
+    description: 'Pantau rekap kehadiran harian santri untuk kelas formal penugasan wali kelas Pondok Pesantren Tebuireng.',
+  });
+
   const [searchParams] = useSearchParams();
   const [targetId, setTargetId] = useState(Number(searchParams.get('kelas')) || 0);
   const [tanggal, setTanggal] = useState(searchParams.get('tanggal') || todayJakarta());
@@ -58,14 +64,13 @@ export function RekapKelasPage() {
   if (!sekolah?.targets.length) return <div className="empty-state">Belum ada kelas formal yang ditugaskan kepada akun ini.</div>;
 
   return (
-    <div className="rekap-page">
+    <section className="rekap-page">
       <header className="dashboard-header">
         <div>
           <span className="page-eyebrow">Absensi kelas</span>
           <h1>Rekap Kelas</h1>
           <p>Pantau hasil absensi harian hanya untuk kelas yang menjadi tanggung jawab Anda.</p>
         </div>
-        <div className="dashboard-mosque" aria-hidden="true"><span></span></div>
       </header>
 
       <div className="rekap-filters">
@@ -91,6 +96,6 @@ export function RekapKelasPage() {
           <tbody>{sessionQuery.data.santri.map((santri, index) => <tr key={santri.santri_id}><td>{index + 1}</td><td><strong>{santri.nama}</strong><small>{santri.nis || 'NIS belum tersedia'}</small></td><td><span className={`rekap-status ${(santri.status ?? 'belum').toLowerCase()}`}>{santri.status ?? 'Belum diisi'}</span></td></tr>)}</tbody>
         </table></div>
       </>}
-    </div>
+    </section>
   );
 }

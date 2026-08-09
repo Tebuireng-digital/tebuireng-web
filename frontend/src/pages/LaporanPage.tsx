@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export function LaporanPage() {
+  usePageMeta({
+    title: 'Laporan Detail & Ekspor',
+    description: 'Unduh laporan rekapitulasi kehadiran, pelanggaran, dan perizinan santri Pondok Pesantren Tebuireng dalam format PDF & Excel.',
+  });
+
   const [laporanType, setLaporanType] = useState('kehadiran');
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
@@ -30,7 +36,7 @@ export function LaporanPage() {
   };
 
   return (
-    <div className="app-container" style={{ padding: '24px' }}>
+    <section className="app-container" style={{ padding: '24px' }}>
       <h1 className="ui-text-title" style={{ marginBottom: '24px' }}>Laporan Detail & Ekspor</h1>
       
       <div style={{ backgroundColor: 'var(--kertas-kartu)', border: '1px solid var(--garis)', borderRadius: '8px', padding: '24px' }}>
@@ -70,6 +76,6 @@ export function LaporanPage() {
         </div>
         {error && <p className="form-error" style={{ marginTop: '16px' }}>{error}</p>}
       </div>
-    </div>
+    </section>
   );
 }

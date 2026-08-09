@@ -9,6 +9,7 @@ import { IndikatorSinkron } from '../components/IndikatorSinkron';
 import type { StatusAbsensi } from '../components/PillStatus';
 import { db, type OfflineAbsensi } from '../db/db';
 import { useBackgroundSync } from '../hooks/useBackgroundSync';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 interface SantriAbsensi {
   santri_id: number;
@@ -74,6 +75,14 @@ export function BulkInputPage() {
     queryFn: async () => (await api.get(`/api/absensi/${jenis}/session`, {
       params: { target_id: targetId, jadwal_id: jadwalId, tanggal },
     })).data,
+  });
+
+  const sessionData = sessionQuery.data;
+  usePageMeta({
+    title: sessionData ? `Absensi ${sessionData.nama_kegiatan} - ${sessionData.target.nama_target}` : 'Input Absensi Santri',
+    description: sessionData
+      ? `Formulir pencatatan absensi ${sessionData.nama_kegiatan} untuk ${sessionData.target.nama_target} jadwal ${sessionData.jadwal.nama_jadwal}.`
+      : 'Formulir pencatatan absensi santri Pondok Pesantren Tebuireng.',
   });
 
   const pendingItems = useLiveQuery(
@@ -236,33 +245,37 @@ export function BulkInputPage() {
         </div>
       )}
 
-      <div className="ledger-header">
-        <div className="ui-text-label" style={{ width: '40px' }}>No</div>
-        <div className="ui-text-label" style={{ flex: 1 }}>Nama Santri</div>
-        <div className="ui-text-label" style={{ width: '80px', textAlign: 'center' }}>Status</div>
-      </div>
-
       {session.santri.length === 0 ? (
         <div className="empty-state">Belum ada santri pada kelompok ini. Periksa data master atau hasil import.</div>
       ) : (
-        <div className="ledger-container">
-          {session.santri.map((santri, index) => {
-            const pending = pendingBySantri.get(santri.santri_id);
-            const currentStatus = pending?.status ?? santri.status ?? 'Hadir';
-            return (
-              <div className={isSaved ? 'saved-row' : ''} key={santri.santri_id}>
-                <BarisLedger
-                  nomorUrut={index + 1}
-                  nama={santri.nama}
-                  nis={santri.nis ?? '—'}
-                  status={currentStatus}
-                  isEven={index % 2 !== 0}
-                  onChangeStatus={status => void savePending(santri, status)}
-                  onLongPressStatus={() => void handleLongPress(santri)}
-                />
-              </div>
-            );
-          })}
+        <div className="table-scroll">
+          <table className="ledger-table">
+            <thead>
+              <tr>
+                <th className="ledger-cell-no">No</th>
+                <th className="ledger-cell-nama">Nama Santri</th>
+                <th className="ledger-cell-status">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {session.santri.map((santri, index) => {
+                const pending = pendingBySantri.get(santri.santri_id);
+                const currentStatus = pending?.status ?? santri.status ?? 'Hadir';
+                return (
+                  <BarisLedger
+                    key={santri.santri_id}
+                    nomorUrut={index + 1}
+                    nama={santri.nama}
+                    nis={santri.nis ?? '—'}
+                    status={currentStatus}
+                    isEven={index % 2 !== 0}
+                    onChangeStatus={status => void savePending(santri, status)}
+                    onLongPressStatus={() => void handleLongPress(santri)}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

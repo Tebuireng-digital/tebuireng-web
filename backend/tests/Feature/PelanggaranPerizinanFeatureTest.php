@@ -209,4 +209,70 @@ class PelanggaranPerizinanFeatureTest extends TestCase
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'application/pdf');
     }
+
+    public function test_security_can_correct_gate_times_and_status(): void
+    {
+        $perizinanId = DB::table('perizinan')->insertGetId([
+            'santri_id' => $this->santriId,
+            'jenis_izin_id' => $this->jenisIzinId,
+            'keperluan' => 'Koreksi waktu gerbang',
+            'tanggal_mulai' => '2026-08-08 08:00:00',
+            'rencana_kembali' => '2026-08-09 18:00:00',
+            'status' => 'Selesai',
+            'waktu_keluar_aktual' => '2026-08-08 09:00:00',
+            'waktu_masuk_aktual' => '2026-08-09 17:00:00',
+            'diajukan_oleh' => $this->admin->petugas_id,
+        ]);
+
+        $this->actingAs($this->keamanan, 'sanctum');
+
+        $this->patchJson('/api/perizinan/' . $perizinanId . '/gerbang/koreksi', [
+            'waktu_keluar_aktual' => '2026-08-08 10:00:00',
+            'waktu_masuk_aktual' => null,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('perizinan', [
+            'perizinan_id' => $perizinanId,
+            'status' => 'Sedang Berjalan',
+            'waktu_keluar_aktual' => '2026-08-08 10:00:00',
+            'waktu_masuk_aktual' => null,
+            'dicatat_keamanan_oleh' => $this->keamanan->petugas_id,
+        ]);
+
+        $this->assertDatabaseHas('perizinan_gerbang_koreksi', [
+            'perizinan_id' => $perizinanId,
+            'waktu_keluar_sebelum' => '2026-08-08 09:00:00',
+            'waktu_masuk_sebelum' => '2026-08-09 17:00:00',
+            'waktu_keluar_sesudah' => '2026-08-08 10:00:00',
+            'waktu_masuk_sesudah' => null,
+            'dikoreksi_oleh' => $this->keamanan->petugas_id,
+        ]);
+    }
+
+    public function test_security_can_set_initial_gate_times_from_an_active_permission(): void
+    {
+        $perizinanId = DB::table('perizinan')->insertGetId([
+            'santri_id' => $this->santriId,
+            'jenis_izin_id' => $this->jenisIzinId,
+            'keperluan' => 'Validasi koreksi waktu',
+            'tanggal_mulai' => '2026-08-08 08:00:00',
+            'rencana_kembali' => '2026-08-09 18:00:00',
+            'status' => 'Disetujui',
+            'diajukan_oleh' => $this->admin->petugas_id,
+        ]);
+
+        $this->actingAs($this->keamanan, 'sanctum');
+
+        $this->patchJson('/api/perizinan/' . $perizinanId . '/gerbang/koreksi', [
+            'waktu_keluar_aktual' => '2026-08-08 08:00:00',
+            'waktu_masuk_aktual' => '2026-08-09 17:00:00',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('perizinan', [
+            'perizinan_id' => $perizinanId,
+            'status' => 'Selesai',
+            'waktu_keluar_aktual' => '2026-08-08 08:00:00',
+            'waktu_masuk_aktual' => '2026-08-09 17:00:00',
+        ]);
+    }
 }

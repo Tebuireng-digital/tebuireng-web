@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 interface PelanggaranRecord {
   pelanggaran_id: number;
@@ -26,6 +27,14 @@ export function PelanggaranListPage() {
   const [endDate, setEndDate] = useState('');
   const [searchParams] = useSearchParams();
   const selectedSantriId = searchParams.get('santri_id');
+
+  const santriName = pelanggaran[0]?.nama_santri;
+  usePageMeta({
+    title: selectedSantriId && santriName ? `Detail Pelanggaran ${santriName}` : 'Daftar Pelanggaran Santri',
+    description: selectedSantriId && santriName
+      ? `Riwayat dan akumulasi poin pelanggaran santri ${santriName} Pondok Pesantren Tebuireng.`
+      : 'Riwayat dan catatan pelanggaran santri yang telah diinputkan oleh petugas Pondok Pesantren Tebuireng.',
+  });
 
   const fetchPelanggaran = async () => {
     try {
@@ -57,7 +66,6 @@ export function PelanggaranListPage() {
   }, [pelanggaran, search, kategoriFilter, startDate, endDate]);
 
   const totalPoin = useMemo(() => filteredPelanggaran.reduce((sum, item) => sum + (item.poin || item.poin_maks || 0), 0), [filteredPelanggaran]);
-  const santriName = pelanggaran[0]?.nama_santri;
   const levelSummary = useMemo(() => ['Ringan', 'Sedang', 'Berat'].map(level => {
     const records = filteredPelanggaran.filter(item => item.kategori?.toLowerCase() === level.toLowerCase());
     return {

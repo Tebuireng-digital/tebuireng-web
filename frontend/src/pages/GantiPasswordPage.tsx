@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return hidden ? (
@@ -18,6 +19,11 @@ function EyeIcon({ hidden }: { hidden: boolean }) {
 }
 
 export function GantiPasswordPage() {
+  usePageMeta({
+    title: 'Ganti Kata Sandi',
+    description: 'Perbarui kata sandi akun petugas SIMANTEB Pondok Pesantren Tebuireng.',
+  });
+
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('');
@@ -70,7 +76,7 @@ export function GantiPasswordPage() {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 80px)' }}>
+    <section style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 80px)' }}>
       <div className="stat-card" style={{ width: '100%', maxWidth: '480px', padding: '40px', alignItems: 'stretch' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>Ganti Kata Sandi</h1>
         <p style={{ color: '#64748B', marginBottom: '32px', fontSize: '15px' }}>
@@ -176,6 +182,6 @@ export function GantiPasswordPage() {
           </button>
         </form>
       </div>
-    </div>
+    </section>
   );
 }

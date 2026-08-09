@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 interface Petugas { petugas_id: number; nama: string; username: string; jabatan: string; status_aktif: boolean; tanggung_jawab_absensi: string }
 interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string }> }
@@ -54,6 +55,14 @@ interface AlumniStats {
 
 type MasterTab = 'santri' | 'penugasan' | 'review' | 'kamar' | 'akun' | 'alumni';
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
+type PaginationItem = number | 'ellipsis';
+
+const getPaginationItems = (current: number, total: number): PaginationItem[] => {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, 6, 'ellipsis', total];
+  if (current >= total - 3) return [1, 'ellipsis', total - 5, total - 4, total - 3, total - 2, total - 1, total];
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
+};
 
 const roleForJenis: Record<string, string> = {
   sekolah: 'Wali Kelas', kamar: 'Pembina Kamar', pbs: 'Ustadz', diniyah: 'Ustadz', pbm: 'Ustadz',
@@ -94,6 +103,7 @@ export function DataMasterPage() {
   const [santriUnitFilter, setSantriUnitFilter] = useState('');
   const [santriKamarFilter, setSantriKamarFilter] = useState('');
   const [santriPage, setSantriPage] = useState(1);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 768px)').matches);
   const [showSantriModal, setShowSantriModal] = useState(false);
   const [editingSantri, setEditingSantri] = useState<Partial<SantriMaster>>({
     santri_id: 0,
@@ -125,6 +135,20 @@ export function DataMasterPage() {
   const activeTab: MasterTab = ['santri', 'penugasan', 'review', 'kamar', 'akun', 'alumni'].includes(tab ?? '')
     ? (tab as MasterTab)
     : 'santri';
+
+  const tabTitles: Record<MasterTab, string> = {
+    santri: 'Data Santri',
+    penugasan: 'Penugasan Absensi',
+    review: 'Review Hasil Impor',
+    kamar: 'Kamar & Pemetaan',
+    akun: 'Akun Petugas',
+    alumni: 'Data Alumni',
+  };
+
+  usePageMeta({
+    title: `${tabTitles[activeTab]} - Data Master`,
+    description: `Kelola ${tabTitles[activeTab].toLowerCase()} dan konfigurasi operasional Pondok Pesantren Tebuireng.`,
+  });
 
   const fetchData = async () => {
     const [petugasResponse, opsiResponse, penugasanResponse, kamarResponse, santriResponse] = await Promise.all([
@@ -205,17 +229,28 @@ export function DataMasterPage() {
     });
   }, [santriList, santriSearch, santriUnitFilter, santriKamarFilter]);
 
-  const itemsPerPage = 50;
+  const itemsPerPage = isMobileViewport ? 10 : 50;
   const totalSantriPages = Math.ceil(filteredSantri.length / itemsPerPage) || 1;
   const currentSantriPageData = useMemo(() => {
     const start = (santriPage - 1) * itemsPerPage;
     return filteredSantri.slice(start, start + itemsPerPage);
-  }, [filteredSantri, santriPage]);
+  }, [filteredSantri, santriPage, itemsPerPage]);
 
   // Reset pagination on filter change
   useEffect(() => {
     setSantriPage(1);
   }, [santriSearch, santriUnitFilter, santriKamarFilter]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const handleViewportChange = () => setIsMobileViewport(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleViewportChange);
+    return () => mediaQuery.removeEventListener('change', handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    setSantriPage(1);
+  }, [isMobileViewport]);
 
   const saveSantri = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -363,7 +398,7 @@ export function DataMasterPage() {
 
   return (
     <div className="master-page">
-      <header className="dashboard-header">
+      <header className="dashboard-header page-header">
         <h1>Data Master</h1>
         <p>Kelola data santri, penugasan pembina, kamar, dan akun petugas.</p>
       </header>
@@ -432,7 +467,7 @@ export function DataMasterPage() {
           </p>
 
           <div className="table-scroll">
-            <table className="master-table">
+            <table className="master-table santri-table">
               <thead>
                 <tr>
                   <th>No</th>
@@ -476,7 +511,7 @@ export function DataMasterPage() {
 
           {/* Pagination Controls */}
           {totalSantriPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+            <div className="pagination-controls">
               <button
                 className="secondary-button"
                 disabled={santriPage <= 1}
@@ -484,9 +519,21 @@ export function DataMasterPage() {
               >
                 ← Sebelumnya
               </button>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>
-                Halaman {santriPage} dari {totalSantriPages}
-              </span>
+              <div className="pagination-pages" aria-label="Pilih halaman data santri">
+                {getPaginationItems(santriPage, totalSantriPages).map((item, index) => item === 'ellipsis' ? (
+                  <span className="pagination-ellipsis" key={`ellipsis-${index}`} aria-hidden="true">…</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`pagination-page${santriPage === item ? ' active' : ''}`}
+                    aria-label={`Halaman ${item}`}
+                    aria-current={santriPage === item ? 'page' : undefined}
+                    onClick={() => setSantriPage(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
               <button
                 className="secondary-button"
                 disabled={santriPage >= totalSantriPages}

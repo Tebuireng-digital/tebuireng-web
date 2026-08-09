@@ -137,6 +137,71 @@ class PerizinanController extends Controller
         return response()->json(['message' => 'Tidak ada perubahan data gerbang'], 400);
     }
 
+    public function koreksiGerbang(Request $request, $id)
+    {
+        $data = $request->validate([
+            'waktu_keluar_aktual' => 'nullable|date',
+            'waktu_masuk_aktual' => 'nullable|date|after_or_equal:waktu_keluar_aktual',
+            'alasan_koreksi' => 'nullable|string|max:255',
+        ]);
+
+        $petugas = Auth::user();
+        if (!in_array($petugas->jabatan, ['Keamanan', 'Admin'], true)) {
+            return response()->json(['message' => 'Hanya Keamanan atau Admin yang dapat mengoreksi data gerbang'], 403);
+        }
+
+        $perizinan = DB::table('perizinan')->where('perizinan_id', $id)->first();
+        if (!$perizinan) {
+            return response()->json(['message' => 'Data perizinan tidak ditemukan'], 404);
+        }
+
+        if (!array_key_exists('waktu_keluar_aktual', $data) && !array_key_exists('waktu_masuk_aktual', $data)) {
+            return response()->json(['message' => 'Isi setidaknya satu waktu yang ingin dikoreksi'], 422);
+        }
+
+        $waktuKeluar = array_key_exists('waktu_keluar_aktual', $data)
+            ? ($data['waktu_keluar_aktual'] ? \Carbon\Carbon::parse($data['waktu_keluar_aktual'])->toDateTimeString() : null)
+            : $perizinan->waktu_keluar_aktual;
+        $waktuMasuk = array_key_exists('waktu_masuk_aktual', $data)
+            ? ($data['waktu_masuk_aktual'] ? \Carbon\Carbon::parse($data['waktu_masuk_aktual'])->toDateTimeString() : null)
+            : $perizinan->waktu_masuk_aktual;
+
+        if ($waktuKeluar && $waktuMasuk && \Carbon\Carbon::parse($waktuMasuk)->lt(\Carbon\Carbon::parse($waktuKeluar))) {
+            return response()->json(['message' => 'Waktu kembali tidak boleh lebih awal dari waktu keluar'], 422);
+        }
+
+        if (!$waktuKeluar && $waktuMasuk) {
+            return response()->json(['message' => 'Waktu keluar harus diisi sebelum waktu kembali'], 422);
+        }
+
+        $status = $waktuMasuk ? 'Selesai' : ($waktuKeluar ? 'Sedang Berjalan' : 'Disetujui');
+
+        DB::transaction(function () use ($perizinan, $id, $waktuKeluar, $waktuMasuk, $status, $petugas, $data) {
+            DB::table('perizinan_gerbang_koreksi')->insert([
+                'perizinan_id' => $id,
+                'waktu_keluar_sebelum' => $perizinan->waktu_keluar_aktual,
+                'waktu_masuk_sebelum' => $perizinan->waktu_masuk_aktual,
+                'waktu_keluar_sesudah' => $waktuKeluar,
+                'waktu_masuk_sesudah' => $waktuMasuk,
+                'status_sebelum' => $perizinan->status,
+                'status_sesudah' => $status,
+                'dikoreksi_oleh' => $petugas->petugas_id,
+                'alasan_koreksi' => $data['alasan_koreksi'] ?? null,
+                'created_at' => now(),
+            ]);
+
+            DB::table('perizinan')->where('perizinan_id', $id)->update([
+                'waktu_keluar_aktual' => $waktuKeluar,
+                'waktu_masuk_aktual' => $waktuMasuk,
+                'status' => $status,
+                'dicatat_keamanan_oleh' => $petugas->petugas_id,
+                'updated_at' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Waktu gerbang berhasil dikoreksi']);
+    }
+
     public function downloadPdf($id)
     {
         $perizinan = DB::table('perizinan')

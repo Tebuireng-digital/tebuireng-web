@@ -21,36 +21,25 @@ export function BarisLedger({
   isEven
 }: BarisLedgerProps) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        height: '56px',
-        padding: '0 16px',
-        backgroundColor: isEven ? 'var(--kertas)' : 'var(--kertas-kartu)',
-      }}
-    >
-      <div 
-        className="ui-text-tabular" 
-        style={{ width: '40px', flexShrink: 0 }}
-      >
+    <tr className={`ledger-row ${isEven ? 'ledger-row-even' : 'ledger-row-odd'}`}>
+      <td className="ledger-cell-no ui-text-tabular">
         {nomorUrut}
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      </td>
+      <td className="ledger-cell-nama">
         <div className="ui-text-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {nama}
         </div>
-        <div className="ui-text-tabular" style={{ fontSize: '12px' }}>
+        <div className="ui-text-tabular" style={{ fontSize: '12px', color: 'var(--tinta-pudar)' }}>
           {nis}
         </div>
-      </div>
-      <div style={{ flexShrink: 0, marginLeft: '12px' }}>
+      </td>
+      <td className="ledger-cell-status">
         <PillStatus 
           status={status} 
           onChange={onChangeStatus} 
           onLongPress={onLongPressStatus} 
         />
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }

@@ -29,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/perizinan-jenis', [\App\Http\Controllers\PerizinanController::class, 'jenis'])->middleware('role:Keamanan');
     Route::post('/perizinan', [\App\Http\Controllers\PerizinanController::class, 'store'])->middleware('role:Keamanan');
     Route::patch('/perizinan/{id}/gerbang', [\App\Http\Controllers\PerizinanController::class, 'gerbang'])->middleware('role:Keamanan');
+    Route::patch('/perizinan/{id}/gerbang/koreksi', [\App\Http\Controllers\PerizinanController::class, 'koreksiGerbang'])->middleware('role:Keamanan');
     Route::get('/perizinan/{id}/pdf', [\App\Http\Controllers\PerizinanController::class, 'downloadPdf'])->middleware('role:Keamanan,Pengasuh,Admin');
 
     // Laporan
@@ -46,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/master/petugas', [\App\Http\Controllers\MasterController::class, 'getPetugas'])->middleware('role:Admin');
     Route::get('/master/kamar', [\App\Http\Controllers\MasterController::class, 'getKamar'])->middleware('role:Admin');
     Route::post('/master/kamar', [\App\Http\Controllers\MasterController::class, 'storeKamar'])->middleware('role:Admin');
+    Route::get('/master/santri/count', [\App\Http\Controllers\MasterController::class, 'countSantri'])->middleware('role:Admin');
     Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
     Route::post('/master/santri', [\App\Http\Controllers\MasterController::class, 'storeSantri'])->middleware('role:Admin');
     Route::get('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'getPenugasan'])->middleware('role:Admin');

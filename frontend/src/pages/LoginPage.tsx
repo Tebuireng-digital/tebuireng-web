@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 export function LoginPage() {
+  usePageMeta({
+    title: 'Masuk Petugas',
+    description: 'Masuk ke akun petugas SIMANTEB untuk mengelola kegiatan dan pendataan santri Pondok Pesantren Tebuireng.',
+  });
+
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -26,9 +32,12 @@ export function LoginPage() {
       }
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
+        const serverMessage = String(err.response.data.message);
+        setError(serverMessage.toLowerCase().includes('csrf')
+          ? 'Sesi login tidak valid. Muat ulang halaman lalu coba lagi.'
+          : serverMessage);
       } else {
-        setError('Terjadi kesalahan saat login.');
+        setError('Login gagal. Periksa koneksi lalu coba lagi.');
       }
     } finally {
       setLoading(false);
@@ -44,25 +53,26 @@ export function LoginPage() {
             <span className="mosque-dome"></span><span className="mosque-tower left"></span><span className="mosque-tower right"></span>
           </div>
           <p>Selamat datang</p>
-          <h1 className="login-title">Sistem Kepesantrenan</h1>
-          <p className="login-hero-copy">Kelola kegiatan dan pendataan santri dalam satu aplikasi.</p>
+          <h1 className="login-title">SIMANTEB</h1>
+          <p className="login-hero-copy">Sistem Manajemen Tebuireng · Kelola kegiatan dan pendataan santri dalam satu aplikasi.</p>
         </div>
 
         <div className="login-form-panel">
-        <p className="login-subtitle">Masuk ke akun petugas</p>
+        <h2 className="login-subtitle">Masuk ke akun petugas</h2>
 
         {error && (
-          <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fecaca' }}>
+          <div role="alert" aria-live="assertive" style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fecaca' }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <div className="login-input-group">
-            <label className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>
+            <label htmlFor="login-username" className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>
               Username petugas
             </label>
             <input
+              id="login-username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -72,9 +82,10 @@ export function LoginPage() {
             />
           </div>
           <div className="login-input-group">
-            <label className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>Password</label>
+            <label htmlFor="login-password" className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>Password</label>
             <div style={{ position: 'relative' }}>
               <input
+                id="login-password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -86,7 +97,8 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
+                aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                aria-pressed={showPassword}
                 style={{
                   position: 'absolute',
                   right: '16px',

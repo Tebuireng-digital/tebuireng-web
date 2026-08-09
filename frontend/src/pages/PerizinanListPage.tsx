@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../AuthContext';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 interface PerizinanRecord {
   perizinan_id: number;
@@ -15,7 +17,63 @@ interface PerizinanRecord {
   waktu_masuk_aktual?: string | null;
 }
 
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize = 10,
+  onPageChange
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize?: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div className="pagination-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, paddingTop: 14, borderTop: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>
+        Menampilkan {startItem}–{endItem} dari {totalItems} data
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          style={{ padding: '6px 12px', fontSize: 12, minHeight: 32 }}
+        >
+          &laquo; Sblm
+        </button>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', padding: '0 8px' }}>
+          Halaman {currentPage} dari {totalPages}
+        </span>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          style={{ padding: '6px 12px', fontSize: 12, minHeight: 32 }}
+        >
+          Slnjt &raquo;
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PerizinanListPage() {
+  usePageMeta({
+    title: 'Daftar Perizinan Santri',
+    description: 'Daftar riwayat dan status perizinan santri (Aktif, Selesai, Kadaluarsa, Dibatalkan) Pondok Pesantren Tebuireng.',
+  });
+
+  const { user } = useAuth();
   const [perizinan, setPerizinan] = useState<PerizinanRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,6 +81,12 @@ export function PerizinanListPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Pagination State (10 rows max per page)
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchPerizinan = async () => {
     try {
@@ -36,6 +100,8 @@ export function PerizinanListPage() {
   };
 
   const handleDownloadPdf = async (perizinanId: number, namaSantri: string) => {
+    setDownloadingId(perizinanId);
+    setDownloadMessage(null);
     try {
       const response = await api.get(`/api/perizinan/${perizinanId}/pdf`, {
         responseType: 'blob',
@@ -43,14 +109,17 @@ export function PerizinanListPage() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Surat_Izin_Pulang_${namaSantri.replace(/\s+/g, '_')}.pdf`);
+      link.setAttribute('download', `Surat_Izin_${namaSantri.replace(/\s+/g, '_')}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      setDownloadMessage({ text: `PDF surat izin ${namaSantri} berhasil diunduh.`, type: 'success' });
     } catch (error) {
       console.error('Gagal mengunduh PDF:', error);
-      alert('Gagal mengunduh file PDF.');
+      setDownloadMessage({ text: 'PDF gagal diunduh. Periksa koneksi lalu coba lagi.', type: 'error' });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -64,11 +133,22 @@ export function PerizinanListPage() {
       const matchSearch = !q || [item.nama_santri, item.nis ?? '', item.keperluan]
         .some(val => val.toLowerCase().includes(q));
       const matchStatus = !statusFilter || item.status.toLowerCase() === statusFilter.toLowerCase();
-      const matchStart = !startDate || item.tanggal_mulai >= startDate;
-      const matchEnd = !endDate || item.tanggal_mulai <= endDate;
+      const waktuMulai = new Date(item.tanggal_mulai.replace(' ', 'T')).getTime();
+      const matchStart = !startDate || waktuMulai >= new Date(`${startDate}T00:00:00`).getTime();
+      const matchEnd = !endDate || waktuMulai <= new Date(`${endDate}T23:59:59`).getTime();
       return matchSearch && matchStatus && matchStart && matchEnd;
     });
   }, [perizinan, search, statusFilter, startDate, endDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredPerizinan.length / ITEMS_PER_PAGE) || 1;
+  const paginatedPerizinan = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredPerizinan.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredPerizinan, currentPage]);
 
   const activeCount = useMemo(() => perizinan.filter(p => ['disetujui', 'sedang berjalan'].includes(p.status.toLowerCase())).length, [perizinan]);
   const finishedCount = useMemo(() => perizinan.filter(p => p.status.toLowerCase() === 'selesai').length, [perizinan]);
@@ -79,17 +159,14 @@ export function PerizinanListPage() {
   return (
     <div className="permit-list-page">
       <header className="dashboard-header" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <div>
-            <span className="page-eyebrow">Rekap Perizinan</span>
-            <h1>Daftar Perizinan Santri</h1>
-            <p>Seluruh riwayat dan status perizinan santri (Aktif, Selesai, Kadaluarsa, Dibatalkan).</p>
-          </div>
-          <Link to="/catat-gerbang" className="primary-button" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            + Catat Izin Baru
-          </Link>
+        <div>
+          <span className="page-eyebrow">Rekap Perizinan</span>
+          <h1>Daftar Perizinan Santri</h1>
+          <p>Seluruh riwayat dan status perizinan santri (Aktif, Selesai, Kadaluarsa, Dibatalkan).</p>
         </div>
       </header>
+
+      {downloadMessage && <div className={downloadMessage.type === 'success' ? 'success-box' : 'error-box'} role="status">{downloadMessage.text}</div>}
 
       {/* Stats Summary Cards */}
       <div className="dashboard-grid-premium" style={{ marginBottom: 24 }}>
@@ -105,6 +182,12 @@ export function PerizinanListPage() {
           <span className="stat-card-value" style={{ color: '#10b981' }}>{finishedCount}</span>
           <span className="stat-card-label">Selesai (Sudah Kembali)</span>
         </div>
+        {['Admin', 'Keamanan'].includes(user?.jabatan ?? '') && (
+          <Link to="/catat-gerbang" className="stat-card stat-card-cta">
+            <span className="stat-card-cta-icon">+</span>
+            <span className="stat-card-cta-text">Catat Izin Baru</span>
+          </Link>
+        )}
       </div>
 
       <section className="master-section">
@@ -175,7 +258,7 @@ export function PerizinanListPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredPerizinan.map((item, idx) => {
+              {paginatedPerizinan.map((item, idx) => {
                 const st = item.status.toLowerCase();
                 const isAktif = st === 'sedang berjalan' || st === 'disetujui';
                 const isSelesai = st === 'selesai';
@@ -183,10 +266,11 @@ export function PerizinanListPage() {
 
                 const badgeColor = isAktif ? '#0284c7' : isSelesai ? '#10b981' : isKadaluarsa ? '#ef4444' : '#64748b';
                 const badgeBg = isAktif ? '#e0f2fe' : isSelesai ? '#ecfdf5' : isKadaluarsa ? '#fef2f2' : '#f1f5f9';
+                const rowNum = (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
 
                 return (
                   <tr key={item.perizinan_id}>
-                    <td>{idx + 1}</td>
+                    <td>{rowNum}</td>
                     <td>{item.nis || <small style={{ color: '#888' }}>—</small>}</td>
                     <td><strong>{item.nama_santri}</strong></td>
                     <td>{item.keperluan}</td>
@@ -212,10 +296,11 @@ export function PerizinanListPage() {
                       <button
                         type="button"
                         className="download-pdf-btn"
-                        style={{ padding: '4px 8px', borderRadius: '8px', fontSize: '11px' }}
                         onClick={() => handleDownloadPdf(item.perizinan_id, item.nama_santri)}
+                        disabled={downloadingId === item.perizinan_id}
+                        aria-label={`Unduh PDF surat izin ${item.nama_santri}`}
                       >
-                        📄 PDF
+                        {downloadingId === item.perizinan_id ? 'Mengunduh…' : 'Unduh PDF'}
                       </button>
                     </td>
                   </tr>
@@ -227,6 +312,13 @@ export function PerizinanListPage() {
             <div className="empty-state">Belum ada perizinan yang sesuai dengan filter pencarian.</div>
           )}
         </div>
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredPerizinan.length}
+          pageSize={ITEMS_PER_PAGE}
+          onPageChange={setCurrentPage}
+        />
       </section>
     </div>
   );

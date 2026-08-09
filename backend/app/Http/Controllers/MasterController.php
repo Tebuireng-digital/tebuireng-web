@@ -147,6 +147,11 @@ class MasterController extends Controller
         return response()->json($santri);
     }
 
+    public function countSantri()
+    {
+        return response()->json(['total' => DB::table('santri')->count()]);
+    }
+
     public function storeSantri(Request $request)
     {
         $data = $request->validate([

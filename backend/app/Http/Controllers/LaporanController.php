@@ -149,4 +149,39 @@ class LaporanController extends Controller
 
         return response()->json($data);
     }
+
+    public function organisasiDaerah(Request $request)
+    {
+        $query = DB::table('santri')
+            ->leftJoin('organisasi_daerah', 'santri.organisasi_daerah_id', '=', 'organisasi_daerah.organisasi_daerah_id')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
+            ->select(
+                'santri.santri_id',
+                'santri.nis',
+                'santri.nama as nama_santri',
+                'unit_pendidikan.kode as unit',
+                'kamar.nama as kamar',
+                'organisasi_daerah.kode_singkat as kode_orda',
+                'organisasi_daerah.nama_organisasi as organisasi_daerah'
+            )
+            ->where('santri.status_aktif', 1);
+
+        if ($request->filled('organisasi_daerah_id')) {
+            $query->where('santri.organisasi_daerah_id', $request->integer('organisasi_daerah_id'));
+        }
+
+        $data = $query->orderBy('organisasi_daerah.kode_singkat')->orderBy('santri.nama')->get();
+
+        if ($request->query('format') === 'xlsx') {
+            return Excel::download(new LaporanExport($data), 'laporan-organisasi-daerah.xlsx');
+        }
+
+        if ($request->query('format') === 'pdf') {
+            $pdf = Pdf::loadView('exports.laporan', ['data' => $data, 'judul' => 'Laporan Santri per Organisasi Daerah']);
+            return $pdf->download('laporan-organisasi-daerah.pdf');
+        }
+
+        return response()->json($data);
+    }
 }

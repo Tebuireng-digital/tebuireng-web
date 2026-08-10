@@ -22,6 +22,9 @@ interface SantriMaster {
   nama_unit?: string;
   kamar_id?: number | null;
   nama_kamar?: string | null;
+  organisasi_daerah_id?: number | null;
+  kode_orda?: string | null;
+  nama_orda?: string | null;
   nama_kelas_formal?: string | null;
   nama_wali?: string | null;
   no_hp_wali?: string | null;
@@ -52,8 +55,16 @@ interface AlumniStats {
   by_jenjang: { jenjang: string; jumlah: number }[];
   by_jenis_kelamin: { jenis_kelamin: string; jumlah: number }[];
 }
+interface OrganisasiDaerahItem {
+  organisasi_daerah_id: number;
+  kode_singkat: string;
+  nama_organisasi: string;
+  deskripsi_wilayah: string | null;
+  status_aktif: boolean;
+  total_santri: number;
+}
 
-type MasterTab = 'santri' | 'penugasan' | 'review' | 'kamar' | 'akun' | 'alumni';
+type MasterTab = 'santri' | 'penugasan' | 'review' | 'kamar' | 'akun' | 'alumni' | 'organisasi-daerah';
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
 type PaginationItem = number | 'ellipsis';
 
@@ -132,7 +143,23 @@ export function DataMasterPage() {
   const [alumniPage, setAlumniPage] = useState(1);
   const [alumniLoading, setAlumniLoading] = useState(false);
 
-  const activeTab: MasterTab = ['santri', 'penugasan', 'review', 'kamar', 'akun', 'alumni'].includes(tab ?? '')
+  // Organisasi Daerah State
+  const [ordaList, setOrdaList] = useState<OrganisasiDaerahItem[]>([]);
+  const [ordaLoading, setOrdaLoading] = useState(false);
+  const [ordaSubTab, setOrdaSubTab] = useState<'master' | 'mapping'>('master');
+  const [showOrdaModal, setShowOrdaModal] = useState(false);
+  const [editingOrda, setEditingOrda] = useState<Partial<OrganisasiDaerahItem>>({
+    organisasi_daerah_id: 0,
+    kode_singkat: '',
+    nama_organisasi: '',
+    deskripsi_wilayah: '',
+    status_aktif: true,
+  });
+  const [selectedOrdaTargetId, setSelectedOrdaTargetId] = useState<number | null>(null);
+  const [selectedSantriIds, setSelectedSantriIds] = useState<Set<number>>(new Set());
+  const [bulkOrdaSaving, setBulkOrdaSaving] = useState(false);
+
+  const activeTab: MasterTab = ['santri', 'penugasan', 'review', 'kamar', 'akun', 'alumni', 'organisasi-daerah'].includes(tab ?? '')
     ? (tab as MasterTab)
     : 'santri';
 
@@ -143,6 +170,7 @@ export function DataMasterPage() {
     kamar: 'Kamar & Pemetaan',
     akun: 'Akun Petugas',
     alumni: 'Data Alumni',
+    'organisasi-daerah': 'Organisasi Daerah',
   };
 
   usePageMeta({
@@ -211,6 +239,57 @@ export function DataMasterPage() {
       return () => window.clearTimeout(timer);
     }
   }, [activeTab, alumniSearch, alumniJenjangFilter, alumniJkFilter]);
+
+  const fetchOrda = async () => {
+    setOrdaLoading(true);
+    try {
+      const response = await api.get('/api/master/organisasi-daerah');
+      setOrdaList(response.data);
+    } catch {
+      setMessage('Data organisasi daerah gagal dimuat.');
+    } finally {
+      setOrdaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'organisasi-daerah') {
+      fetchOrda();
+    }
+  }, [activeTab]);
+
+  const saveOrda = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/api/master/organisasi-daerah', editingOrda);
+      setMessage(res.data.message);
+      setShowOrdaModal(false);
+      await fetchOrda();
+    } catch (err: any) {
+      setMessage(err.response?.data?.message || 'Gagal menyimpan organisasi daerah.');
+    }
+  };
+
+  const saveBulkOrda = async () => {
+    if (selectedSantriIds.size === 0) {
+      alert('Pilih setidaknya 1 santri untuk dipetakan.');
+      return;
+    }
+    setBulkOrdaSaving(true);
+    try {
+      const res = await api.post('/api/master/santri/bulk-orda', {
+        organisasi_daerah_id: selectedOrdaTargetId,
+        santri_ids: Array.from(selectedSantriIds),
+      });
+      setMessage(res.data.message);
+      setSelectedSantriIds(new Set());
+      await Promise.all([fetchOrda(), fetchData()]);
+    } catch (err: any) {
+      setMessage(err.response?.data?.message || 'Gagal menyimpan pemetaan santri.');
+    } finally {
+      setBulkOrdaSaving(false);
+    }
+  };
 
   // Reset alumni pagination on filter change
   useEffect(() => {
@@ -809,6 +888,274 @@ export function DataMasterPage() {
               >
                 Muat {Math.min(100, alumniList.length - alumniPage * 100)} data berikutnya
               </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ORGANISASI DAERAH TAB */}
+      {activeTab === 'organisasi-daerah' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Organisasi Daerah (Orda) Santri</h2>
+              <p>Kelola data master Orda dan pemetaan wilayah santri.</p>
+            </div>
+            {ordaSubTab === 'master' && (
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setEditingOrda({ organisasi_daerah_id: 0, kode_singkat: '', nama_organisasi: '', deskripsi_wilayah: '', status_aktif: true });
+                  setShowOrdaModal(true);
+                }}
+              >
+                + Tambah Orda
+              </button>
+            )}
+          </div>
+
+          {/* Sub Tab Switcher */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            <button
+              className={`secondary-button ${ordaSubTab === 'master' ? 'active' : ''}`}
+              style={{ background: ordaSubTab === 'master' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'master' ? '#fff' : undefined }}
+              onClick={() => setOrdaSubTab('master')}
+            >
+              📋 Master Orda ({ordaList.length})
+            </button>
+            <button
+              className={`secondary-button ${ordaSubTab === 'mapping' ? 'active' : ''}`}
+              style={{ background: ordaSubTab === 'mapping' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'mapping' ? '#fff' : undefined }}
+              onClick={() => setOrdaSubTab('mapping')}
+            >
+              🔗 Pemetaan Bulk Santri
+            </button>
+          </div>
+
+          {ordaSubTab === 'master' && (
+            <div className="table-scroll">
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}>No</th>
+                    <th>Kode Singkat</th>
+                    <th>Nama Organisasi Daerah</th>
+                    <th>Cakupan Wilayah</th>
+                    <th style={{ textAlign: 'center' }}>Total Santri</th>
+                    <th style={{ textAlign: 'center' }}>Status</th>
+                    <th style={{ textAlign: 'center', width: '80px' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordaList.map((o, idx) => (
+                    <tr key={o.organisasi_daerah_id}>
+                      <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td><strong>{o.kode_singkat}</strong></td>
+                      <td>{o.nama_organisasi}</td>
+                      <td>{o.deskripsi_wilayah || <small style={{ color: '#888' }}>—</small>}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{o.total_santri} santri</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`status-pill ${o.status_aktif ? 'status-hadir' : 'status-alpha'}`}>
+                          {o.status_aktif ? 'Aktif' : 'Non-aktif'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="secondary-button"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                          onClick={() => {
+                            setEditingOrda(o);
+                            setShowOrdaModal(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {ordaList.length === 0 && !ordaLoading && (
+                <div className="empty-state">Belum ada data Organisasi Daerah.</div>
+              )}
+            </div>
+          )}
+
+          {ordaSubTab === 'mapping' && (
+            <div>
+              <div className="account-table-controls" style={{ marginBottom: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="orda-target-select">Orda Tujuan (Pemetaan Bulk)</label>
+                  <select
+                    id="orda-target-select"
+                    value={selectedOrdaTargetId ?? ''}
+                    onChange={e => setSelectedOrdaTargetId(Number(e.target.value) || null)}
+                  >
+                    <option value="">— Kosongkan Orda (Hapus Pemetaan) —</option>
+                    {ordaList.filter(o => o.status_aktif).map(o => (
+                      <option key={o.organisasi_daerah_id} value={o.organisasi_daerah_id}>
+                        {o.kode_singkat} — {o.nama_organisasi} ({o.total_santri} santri)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="account-search-control" style={{ flex: 1 }}>
+                  <label htmlFor="orda-santri-search">Cari Santri</label>
+                  <input
+                    id="orda-santri-search"
+                    value={santriSearch}
+                    onChange={e => setSantriSearch(e.target.value)}
+                    placeholder="Cari Nama, NIS, Orda..."
+                  />
+                </div>
+
+                <div style={{ alignSelf: 'flex-end' }}>
+                  <button
+                    className="primary-button"
+                    disabled={selectedSantriIds.size === 0 || bulkOrdaSaving}
+                    onClick={() => void saveBulkOrda()}
+                  >
+                    {bulkOrdaSaving ? 'Menyimpan...' : `Simpan Pemetaan (${selectedSantriIds.size} Santri)`}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  className="secondary-button"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => {
+                    const allIds = new Set(filteredSantri.map(s => s.santri_id));
+                    setSelectedSantriIds(allIds);
+                  }}
+                >
+                  ✓ Pilih Semua ({filteredSantri.length})
+                </button>
+                <button
+                  className="secondary-button"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => setSelectedSantriIds(new Set())}
+                >
+                  ✕ Batal Pilih All
+                </button>
+              </div>
+
+              <div className="table-scroll">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>Pilih</th>
+                      <th>No</th>
+                      <th>NIS</th>
+                      <th>Nama Santri</th>
+                      <th>Unit</th>
+                      <th>Kamar</th>
+                      <th>Organisasi Daerah Saat Ini</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentSantriPageData.map((s, idx) => {
+                      const isChecked = selectedSantriIds.has(s.santri_id);
+                      return (
+                        <tr key={s.santri_id} style={{ background: isChecked ? 'rgba(15, 110, 86, 0.06)' : undefined }}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const next = new Set(selectedSantriIds);
+                                if (e.target.checked) next.add(s.santri_id);
+                                else next.delete(s.santri_id);
+                                setSelectedSantriIds(next);
+                              }}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'center' }}>{(santriPage - 1) * itemsPerPage + idx + 1}</td>
+                          <td>{s.nis || '—'}</td>
+                          <td><strong>{s.nama}</strong></td>
+                          <td><span className="schedule-label">{s.kode_unit || '—'}</span></td>
+                          <td>{s.nama_kamar || '—'}</td>
+                          <td>
+                            {s.kode_orda ? (
+                              <span style={{ fontWeight: 600, color: 'var(--aksen)' }}>
+                                {s.kode_orda} ({s.nama_orda})
+                              </span>
+                            ) : (
+                              <small style={{ color: '#888' }}>Belum Dipetakan</small>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalSantriPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+                  <button className="secondary-button" disabled={santriPage <= 1} onClick={() => setSantriPage(p => p - 1)}>Sebelumnya</button>
+                  <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px' }}>Halaman {santriPage} dari {totalSantriPages}</span>
+                  <button className="secondary-button" disabled={santriPage >= totalSantriPages} onClick={() => setSantriPage(p => p + 1)}>Berikutnya</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ORDA MODAL */}
+          {showOrdaModal && (
+            <div className="save-modal-backdrop" role="presentation">
+              <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog">
+                <h2>{editingOrda.organisasi_daerah_id ? 'Edit Organisasi Daerah' : 'Tambah Organisasi Daerah'}</h2>
+                <form onSubmit={e => void saveOrda(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <div>
+                    <label className="ui-text-label">Kode Singkat (singkatan)</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      required
+                      value={editingOrda.kode_singkat || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, kode_singkat: e.target.value }))}
+                      placeholder="Contoh: HISPA, OPIM, IKSMA"
+                    />
+                  </div>
+                  <div>
+                    <label className="ui-text-label">Nama Resmi Organisasi</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      required
+                      value={editingOrda.nama_organisasi || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, nama_organisasi: e.target.value }))}
+                      placeholder="Contoh: Himpunan Santri Pasundan"
+                    />
+                  </div>
+                  <div>
+                    <label className="ui-text-label">Cakupan Wilayah / Daerah Asal</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      value={editingOrda.deskripsi_wilayah || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, deskripsi_wilayah: e.target.value }))}
+                      placeholder="Contoh: Jawa Barat & Banten"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="orda-aktif-chk"
+                      checked={editingOrda.status_aktif ?? true}
+                      onChange={e => setEditingOrda(p => ({ ...p, status_aktif: e.target.checked }))}
+                    />
+                    <label htmlFor="orda-aktif-chk" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label>
+                  </div>
+
+                  <div className="save-modal-actions" style={{ marginTop: '16px' }}>
+                    <button type="button" className="secondary-button" onClick={() => setShowOrdaModal(false)}>Batal</button>
+                    <button type="submit" className="primary-button">Simpan</button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </section>

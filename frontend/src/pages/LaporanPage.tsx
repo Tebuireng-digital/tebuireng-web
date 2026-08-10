@@ -53,6 +53,7 @@ export function LaporanPage() {
             <option value="pelanggaran">Rekap Pelanggaran</option>
             <option value="perizinan">Rekap Perizinan</option>
             <option value="bulanan">Rekap Gabungan Bulanan</option>
+            <option value="organisasi-daerah">Rekap Santri per Organisasi Daerah</option>
           </select>
         </div>
 

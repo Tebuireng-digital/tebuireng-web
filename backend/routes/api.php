@@ -59,6 +59,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/master/import-reviews/{id}/separate', [\App\Http\Controllers\ImportReviewController::class, 'markSeparate'])->middleware('role:Admin');
     Route::get('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'mappings'])->middleware('role:Admin');
     Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
+    Route::get('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'index'])->middleware('role:Admin');
+    Route::post('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'store'])->middleware('role:Admin');
+    Route::post('/master/santri/bulk-orda', [\App\Http\Controllers\OrganisasiDaerahController::class, 'bulkUpdateSantri'])->middleware('role:Admin');
+    Route::get('/laporan/organisasi-daerah', [\App\Http\Controllers\LaporanController::class, 'organisasiDaerah'])->middleware('role:Admin,Pengasuh');
+
+    // Raport Pengajian
+    Route::get('/raport-pengajian/options', [\App\Http\Controllers\RaportPengajianController::class, 'options']);
+    Route::get('/raport-pengajian/session', [\App\Http\Controllers\RaportPengajianController::class, 'session']);
+    Route::post('/raport-pengajian/bulk', [\App\Http\Controllers\RaportPengajianController::class, 'bulkUpsert'])->middleware('role:Admin,Ustadz');
+    Route::get('/raport-pengajian/rekap-semester', [\App\Http\Controllers\RaportPengajianController::class, 'rekapSemester'])->middleware('role:Admin,Pengasuh');
+    Route::get('/raport-pengajian/kelompok/{jenis}/{kelompokId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdfBulk'])->middleware('role:Admin,Ustadz');
+    Route::get('/raport-pengajian/{santriId}', [\App\Http\Controllers\RaportPengajianController::class, 'show']);
+    Route::get('/raport-pengajian/{santriId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdf']);
 
     // Alumni
     Route::get('/master/alumni', [\App\Http\Controllers\AlumniController::class, 'index'])->middleware('role:Admin');

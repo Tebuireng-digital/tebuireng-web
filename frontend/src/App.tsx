@@ -15,8 +15,10 @@ const DataMasterPage = lazy(() => import('./pages/DataMasterPage').then(module =
 const LaporanPage = lazy(() => import('./pages/LaporanPage').then(module => ({ default: module.LaporanPage })));
 const GantiPasswordPage = lazy(() => import('./pages/GantiPasswordPage').then(module => ({ default: module.GantiPasswordPage })));
 const RekapKelasPage = lazy(() => import('./pages/RekapKelasPage').then(module => ({ default: module.RekapKelasPage })));
+const RaportInputPage = lazy(() => import('./pages/RaportInputPage').then(module => ({ default: module.RaportInputPage })));
+const RaportViewPage = lazy(() => import('./pages/RaportViewPage').then(module => ({ default: module.RaportViewPage })));
 
-type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more';
+type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport';
 
 interface OpsiAbsensiItem {
   jenis: string;
@@ -47,6 +49,7 @@ function NavIcon({ name }: { name: IconName }) {
     menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
     logout: <><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></>,
     more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
+    raport: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
   };
   return <svg className="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -81,6 +84,7 @@ function Layout() {
   const [isPelanggaranMenuOpen, setIsPelanggaranMenuOpen] = useState(() => location.pathname.startsWith('/pelanggaran'));
   const [isPerizinanMenuOpen, setIsPerizinanMenuOpen] = useState(() => location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang');
   const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(() => location.pathname.startsWith('/data-master'));
+  const [isRaportMenuOpen, setIsRaportMenuOpen] = useState(true);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -185,6 +189,19 @@ function Layout() {
         setIsAbsensiMenuOpen(false);
         setIsPelanggaranMenuOpen(false);
         setIsPerizinanMenuOpen(false);
+        setIsRaportMenuOpen(false);
+      }
+      return next;
+    });
+  };
+  const toggleRaportMenu = () => {
+    setIsRaportMenuOpen(open => {
+      const next = !open;
+      if (next) {
+        setIsAbsensiMenuOpen(false);
+        setIsPelanggaranMenuOpen(false);
+        setIsPerizinanMenuOpen(false);
+        setIsMasterMenuOpen(false);
       }
       return next;
     });
@@ -345,6 +362,43 @@ function Layout() {
             <Link to="/rekap-kelas" className={`sidebar-nav-link ${location.pathname === '/rekap-kelas' ? 'active' : ''}`} aria-current={location.pathname === '/rekap-kelas' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Rekap Kelas</span></Link>
           )}
 
+          {/* KELOMPOK MENU RAPORT PENGAJIAN (COLLAPSIBLE) */}
+          {Boolean(user) && (
+            <div className="sidebar-master-menu">
+              <button
+                type="button"
+                aria-label="Buka atau tutup menu Raport Pengajian"
+                aria-expanded={isRaportMenuOpen}
+                aria-controls="raport-subnav"
+                className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/raport') ? 'active' : ''}`}
+                onClick={toggleRaportMenu}
+              >
+                <span className="nav-label"><NavIcon name="raport"/><span>Raport Pengajian</span></span>
+                <span aria-hidden="true">{isRaportMenuOpen ? '⌃' : '⌄'}</span>
+              </button>
+              <div id="raport-subnav" className={`sidebar-subnav ${isRaportMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isRaportMenuOpen}>
+                  {['Admin', 'Ustadz'].includes(user.jabatan) && (
+                    <Link
+                      to="/raport/input"
+                      className={`sidebar-subnav-link ${location.pathname === '/raport/input' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/raport/input' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Input Raport
+                    </Link>
+                  )}
+                  <Link
+                    to="/raport/lihat"
+                    className={`sidebar-subnav-link ${location.pathname === '/raport/lihat' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/raport/lihat' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Lihat Raport
+                  </Link>
+              </div>
+            </div>
+          )}
+
           {user.jabatan === 'Admin' && (
             <div className="sidebar-master-menu">
               <button
@@ -361,6 +415,7 @@ function Layout() {
               <div id="master-subnav" className={`sidebar-subnav ${isMasterMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isMasterMenuOpen}>
                 <Link to="/data-master/santri" className={`sidebar-subnav-link ${location.pathname === '/data-master/santri' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/santri' ? 'page' : undefined} onClick={closeMenu}>Data santri</Link>
                 <Link to="/data-master/alumni" className={`sidebar-subnav-link ${location.pathname === '/data-master/alumni' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/alumni' ? 'page' : undefined} onClick={closeMenu}>Data alumni</Link>
+                <Link to="/data-master/organisasi-daerah" className={`sidebar-subnav-link ${location.pathname === '/data-master/organisasi-daerah' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/organisasi-daerah' ? 'page' : undefined} onClick={closeMenu}>Organisasi daerah</Link>
                 <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/penugasan' ? 'page' : undefined} onClick={closeMenu}>Penugasan absensi</Link>
                 <Link to="/data-master/review" className={`sidebar-subnav-link ${location.pathname === '/data-master/review' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/review' ? 'page' : undefined} onClick={closeMenu}>Review impor</Link>
                 <Link to="/data-master/kamar" className={`sidebar-subnav-link ${location.pathname === '/data-master/kamar' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/kamar' ? 'page' : undefined} onClick={closeMenu}>Kamar & mapping</Link>
@@ -408,6 +463,13 @@ function Layout() {
             {/* Protected Routes based on Jabatan */}
             <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
             <Route path="/rekap-kelas" element={user.jabatan === 'Wali Kelas' ? <RekapKelasPage /> : <Navigate to="/dashboard" />} />
+
+            <Route path="/raport/input" element={
+              ['Admin', 'Ustadz'].includes(user.jabatan)
+                ? <RaportInputPage />
+                : <Navigate to="/dashboard" />
+            } />
+            <Route path="/raport/lihat" element={<RaportViewPage />} />
 
             <Route path="/data-master" element={
               user.jabatan === 'Admin'
@@ -459,6 +521,10 @@ function Layout() {
             <NavIcon name="report"/><span>Laporan</span>
           </Link>
         )}
+
+        <Link to="/raport/lihat" className={location.pathname.startsWith('/raport') ? 'active' : ''} aria-current={location.pathname.startsWith('/raport') ? 'page' : undefined} onClick={closeMenu}>
+          <NavIcon name="raport"/><span>Raport</span>
+        </Link>
 
         <button type="button" aria-label="Buka menu navigasi" aria-expanded={isMobileMenuOpen} aria-controls="primary-navigation" className={isMobileMenuOpen ? 'active' : ''} onClick={openMenu}>
           <NavIcon name="more"/><span>Menu</span>

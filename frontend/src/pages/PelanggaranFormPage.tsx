@@ -29,6 +29,11 @@ export function PelanggaranFormPage() {
   const [kategoriSearch, setKategoriSearch] = useState('');
   const [activeKategoriIndex, setActiveKategoriIndex] = useState(0);
 
+  // Custom violation state
+  const [uraianPelanggaranCustom, setUraianPelanggaranCustom] = useState('');
+  const [kategoriCustom, setKategoriCustom] = useState<'Ringan' | 'Sedang' | 'Berat' | 'Kewajiban'>('Ringan');
+  const isCustomKategori = kategoriId === '0';
+
   // Form State
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [catatan, setCatatan] = useState('');
@@ -92,41 +97,26 @@ export function PelanggaranFormPage() {
   useEffect(() => {
     if (!modalState.isOpen) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    const dialog = modalRef.current;
     const closeButton = modalCloseRef.current;
     closeButton?.focus();
 
     const handleDialogKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setModalState(current => ({ ...current, isOpen: false }));
-        return;
-      }
-      if (event.key !== 'Tab' || !dialog) return;
-      const focusable = dialog.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
+        setModalState({ ...modalState, isOpen: false });
       }
     };
-
-    document.addEventListener('keydown', handleDialogKeyDown);
+    document.addEventListener("keydown", handleDialogKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleDialogKeyDown);
+      document.removeEventListener("keydown", handleDialogKeyDown);
       previouslyFocused?.focus();
     };
   }, [modalState.isOpen]);
 
   // Search Santri Effect (Debounced)
   useEffect(() => {
-    if (searchTerm.length >= 2 && (!selectedSantri || searchTerm !== selectedSantri.nama)) {
+    if (searchTerm.trim().length >= 2 && (!selectedSantri || searchTerm !== selectedSantri.nama)) {
       const delayDebounceFn = setTimeout(() => {
-        api.get(`/api/santri?q=${encodeURIComponent(searchTerm)}`).then(res => {
+        api.get(`/api/santri?q=${encodeURIComponent(searchTerm.trim())}`).then(res => {
           setSearchResults(res.data);
           setShowDropdown(true);
         }).catch(console.error);
@@ -139,9 +129,9 @@ export function PelanggaranFormPage() {
 
   const handleSelectSantri = (santri: any) => {
     setSelectedSantri(santri);
-    setSearchTerm(santri.nama); // Set input to the selected name
+    setSearchTerm(santri.nama);
+    setSearchResults([]);
     setShowDropdown(false);
-    setPoinAccumulated(null); // Reset points display when selecting a new santri
   };
 
   const handleClearSantri = () => {
@@ -152,12 +142,16 @@ export function PelanggaranFormPage() {
   };
 
   const selectedKategori = kategoriList.find(kat => String(kat.kategori_pelanggaran_id) === kategoriId);
-  const poinMaks = selectedKategori ? Number(selectedKategori.poin_maks) : null;
+  const poinMaks = isCustomKategori ? 100 : (selectedKategori ? Number(selectedKategori.poin_maks) : null);
 
   const handleKategoriChange = (value: string) => {
     setKategoriId(value);
-    const kategori = kategoriList.find(kat => String(kat.kategori_pelanggaran_id) === value);
-    setPoin(kategori ? String(kategori.poin_maks) : '');
+    if (value === '0') {
+      setPoin('5');
+    } else {
+      const kategori = kategoriList.find(kat => String(kat.kategori_pelanggaran_id) === value);
+      setPoin(kategori ? String(kategori.poin_maks) : '');
+    }
   };
 
   const filteredKategoriList = kategoriList.filter(kat => {
@@ -209,21 +203,40 @@ export function PelanggaranFormPage() {
       setModalState({ isOpen: true, type: 'error', message: 'Isi tanggal kejadian terlebih dahulu.' });
       return;
     }
-    if (!poin || Number(poin) < 1 || (poinMaks !== null && Number(poin) > poinMaks)) {
-      setModalState({ isOpen: true, type: 'error', message: `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.` });
-      return;
+
+    if (isCustomKategori) {
+      if (!uraianPelanggaranCustom.trim()) {
+        setModalState({ isOpen: true, type: 'error', message: 'Ketik nama / uraian pelanggaran baru secara manual.' });
+        return;
+      }
+      if (!poin || Number(poin) < 1 || Number(poin) > 100) {
+        setModalState({ isOpen: true, type: 'error', message: 'Jumlah poin pelanggaran manual harus antara 1 dan 100.' });
+        return;
+      }
+    } else {
+      if (!poin || Number(poin) < 1 || (poinMaks !== null && Number(poin) > poinMaks)) {
+        setModalState({ isOpen: true, type: 'error', message: `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.` });
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
       // 1. Submit Pelanggaran
-      const res = await api.post('/api/pelanggaran', {
+      const payload: any = {
         santri_id: selectedSantri.santri_id,
         kategori_pelanggaran_id: parseInt(kategoriId),
         poin: parseInt(poin),
         tanggal: tanggal,
         keterangan: catatan,
-      });
+      };
+
+      if (isCustomKategori) {
+        payload.uraian_pelanggaran_custom = uraianPelanggaranCustom.trim();
+        payload.kategori_custom = kategoriCustom;
+      }
+
+      const res = await api.post('/api/pelanggaran', payload);
 
       const id = res.data.pelanggaran_id;
 
@@ -246,6 +259,7 @@ export function PelanggaranFormPage() {
       
       // Reset form optional
       setKategoriId('');
+      setUraianPelanggaranCustom('');
       setPoin('');
       setCatatan('');
       setFoto(null);
@@ -306,7 +320,7 @@ export function PelanggaranFormPage() {
           {/* Autocomplete Pencarian Santri */}
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
             <label htmlFor="student-search">Cari Santri (Nama / NIS)</label>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input 
                 id="student-search"
                 type="text"
@@ -320,12 +334,23 @@ export function PelanggaranFormPage() {
                   setSearchTerm(e.target.value);
                   if (selectedSantri) setSelectedSantri(null);
                 }}
+                style={{
+                  paddingRight: selectedSantri ? '140px' : '36px',
+                  borderColor: selectedSantri ? '#10B981' : undefined,
+                  backgroundColor: selectedSantri ? '#F0FDF4' : undefined,
+                  fontWeight: selectedSantri ? 600 : undefined
+                }}
                 required
               />
               {selectedSantri && (
-                <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih">
-                  ✕
-                </button>
+                <div style={{ position: 'absolute', right: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#047857', backgroundColor: '#D1FAE5', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                    ✓ {selectedSantri.nama_kamar || selectedSantri.nama_unit || 'Terpilih'}
+                  </span>
+                  <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih" style={{ position: 'static' }}>
+                    ✕
+                  </button>
+                </div>
               )}
             </div>
 
@@ -333,9 +358,16 @@ export function PelanggaranFormPage() {
             {showDropdown && searchResults.length > 0 && (
               <div id="student-search-results" role="listbox" className="student-search-dropdown">
                 {searchResults.map((s, idx) => (
-                  <button className="student-search-result" type="button" role="option" aria-selected={selectedSantri?.santri_id === s.santri_id} key={s.santri_id ?? idx} onClick={() => handleSelectSantri(s)}>
+                  <button 
+                    className={`student-search-result ${selectedSantri?.santri_id === s.santri_id ? 'is-selected' : ''}`} 
+                    type="button" 
+                    role="option" 
+                    aria-selected={selectedSantri?.santri_id === s.santri_id} 
+                    key={s.santri_id ?? idx} 
+                    onClick={() => handleSelectSantri(s)}
+                  >
                     <span className="search-result-name">{s.nama}</span>
-                    <span className="search-result-meta">NIS: {s.nis} &bull; {s.nama_kamar || 'Kamar -'} &bull; {s.nama_unit || 'Unit -'}</span>
+                    <span className="search-result-meta">NIS: {s.nis || '-'} &bull; {s.nama_kamar || 'Kamar -'} &bull; {s.nama_unit || 'Unit -'}</span>
                   </button>
                 ))}
               </div>
@@ -347,37 +379,6 @@ export function PelanggaranFormPage() {
               </div>
             )}
           </div>
-
-          {/* Info Detail Santri (Muncul setelah dipilih) */}
-          {selectedSantri && (
-            <div className="selected-santri-card">
-              <div className="selected-santri-header">
-                <div className="selected-santri-avatar">
-                  {selectedSantri.nama ? selectedSantri.nama.slice(0, 2).toUpperCase() : 'ST'}
-                </div>
-                <div className="selected-santri-info">
-                  <h3 className="selected-santri-name">{selectedSantri.nama}</h3>
-                  <div className="santri-chips">
-                    <span className="santri-chip">NIS: {selectedSantri.nis || '-'}</span>
-                    <span className="santri-chip">Unit: {selectedSantri.nama_unit || '-'}</span>
-                    <span className="santri-chip">Kamar: {selectedSantri.nama_kamar || '-'}</span>
-                  </div>
-                </div>
-                <button type="button" onClick={handleClearSantri} className="btn-change-santri">
-                  Ganti Santri
-                </button>
-              </div>
-              {selectedSantri.nama_wali && (
-                <div className="selected-santri-wali">
-                  <span className="wali-label">Wali Santri:</span>
-                  <span className="wali-name">{selectedSantri.nama_wali}</span>
-                  {selectedSantri.no_hp_wali && (
-                    <span className="wali-phone">({selectedSantri.no_hp_wali})</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Tanggal Pelanggaran */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -408,13 +409,21 @@ export function PelanggaranFormPage() {
               }}
               onKeyDown={handleKategoriKeyDown}
             >
-              <span className={selectedKategori ? 'category-picker-value' : 'category-picker-placeholder'}>
-                {selectedKategori ? selectedKategori.uraian_pelanggaran : 'Pilih jenis pelanggaran'}
+              <span className={selectedKategori || isCustomKategori ? 'category-picker-value' : 'category-picker-placeholder'}>
+                {isCustomKategori
+                  ? (uraianPelanggaranCustom ? `[Manual] ${uraianPelanggaranCustom}` : '➕ Lainnya / Input Manual (Tidak ada di panduan)')
+                  : (selectedKategori ? selectedKategori.uraian_pelanggaran : 'Pilih jenis pelanggaran')}
               </span>
               {selectedKategori && (
                 <span className="category-picker-meta">
                   <span className={getSeverityClass(selectedKategori.kategori)}>{selectedKategori.kategori}</span>
                   <span className="points-pill-tag">{selectedKategori.poin_maks} poin maks</span>
+                </span>
+              )}
+              {isCustomKategori && (
+                <span className="category-picker-meta">
+                  <span className={getSeverityClass(kategoriCustom)}>{kategoriCustom}</span>
+                  <span className="points-pill-tag">Input Manual</span>
                 </span>
               )}
               <span className="category-picker-chevron" aria-hidden="true">⌄</span>
@@ -451,6 +460,24 @@ export function PelanggaranFormPage() {
                   />
                 </div>
                 <div className="category-picker-list">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isCustomKategori}
+                    className={`category-picker-option ${isCustomKategori ? 'is-selected' : ''}`}
+                    style={{ background: 'rgba(15, 110, 86, 0.08)', borderBottom: '1px dashed var(--garis)' }}
+                    onClick={() => {
+                      handleKategoriChange('0');
+                      setKategoriSearch('');
+                      setIsKategoriOpen(false);
+                    }}
+                  >
+                    <span className="category-option-copy">
+                      <strong style={{ color: 'var(--aksen)', fontWeight: 600 }}>➕ Lainnya / Input Manual (Tidak ada di panduan)</strong>
+                    </span>
+                    <span className="category-option-points">Input Baru</span>
+                  </button>
+
                   {filteredKategoriList.length > 0 ? filteredKategoriList.map((kat, index) => (
                     <button
                       type="button"
@@ -475,6 +502,40 @@ export function PelanggaranFormPage() {
               </div>
             )}
           </div>
+
+          {/* Custom Input Fields (Jika memilih "Lainnya / Input Manual") */}
+          {isCustomKategori && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', backgroundColor: 'rgba(15, 110, 86, 0.05)', borderRadius: '8px', border: '1px solid var(--garis)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <label htmlFor="custom-uraian" style={{ fontWeight: 600, color: 'var(--tinta)', marginBottom: '6px' }}>Nama / Uraian Pelanggaran Baru *</label>
+                <input
+                  id="custom-uraian"
+                  type="text"
+                  value={uraianPelanggaranCustom}
+                  onChange={(e) => setUraianPelanggaranCustom(e.target.value)}
+                  placeholder="Ketik nama pelanggaran (mis. Menggunakan HP di luar jadwal)..."
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column' }}>
+                  <label htmlFor="custom-kategori" style={{ fontWeight: 600, color: 'var(--tinta)', marginBottom: '6px' }}>Tingkat Kategori Pelanggaran *</label>
+                  <select
+                    id="custom-kategori"
+                    value={kategoriCustom}
+                    onChange={(e) => setKategoriCustom(e.target.value as any)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--garis)', backgroundColor: 'var(--kertas)' }}
+                  >
+                    <option value="Ringan">Ringan</option>
+                    <option value="Sedang">Sedang</option>
+                    <option value="Berat">Berat</option>
+                    <option value="Kewajiban">Kewajiban</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label htmlFor="violation-points">

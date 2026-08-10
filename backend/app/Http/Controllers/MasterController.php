@@ -125,6 +125,7 @@ class MasterController extends Controller
             ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
             ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
             ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
+            ->leftJoin('organisasi_daerah', 'santri.organisasi_daerah_id', '=', 'organisasi_daerah.organisasi_daerah_id')
             ->select(
                 'santri.santri_id',
                 'santri.nis',
@@ -136,6 +137,9 @@ class MasterController extends Controller
                 'kamar.nama as nama_kamar',
                 'santri.kelas_formal_id',
                 'kelas_formal.nama_kelas as nama_kelas_formal',
+                'santri.organisasi_daerah_id',
+                'organisasi_daerah.kode_singkat as kode_orda',
+                'organisasi_daerah.nama_organisasi as nama_orda',
                 'santri.nama_wali',
                 'santri.no_hp_wali',
                 'santri.status_aktif',
@@ -160,6 +164,7 @@ class MasterController extends Controller
             'nama' => 'required|string|max:150',
             'unit_id' => 'required|integer|exists:unit_pendidikan,unit_id',
             'kamar_id' => 'nullable|integer',
+            'organisasi_daerah_id' => 'nullable|integer',
             'nama_wali' => 'nullable|string|max:150',
             'no_hp_wali' => 'nullable|string|max:20',
         ]);
@@ -167,6 +172,7 @@ class MasterController extends Controller
         $nama = strtoupper(trim($data['nama']));
         $unitId = (int) $data['unit_id'];
         $kamarId = !empty($data['kamar_id']) ? (int) $data['kamar_id'] : null;
+        $ordaId = !empty($data['organisasi_daerah_id']) ? (int) $data['organisasi_daerah_id'] : null;
 
         if (!empty($data['santri_id'])) {
             DB::table('santri')->where('santri_id', $data['santri_id'])->update([
@@ -174,6 +180,7 @@ class MasterController extends Controller
                 'nama' => $nama,
                 'unit_id' => $unitId,
                 'kamar_id' => $kamarId,
+                'organisasi_daerah_id' => $ordaId,
                 'nama_wali' => $data['nama_wali'] ?: null,
                 'no_hp_wali' => $data['no_hp_wali'] ?: null,
                 'updated_at' => now(),
@@ -185,6 +192,7 @@ class MasterController extends Controller
                 'nama' => $nama,
                 'unit_id' => $unitId,
                 'kamar_id' => $kamarId,
+                'organisasi_daerah_id' => $ordaId,
                 'nama_wali' => $data['nama_wali'] ?: null,
                 'no_hp_wali' => $data['no_hp_wali'] ?: null,
                 'status_aktif' => 1,

@@ -73,6 +73,8 @@ class PelanggaranController extends Controller
         $data = $request->validate([
             'santri_id' => 'required|integer|exists:santri,santri_id',
             'kategori_pelanggaran_id' => 'required|integer',
+            'uraian_pelanggaran_custom' => 'nullable|string|max:255',
+            'kategori_custom' => 'nullable|string|in:Ringan,Sedang,Berat,Kewajiban',
             'poin' => 'nullable|integer|min:1',
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string',
@@ -85,6 +87,29 @@ class PelanggaranController extends Controller
         $model->santri_id = $data['santri_id'];
         if (Gate::forUser($petugas)->denies('create', $model)) {
             return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
+        }
+
+        // Handle Custom / Manual violation input
+        if ((int) $data['kategori_pelanggaran_id'] === 0 || !empty($data['uraian_pelanggaran_custom'])) {
+            $request->validate([
+                'uraian_pelanggaran_custom' => 'required|string|max:255',
+                'kategori_custom' => 'required|string|in:Ringan,Sedang,Berat,Kewajiban',
+                'poin' => 'required|integer|min:1|max:100',
+            ]);
+
+            $kodePasal = 'CUSTOM-' . strtoupper(Str::random(6));
+            $kategoriId = DB::table('kategori_pelanggaran')->insertGetId([
+                'kode_pasal' => $kodePasal,
+                'kategori' => $data['kategori_custom'],
+                'uraian_pelanggaran' => trim($data['uraian_pelanggaran_custom']),
+                'poin_maks' => (int) $data['poin'],
+                'jenis' => $data['kategori_custom'] === 'Kewajiban' ? 'Meninggalkan Kewajiban' : 'Pelanggaran',
+                'status_aktif' => 'Aktif',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $data['kategori_pelanggaran_id'] = $kategoriId;
         }
 
         // Validate kategori
@@ -112,6 +137,9 @@ class PelanggaranController extends Controller
         if ($petugas->jabatan === 'Keamanan' && !in_array(strtolower(trim($kategori->kategori)), ['sedang', 'berat'])) {
             return response()->json(['message' => 'Keamanan hanya dapat menginput pelanggaran Sedang dan Berat'], 403);
         }
+
+        // Clean custom fields before saving to pelanggaran table
+        unset($data['uraian_pelanggaran_custom'], $data['kategori_custom']);
 
         $data['petugas_pencatat_id'] = $petugas->petugas_id;
         $data['created_at'] = now()->toDateTimeString();

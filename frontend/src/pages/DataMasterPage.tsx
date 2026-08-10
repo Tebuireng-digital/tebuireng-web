@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -7,26 +7,67 @@ interface Petugas { petugas_id: number; nama: string; username: string; jabatan:
 interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string }> }
 interface Penugasan { penugasan_id: number; nama_petugas: string; jabatan: string; tipe_target: string; nama_target: string }
 interface Kamar { kamar_id: number; nama: string }
-interface ImportReview {
-  review_id: number; sumber_sheet: string; baris_sumber: number; nama_sumber: string; kode_kamar_sumber?: string;
-  data_tambahan?: string; santri_otomatis_id?: number; nama_santri_otomatis?: string; kamar_santri_otomatis?: string;
-  kandidat_santri_id?: number; nama_kandidat?: string; kamar_kandidat?: string; skor_kemiripan?: number; status: string;
-}
 interface KamarMapping { kode_sumber: string; jumlah_review: number; kamar_id?: number; nama_kamar?: string }
 interface SantriMaster {
   santri_id: number;
+  no_id_induk?: string | null;
   nis: string | null;
+  nik_siswa?: string | null;
   nama: string;
+  jenis_kelamin?: 'L' | 'P' | null;
+  tempat_lahir?: string | null;
+  tanggal_lahir?: string | null;
+  no_hp_santri?: string | null;
+  alamat_jalan?: string | null;
+  provinsi?: string | null;
+  kabupaten_kota?: string | null;
+  kecamatan?: string | null;
+  desa_kelurahan?: string | null;
+  kode_pos?: string | null;
   unit_id: number;
   kode_unit?: string;
   nama_unit?: string;
   kamar_id?: number | null;
+  kelas_formal_id?: number | null;
+  kelompok_madin_id?: number | null;
+  kelompok_pbs_id?: number | null;
+  kelompok_pbm_id?: number | null;
   nama_kamar?: string | null;
+  organisasi_daerah_id?: number | null;
+  kode_orda?: string | null;
+  nama_orda?: string | null;
   nama_kelas_formal?: string | null;
   nama_wali?: string | null;
   no_hp_wali?: string | null;
   status_aktif: boolean;
+  status_verifikasi?: string;
+  organisasi_daerah_id?: number | null;
+  kode_organisasi_daerah?: string | null;
+  nama_organisasi_daerah?: string | null;
+  kegiatan_partisipasi?: Record<string, { status: 'terdaftar' | 'tidak_ikut' | 'perlu_verifikasi'; alasan?: string | null }>;
   catatan_import?: string | null;
+}
+interface VerificationSantri {
+  santri_id: number;
+  no_id_induk?: string | null;
+  nama: string;
+  kode_unit?: string | null;
+  status_verifikasi: string;
+  alasan: string[];
+}
+interface VerificationQueueResponse {
+  data: VerificationSantri[];
+  current_page: number;
+  last_page: number;
+  total: number;
+}
+interface SantriOptions {
+  unit_pendidikan: Array<{ unit_id: number; kode: string; nama: string }>;
+  organisasi_daerah: Array<{ organisasi_daerah_id: number; kode: string; nama: string }>;
+  kelas_formal: Array<{ kelas_formal_id: number; nama_kelas: string }>;
+  kelompok_madin: Array<{ kelompok_madin_id: number; nama_kelas_madin: string }>;
+  kelompok_pbs: Array<{ kelompok_pbs_id: number; nama_kelompok: string }>;
+  kelompok_pbm: Array<{ kelompok_pbm_id: number; nama_kelompok: string }>;
 }
 interface AlumniRecord {
   alumni_id: number;
@@ -52,8 +93,36 @@ interface AlumniStats {
   by_jenjang: { jenjang: string; jumlah: number }[];
   by_jenis_kelamin: { jenis_kelamin: string; jumlah: number }[];
 }
+interface OrganisasiDaerahItem {
+  organisasi_daerah_id: number;
+  kode_singkat: string;
+  nama_organisasi: string;
+  deskripsi_wilayah: string | null;
+  status_aktif: boolean;
+  total_santri: number;
+}
 
-type MasterTab = 'santri' | 'penugasan' | 'review' | 'kamar' | 'akun' | 'alumni';
+interface ImportReviewItem {
+  review_id: number;
+  sumber_sheet: string;
+  baris_sumber: number;
+  nama_sumber: string;
+  kode_kamar_sumber: string | null;
+  data_tambahan: string | null;
+  santri_otomatis_id: number | null;
+  kandidat_santri_id: number | null;
+  skor_kemiripan: number;
+  status: 'perlu_tinjau' | 'perlu_mapping_kamar' | 'terpisah' | 'digabung';
+  diputuskan_oleh?: number | null;
+  diputuskan_pada?: string | null;
+  catatan_keputusan?: string | null;
+  nama_santri_otomatis?: string | null;
+  kamar_santri_otomatis?: string | null;
+  nama_kandidat?: string | null;
+  kamar_kandidat?: string | null;
+}
+
+type MasterTab = 'santri' | 'alumni' | 'data-orda' | 'ekstrakurikuler' | 'wisma' | 'verifikasi' | 'orda' | 'kamar' | 'review' | 'penugasan' | 'akun' | 'organisasi-daerah';
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
 type PaginationItem = number | 'ellipsis';
 
@@ -74,16 +143,45 @@ const UNIT_LIST = [
   { id: 3, kode: 'SMA', nama: 'SMA A. Wahid Hasyim' },
   { id: 4, kode: 'SMK', nama: 'SMK Khoiriyah Hasyim' },
   { id: 5, kode: 'MA', nama: 'MA Salafiyah Syafi\'iyah' },
+  { id: 6, kode: 'MTSS', nama: 'MTSS' },
+  { id: 7, kode: 'SMPT', nama: 'SMPT' },
+  { id: 8, kode: 'SMAT', nama: 'SMAT' },
+  { id: 9, kode: 'MAS', nama: 'MAS' },
+  { id: 10, kode: 'MU', nama: 'MU' },
+  { id: 11, kode: 'THS', nama: 'THS' },
 ];
+
+function TableSkeleton({ columns, rows = 6 }: { columns: number; rows?: number }) {
+  return <>
+    {Array.from({ length: rows }, (_, rowIndex) => (
+      <tr key={rowIndex} className="table-skeleton-row" aria-hidden="true">
+        {Array.from({ length: columns }, (_, columnIndex) => (
+          <td key={columnIndex}><span className={`table-skeleton-line line-${(rowIndex + columnIndex) % 3}`} /></td>
+        ))}
+      </tr>
+    ))}
+  </>;
+}
 
 export function DataMasterPage() {
   const { tab } = useParams<{ tab?: string }>();
+  const location = useLocation();
   const [petugas, setPetugas] = useState<Petugas[]>([]);
   const [opsi, setOpsi] = useState<Opsi[]>([]);
   const [penugasan, setPenugasan] = useState<Penugasan[]>([]);
   const [kamar, setKamar] = useState<Kamar[]>([]);
   const [santriList, setSantriList] = useState<SantriMaster[]>([]);
-  const [reviews, setReviews] = useState<ImportReview[]>([]);
+  const [verificationList, setVerificationList] = useState<VerificationSantri[]>([]);
+  const [verificationPage, setVerificationPage] = useState(1);
+  const [verificationLastPage, setVerificationLastPage] = useState(1);
+  const [verificationTotal, setVerificationTotal] = useState(0);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [ordaList, setOrdaList] = useState<VerificationSantri[]>([]);
+  const [ordaPage, setOrdaPage] = useState(1);
+  const [ordaLastPage, setOrdaLastPage] = useState(1);
+  const [ordaTotal, setOrdaTotal] = useState(0);
+  const [ordaLoading, setOrdaLoading] = useState(false);
+  const [santriOptions, setSantriOptions] = useState<SantriOptions>({ unit_pendidikan: [], organisasi_daerah: [], kelas_formal: [], kelompok_madin: [], kelompok_pbs: [], kelompok_pbm: [] });
   const [mappings, setMappings] = useState<KamarMapping[]>([]);
   const [jenis, setJenis] = useState('sekolah');
   const [petugasId, setPetugasId] = useState('');
@@ -92,8 +190,6 @@ export function DataMasterPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [santriLoading, setSantriLoading] = useState(false);
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [reviewStatus, setReviewStatus] = useState('perlu_tinjau');
   const [mappingChoices, setMappingChoices] = useState<Record<string, string>>({});
   const [namaKamarBaru, setNamaKamarBaru] = useState('');
   const [kodeKamarBaru, setKodeKamarBaru] = useState('');
@@ -132,46 +228,112 @@ export function DataMasterPage() {
   const [alumniPage, setAlumniPage] = useState(1);
   const [alumniLoading, setAlumniLoading] = useState(false);
 
-  const activeTab: MasterTab = ['santri', 'penugasan', 'review', 'kamar', 'akun', 'alumni'].includes(tab ?? '')
-    ? (tab as MasterTab)
-    : 'santri';
+  // Review Kemiripan Tab State
+  const [reviewList, setReviewList] = useState<ImportReviewItem[]>([]);
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<string>('');
+  const [reviewSheetFilter, setReviewSheetFilter] = useState<string>('');
+  const [reviewSearch, setReviewSearch] = useState<string>('');
+  const [reviewPage, setReviewPage] = useState<number>(1);
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  // Filter out items without candidates (only display rows with candidate/pair)
+  const validReviewList = useMemo(() => {
+    return reviewList.filter(item => Boolean(item.kandidat_santri_id || item.santri_otomatis_id || item.nama_kandidat || item.nama_santri_otomatis));
+  }, [reviewList]);
+
+  const reviewItemsPerPage = 10;
+  const totalReviewPages = Math.ceil(validReviewList.length / reviewItemsPerPage) || 1;
+
+  const paginatedReviewList = useMemo(() => {
+    const start = (reviewPage - 1) * reviewItemsPerPage;
+    return validReviewList.slice(start, start + reviewItemsPerPage);
+  }, [validReviewList, reviewPage, reviewItemsPerPage]);
+
+  useEffect(() => {
+    setReviewPage(1);
+  }, [reviewSearch, reviewStatusFilter, reviewSheetFilter]);
+
+  // Modal Review Verification State
+  const [activeReviewItem, setActiveReviewItem] = useState<ImportReviewItem | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const [candidateSearchText, setCandidateSearchText] = useState<string>('');
+  const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState<boolean>(false);
+  const [isMerging, setIsMerging] = useState<boolean>(false);
+
+  const isVerificationData = location.pathname.startsWith('/verifikasi-data');
+  const allowedTabs = isVerificationData
+    ? ['santri', 'orda', 'kamar', 'review']
+    : ['santri', 'alumni', 'data-orda', 'ekstrakurikuler', 'wisma', 'penugasan', 'kamar', 'review', 'akun', 'organisasi-daerah'];
+  const activeTab: MasterTab = allowedTabs.includes(tab ?? '') ? (tab as MasterTab) : 'santri';
 
   const tabTitles: Record<MasterTab, string> = {
     santri: 'Data Santri',
+    verifikasi: 'Pemetaan Absensi Santri',
+    orda: 'Verifikasi ORDA',
     penugasan: 'Penugasan Absensi',
-    review: 'Review Hasil Impor',
     kamar: 'Kamar & Pemetaan',
+    review: 'Review Kemiripan Data',
     akun: 'Akun Petugas',
     alumni: 'Data Alumni',
+    'organisasi-daerah': 'Organisasi Daerah',
+    'data-orda': 'Data ORDA',
+    ekstrakurikuler: 'Data Ekstrakurikuler',
+    wisma: 'Data Wisma',
   };
 
   usePageMeta({
-    title: `${tabTitles[activeTab]} - Data Master`,
+    title: `${tabTitles[activeTab]} - ${isVerificationData ? 'Verifikasi Data' : 'Data Master'}`,
     description: `Kelola ${tabTitles[activeTab].toLowerCase()} dan konfigurasi operasional Pondok Pesantren Tebuireng.`,
   });
 
   const fetchData = async () => {
-    const [petugasResponse, opsiResponse, penugasanResponse, kamarResponse, santriResponse] = await Promise.all([
+    const [petugasResponse, opsiResponse, penugasanResponse, kamarResponse, santriResponse, santriOptionsResponse] = await Promise.all([
       api.get('/api/master/petugas'),
       api.get('/api/absensi-options'),
       api.get('/api/master/penugasan'),
       api.get('/api/master/kamar'),
       api.get('/api/master/santri'),
+      api.get('/api/master/santri/options'),
     ]);
     setPetugas(petugasResponse.data);
     setOpsi(opsiResponse.data);
     setPenugasan(penugasanResponse.data);
     setKamar(kamarResponse.data);
     setSantriList(santriResponse.data);
+    setSantriOptions(santriOptionsResponse.data);
   };
 
-  const fetchReviews = async () => {
-    const [reviewsResponse, mappingsResponse] = await Promise.all([
-      api.get('/api/master/import-reviews', { params: reviewStatus ? { status: reviewStatus } : {} }),
-      api.get('/api/master/kamar-mappings'),
-    ]);
-    setReviews(reviewsResponse.data);
-    setMappings(mappingsResponse.data);
+  const fetchVerification = async () => {
+    setVerificationLoading(true);
+    try {
+      const response = await api.get<VerificationQueueResponse>('/api/master/santri/verifikasi', {
+        params: { page: verificationPage, per_page: 50 },
+      });
+      setVerificationList(response.data.data);
+      setVerificationLastPage(response.data.last_page);
+      setVerificationTotal(response.data.total);
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const fetchOrdaVerification = async () => {
+    setOrdaLoading(true);
+    try {
+      const response = await api.get<VerificationQueueResponse>('/api/master/santri/verifikasi-orda', {
+        params: { page: ordaPage, per_page: 50 },
+      });
+      setOrdaList(response.data.data);
+      setOrdaLastPage(response.data.last_page);
+      setOrdaTotal(response.data.total);
+    } finally {
+      setOrdaLoading(false);
+    }
+  };
+
+  const fetchKamarMappings = async () => {
+    const response = await api.get('/api/master/kamar-mappings');
+    setMappings(response.data);
   };
 
   const fetchAlumni = async () => {
@@ -199,18 +361,178 @@ export function DataMasterPage() {
   }, []);
 
   useEffect(() => {
-    fetchReviews().catch(() => {
-      setReviews([]); setMappings([]);
-    });
-  }, [reviewStatus]);
+    if (isVerificationData && activeTab === 'kamar') {
+      fetchKamarMappings().catch(() => setMappings([]));
+    }
+  }, [activeTab, isVerificationData]);
+
+  useEffect(() => {
+    if (isVerificationData && activeTab === 'santri') {
+      fetchVerification().catch(() => setMessage('Antrean verifikasi gagal dimuat.'));
+    }
+  }, [activeTab, isVerificationData, verificationPage]);
+
+  useEffect(() => {
+    if (isVerificationData && activeTab === 'orda') {
+      fetchOrdaVerification().catch(() => setMessage('Antrean verifikasi ORDA gagal dimuat.'));
+    }
+  }, [activeTab, isVerificationData, ordaPage]);
+
+  const fetchReviewData = async () => {
+    setReviewLoading(true);
+    try {
+      const response = await api.get<ImportReviewItem[]>('/api/master/import-reviews', {
+        params: {
+          status: reviewStatusFilter || undefined,
+          sheet: reviewSheetFilter || undefined,
+          search: reviewSearch.trim() || undefined,
+        },
+      });
+      setReviewList(response.data);
+    } catch {
+      setMessage('Daftar review kemiripan data gagal dimuat.');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const openReviewModal = (item: ImportReviewItem) => {
+    setActiveReviewItem(item);
+    setSelectedCandidateId(item.kandidat_santri_id || item.santri_otomatis_id);
+    setCandidateSearchText('');
+    setIsCandidateSearchOpen(false);
+  };
+
+  const closeReviewModal = () => {
+    if (isMerging) return;
+    setActiveReviewItem(null);
+    setSelectedCandidateId(null);
+    setCandidateSearchText('');
+    setIsCandidateSearchOpen(false);
+  };
+
+  const confirmMergeInModal = async () => {
+    if (!activeReviewItem) return;
+    setIsMerging(true);
+    try {
+      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/merge`, {
+        kandidat_santri_id: selectedCandidateId,
+      });
+      setMessage(response.data.message);
+      closeReviewModal();
+      await fetchReviewData();
+      await fetchData();
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Gagal menggabungkan data santri.');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const confirmSeparateInModal = async () => {
+    if (!activeReviewItem) return;
+    setIsMerging(true);
+    try {
+      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/separate`);
+      setMessage(response.data.message);
+      closeReviewModal();
+      await fetchReviewData();
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Gagal menandai terpisah.');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleSeparateDirect = async (item: ImportReviewItem) => {
+    if (!window.confirm(`Tandai "${item.nama_sumber}" sebagai dua orang yang berbeda (terpisah)?`)) return;
+    try {
+      const response = await api.post(`/api/master/import-reviews/${item.review_id}/separate`);
+      setMessage(response.data.message);
+      await fetchReviewData();
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Gagal menandai terpisah.');
+    }
+  };
+
+  const handleSyncReview = async () => {
+    setReviewLoading(true);
+    try {
+      const response = await api.post('/api/master/import-reviews/sync');
+      setMessage(`${response.data.message} (${response.data.baru_ditambahkan} data baru).`);
+      await fetchReviewData();
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Gagal menyinkronkan data review.');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isVerificationData && activeTab === 'review') {
+      const timer = window.setTimeout(() => { fetchReviewData(); }, 300);
+      return () => window.clearTimeout(timer);
+    }
+  }, [activeTab, isVerificationData, reviewStatusFilter, reviewSheetFilter, reviewSearch]);
 
   // Fetch alumni when tab is alumni or filter changes
   useEffect(() => {
-    if (activeTab === 'alumni') {
+    if (!isVerificationData && activeTab === 'alumni') {
       const timer = window.setTimeout(() => { fetchAlumni(); }, 300);
       return () => window.clearTimeout(timer);
     }
-  }, [activeTab, alumniSearch, alumniJenjangFilter, alumniJkFilter]);
+  }, [activeTab, isVerificationData, alumniSearch, alumniJenjangFilter, alumniJkFilter]);
+
+  const fetchOrda = async () => {
+    setOrdaLoading(true);
+    try {
+      const response = await api.get('/api/master/organisasi-daerah');
+      setOrdaList(response.data);
+    } catch {
+      setMessage('Data organisasi daerah gagal dimuat.');
+    } finally {
+      setOrdaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'organisasi-daerah') {
+      fetchOrda();
+    }
+  }, [activeTab]);
+
+  const saveOrda = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/api/master/organisasi-daerah', editingOrda);
+      setMessage(res.data.message);
+      setShowOrdaModal(false);
+      await fetchOrda();
+    } catch (err: any) {
+      setMessage(err.response?.data?.message || 'Gagal menyimpan organisasi daerah.');
+    }
+  };
+
+  const saveBulkOrda = async () => {
+    if (selectedSantriIds.size === 0) {
+      alert('Pilih setidaknya 1 santri untuk dipetakan.');
+      return;
+    }
+    setBulkOrdaSaving(true);
+    try {
+      const res = await api.post('/api/master/santri/bulk-orda', {
+        organisasi_daerah_id: selectedOrdaTargetId,
+        santri_ids: Array.from(selectedSantriIds),
+      });
+      setMessage(res.data.message);
+      setSelectedSantriIds(new Set());
+      await Promise.all([fetchOrda(), fetchData()]);
+    } catch (err: any) {
+      setMessage(err.response?.data?.message || 'Gagal menyimpan pemetaan santri.');
+    } finally {
+      setBulkOrdaSaving(false);
+    }
+  };
 
   // Reset alumni pagination on filter change
   useEffect(() => {
@@ -228,6 +550,7 @@ export function DataMasterPage() {
       return matchSearch && matchUnit && matchKamar;
     });
   }, [santriList, santriSearch, santriUnitFilter, santriKamarFilter]);
+  const unitOptions = santriOptions.unit_pendidikan.length ? santriOptions.unit_pendidikan : UNIT_LIST.map(unit => ({ unit_id: unit.id, kode: unit.kode, nama: unit.nama }));
 
   const itemsPerPage = isMobileViewport ? 10 : 50;
   const totalSantriPages = Math.ceil(filteredSantri.length / itemsPerPage) || 1;
@@ -264,6 +587,8 @@ export function DataMasterPage() {
       setMessage(response.data.message);
       setShowSantriModal(false);
       await fetchData();
+      await fetchVerification();
+      await fetchOrdaVerification();
     } catch (error: any) {
       setMessage(error.response?.data?.message ?? 'Gagal menyimpan data santri.');
     } finally {
@@ -346,40 +671,13 @@ export function DataMasterPage() {
     }
   };
 
-  const syncReviews = async () => {
-    setReviewLoading(true);
-    try {
-      const response = await api.post('/api/master/import-reviews/sync');
-      setMessage(`${response.data.message} ${response.data.total_sumber} baris sumber diperiksa.`);
-      await fetchReviews();
-    } catch (error: any) {
-      setMessage(error.response?.data?.message ?? 'Sinkronisasi review impor gagal.');
-    } finally { setReviewLoading(false); }
-  };
-
-  const mergeReview = async (review: ImportReview) => {
-    if (!review.kandidat_santri_id || !window.confirm(`Gabungkan “${review.nama_sumber}” ke kandidat “${review.nama_kandidat}”? Data induk kandidat dipertahankan.`)) return;
-    try {
-      const response = await api.post(`/api/master/import-reviews/${review.review_id}/merge`, { kandidat_santri_id: review.kandidat_santri_id });
-      setMessage(response.data.message); await fetchReviews();
-    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Penggabungan gagal.'); }
-  };
-
-  const markSeparate = async (review: ImportReview) => {
-    if (!window.confirm(`Tandai “${review.nama_sumber}” dan kandidatnya sebagai dua santri berbeda?`)) return;
-    try {
-      const response = await api.post(`/api/master/import-reviews/${review.review_id}/separate`);
-      setMessage(response.data.message); await fetchReviews();
-    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Keputusan gagal disimpan.'); }
-  };
-
   const saveMapping = async (mapping: KamarMapping) => {
     const kamarId = Number(mappingChoices[mapping.kode_sumber] || mapping.kamar_id);
     if (!kamarId) { setMessage('Pilih kamar tujuan terlebih dahulu.'); return; }
     if (!window.confirm(`Simpan kode ${mapping.kode_sumber} sebagai kamar tujuan terpilih?`)) return;
     try {
       const response = await api.post('/api/master/kamar-mappings', { kode_sumber: mapping.kode_sumber, kamar_id: kamarId });
-      setMessage(`${response.data.message} ${response.data.santri_diperbarui} data santri dilengkapi.`); await fetchReviews();
+      setMessage(`${response.data.message} ${response.data.santri_diperbarui} data santri dilengkapi.`); await fetchKamarMappings();
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Mapping kamar gagal disimpan.'); }
   };
 
@@ -390,7 +688,7 @@ export function DataMasterPage() {
       const response = await api.post('/api/master/kamar', { nama: namaKamarBaru, kode_sumber: kodeKamarBaru || null });
       setMessage(`${response.data.message} ${response.data.santri_diperbarui ?? 0} data santri dilengkapi.`);
       setNamaKamarBaru(''); setKodeKamarBaru('');
-      await Promise.all([fetchData(), fetchReviews()]);
+      await Promise.all([fetchData(), fetchKamarMappings()]);
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Kamar atau mapping gagal disimpan.'); }
   };
 
@@ -399,14 +697,14 @@ export function DataMasterPage() {
   return (
     <div className="master-page">
       <header className="dashboard-header page-header">
-        <h1>Data Master</h1>
-        <p>Kelola data santri, penugasan pembina, kamar, dan akun petugas.</p>
+        <h1>{isVerificationData ? 'Verifikasi Data' : 'Data Master'}</h1>
+        <p>{isVerificationData ? 'Selesaikan data yang belum tervalidasi sebelum dipakai untuk operasional absensi.' : 'Kelola data referensi santri, alumni, ORDA, ekstrakurikuler, dan wisma.'}</p>
       </header>
       {message && <div className="warning-box" style={{ marginBottom: 16 }}>{message}</div>}
       {passwordBaru && <div className="password-result">Password baru: <strong>{passwordBaru}</strong><button onClick={() => { void navigator.clipboard.writeText(passwordBaru); setPasswordBaru(''); }}>Salin & tutup</button></div>}
 
       {/* DATA SANTRI TAB */}
-      {activeTab === 'santri' && (
+      {!isVerificationData && activeTab === 'santri' && (
         <section className="master-section">
           <div className="section-heading">
             <div>
@@ -442,8 +740,8 @@ export function DataMasterPage() {
                 onChange={e => setSantriUnitFilter(e.target.value)}
               >
                 <option value="">Semua Unit</option>
-                {UNIT_LIST.map(u => (
-                  <option key={u.id} value={u.id}>{u.kode} - {u.nama}</option>
+                {unitOptions.map(u => (
+                  <option key={u.unit_id} value={u.unit_id}>{u.kode} - {u.nama}</option>
                 ))}
               </select>
             </div>
@@ -471,7 +769,7 @@ export function DataMasterPage() {
               <thead>
                 <tr>
                   <th>No</th>
-                  <th>NIS / NIK</th>
+                  <th>No. ID</th>
                   <th>Nama Santri</th>
                   <th>Unit</th>
                   <th>Kamar</th>
@@ -484,7 +782,7 @@ export function DataMasterPage() {
                 {currentSantriPageData.map((s, idx) => (
                   <tr key={s.santri_id}>
                     <td>{(santriPage - 1) * itemsPerPage + idx + 1}</td>
-                    <td>{s.nis || <small style={{ color: '#888' }}>—</small>}</td>
+                    <td>{s.no_id_induk || <small style={{ color: '#888' }}>Belum diverifikasi</small>}</td>
                     <td><strong>{s.nama}</strong></td>
                     <td><span className="schedule-label">{s.kode_unit || '—'}</span></td>
                     <td>{s.nama_kamar || <small style={{ color: '#aaa' }}>Belum diatur</small>}</td>
@@ -546,20 +844,154 @@ export function DataMasterPage() {
         </section>
       )}
 
+      {!isVerificationData && activeTab === 'data-orda' && (
+        <section className="master-section">
+          <div className="section-heading"><div><h2>Data ORDA</h2><p>Daftar organisasi daerah yang tersedia untuk penetapan santri.</p></div><span className="schedule-label">{santriOptions.organisasi_daerah.length.toLocaleString('id')} ORDA</span></div>
+          <div className="table-scroll"><table className="master-table"><thead><tr><th>Kode</th><th>Nama organisasi daerah</th></tr></thead><tbody>{santriOptions.organisasi_daerah.map(organisasi => <tr key={organisasi.organisasi_daerah_id}><td><strong>{organisasi.kode}</strong></td><td>{organisasi.nama}</td></tr>)}</tbody></table>{santriOptions.organisasi_daerah.length === 0 && <div className="empty-state">Belum ada data ORDA.</div>}</div>
+        </section>
+      )}
+
+      {!isVerificationData && activeTab === 'ekstrakurikuler' && (
+        <section className="master-section">
+          <h2>Data ekstrakurikuler</h2>
+          <p>Tab ini disiapkan untuk master kegiatan ekstrakurikuler. Belum ada data yang dikelola pada tahap ini.</p>
+          <div className="empty-state">Data ekstrakurikuler masih dummy dan belum terhubung ke absensi atau rapor.</div>
+        </section>
+      )}
+
+      {!isVerificationData && activeTab === 'wisma' && (
+        <section className="master-section">
+          <div className="section-heading"><div><h2>Data wisma</h2><p>Struktur wisma belum dimodelkan terpisah. Daftar kamar yang tersedia ditampilkan sebagai data penempatan saat ini.</p></div><span className="schedule-label">{kamar.length.toLocaleString('id')} kamar</span></div>
+          <div className="table-scroll"><table className="master-table"><thead><tr><th>No.</th><th>Nama kamar</th></tr></thead><tbody>{kamar.map((item, index) => <tr key={item.kamar_id}><td>{index + 1}</td><td>{item.nama}</td></tr>)}</tbody></table>{kamar.length === 0 && <div className="empty-state">Belum ada data kamar untuk ditampilkan.</div>}</div>
+        </section>
+      )}
+
+      {isVerificationData && activeTab === 'santri' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Antrean pemetaan absensi</h2>
+              <p>Petakan kamar, kelas formal, Madin, Al-Qur’an Subuh, dan Takhasus Maghrib sebelum data dipakai untuk absensi dan rapor.</p>
+            </div>
+            <span className="schedule-label">{verificationTotal.toLocaleString('id')} perlu ditinjau</span>
+          </div>
+          <div className="table-scroll">
+            <table className="master-table">
+              <thead><tr><th>No. ID</th><th>Santri</th><th>Unit</th><th>Mapping absensi yang perlu dilengkapi</th><th>Aksi</th></tr></thead>
+              <tbody>
+                {verificationLoading ? <TableSkeleton columns={5} /> : verificationList.map(item => (
+                  <tr key={item.santri_id}>
+                    <td>{item.no_id_induk || '—'}</td>
+                    <td><strong>{item.nama}</strong><small>{item.status_verifikasi.replaceAll('_', ' ')}</small></td>
+                    <td>{item.kode_unit || '—'}</td>
+                    <td>{item.alasan.length ? item.alasan.join('; ') : 'Perlu keputusan admin'}</td>
+                    <td><button className="secondary-button" onClick={() => {
+                      const santri = santriList.find(row => row.santri_id === item.santri_id);
+                      if (santri) { setEditingSantri({ ...santri }); setShowSantriModal(true); }
+                    }}>Verifikasi</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!verificationLoading && verificationList.length === 0 && <div className="empty-state">Tidak ada santri yang menunggu pemetaan absensi.</div>}
+          </div>
+          {verificationLastPage > 1 && (
+            <div className="pagination-controls">
+              <button
+                className="secondary-button"
+                disabled={verificationPage <= 1}
+                onClick={() => setVerificationPage(page => Math.max(1, page - 1))}
+              >
+                ← Sebelumnya
+              </button>
+              <div className="pagination-pages" aria-label="Halaman antrean verifikasi">
+                {getPaginationItems(verificationPage, verificationLastPage).map((item, index) => item === 'ellipsis' ? (
+                  <span key={`verification-ellipsis-${index}`} className="pagination-ellipsis">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`pagination-page${verificationPage === item ? ' active' : ''}`}
+                    aria-label={`Halaman ${item}`}
+                    aria-current={verificationPage === item ? 'page' : undefined}
+                    onClick={() => setVerificationPage(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="secondary-button"
+                disabled={verificationPage >= verificationLastPage}
+                onClick={() => setVerificationPage(page => Math.min(verificationLastPage, page + 1))}
+              >
+                Berikutnya →
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isVerificationData && activeTab === 'orda' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Antrean verifikasi ORDA</h2>
+              <p>Tetapkan organisasi daerah berdasarkan NIK, domisili, dan data pendukung santri. Antrean ini tidak memengaruhi mapping absensi.</p>
+            </div>
+            <span className="schedule-label">{ordaTotal.toLocaleString('id')} perlu ditinjau</span>
+          </div>
+          <div className="table-scroll">
+            <table className="master-table">
+              <thead><tr><th>No. ID</th><th>Santri</th><th>Unit</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody>
+                {ordaLoading ? <TableSkeleton columns={5} /> : ordaList.map(item => (
+                  <tr key={item.santri_id}>
+                    <td>{item.no_id_induk || '—'}</td>
+                    <td><strong>{item.nama}</strong><small>{item.status_verifikasi.replaceAll('_', ' ')}</small></td>
+                    <td>{item.kode_unit || '—'}</td>
+                    <td>{item.alasan.join('; ')}</td>
+                    <td><button className="secondary-button" onClick={() => {
+                      const santri = santriList.find(row => row.santri_id === item.santri_id);
+                      if (santri) { setEditingSantri({ ...santri }); setShowSantriModal(true); }
+                    }}>Tentukan ORDA</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!ordaLoading && ordaList.length === 0 && <div className="empty-state">Semua santri sudah memiliki ORDA aktif.</div>}
+          </div>
+          {ordaLastPage > 1 && (
+            <div className="pagination-controls">
+              <button className="secondary-button" disabled={ordaPage <= 1} onClick={() => setOrdaPage(page => Math.max(1, page - 1))}>← Sebelumnya</button>
+              <div className="pagination-pages" aria-label="Halaman antrean verifikasi ORDA">
+                {getPaginationItems(ordaPage, ordaLastPage).map((item, index) => item === 'ellipsis' ? (
+                  <span key={`orda-ellipsis-${index}`} className="pagination-ellipsis">…</span>
+                ) : (
+                  <button key={item} type="button" className={`pagination-page${ordaPage === item ? ' active' : ''}`} aria-label={`Halaman ${item}`} aria-current={ordaPage === item ? 'page' : undefined} onClick={() => setOrdaPage(item)}>{item}</button>
+                ))}
+              </div>
+              <button className="secondary-button" disabled={ordaPage >= ordaLastPage} onClick={() => setOrdaPage(page => Math.min(ordaLastPage, page + 1))}>Berikutnya →</button>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* FORM MODAL / SECTION UNTUK TAMBAH / EDIT SANTRI */}
       {showSantriModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16
+        <div className="santri-modal-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget && !santriLoading) setShowSantriModal(false);
         }}>
-          <div style={{
-            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 520, padding: 28,
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-          }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>
-              {editingSantri.santri_id ? 'Edit Data Santri' : 'Tambah Santri Baru'}
-            </h2>
-            <form onSubmit={saveSantri} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <section className="santri-modal" role="dialog" aria-modal="true" aria-labelledby="santri-modal-title">
+            <header className="santri-modal-header">
+              <div>
+                <h2 id="santri-modal-title">{editingSantri.santri_id ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h2>
+                {editingSantri.no_id_induk && <p>No. ID {editingSantri.no_id_induk}</p>}
+              </div>
+              <button type="button" className="santri-modal-close" aria-label="Tutup formulir" disabled={santriLoading} onClick={() => setShowSantriModal(false)}>×</button>
+            </header>
+            <form id="santri-form" onSubmit={saveSantri} className="santri-modal-form">
+              <div className="santri-modal-body">
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Nama Lengkap *</label>
                 <input
@@ -571,13 +1003,47 @@ export function DataMasterPage() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>NIS / NIK</label>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>No. ID Santri</label>
                 <input
                   style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }}
-                  value={editingSantri.nis || ''}
-                  onChange={e => setEditingSantri(s => ({ ...s, nis: e.target.value }))}
-                  placeholder="Nomor Induk Santri / NIK"
+                  value={editingSantri.no_id_induk || ''}
+                  onChange={e => setEditingSantri(s => ({ ...s, no_id_induk: e.target.value }))}
+                  placeholder="ID resmi dari data santri semua"
                 />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>NIK Santri</label>
+                <input
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+                  value={editingSantri.nik_siswa || ''}
+                  onChange={e => setEditingSantri(s => ({ ...s, nik_siswa: e.target.value }))}
+                  placeholder="Opsional, dapat dilengkapi kemudian"
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>L/P</label>
+                  <select style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.jenis_kelamin || ''} onChange={e => setEditingSantri(s => ({ ...s, jenis_kelamin: e.target.value || null } as Partial<SantriMaster>))}>
+                    <option value="">-- Belum diisi --</option><option value="L">Laki-laki</option><option value="P">Perempuan</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Tanggal Lahir</label>
+                  <input type="date" style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.tanggal_lahir || ''} onChange={e => setEditingSantri(s => ({ ...s, tanggal_lahir: e.target.value || null }))} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Tempat Lahir</label>
+                <input style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.tempat_lahir || ''} onChange={e => setEditingSantri(s => ({ ...s, tempat_lahir: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Alamat Domisili</label>
+                <textarea style={{ width: '100%', minHeight: 70, padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.alamat_jalan || ''} onChange={e => setEditingSantri(s => ({ ...s, alamat_jalan: e.target.value }))} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {([
+                  ['provinsi', 'Provinsi'], ['kabupaten_kota', 'Kabupaten/Kota'], ['kecamatan', 'Kecamatan'], ['desa_kelurahan', 'Desa/Kelurahan'],
+                ] as const).map(([field, label]) => <div key={field}><label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>{label}</label><input style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri[field] || ''} onChange={e => setEditingSantri(s => ({ ...s, [field]: e.target.value }))} /></div>)}
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Unit Pendidikan *</label>
@@ -587,8 +1053,8 @@ export function DataMasterPage() {
                   onChange={e => setEditingSantri(s => ({ ...s, unit_id: Number(e.target.value) }))}
                   required
                 >
-                  {UNIT_LIST.map(u => (
-                    <option key={u.id} value={u.id}>{u.kode} - {u.nama}</option>
+                  {unitOptions.map(u => (
+                    <option key={u.unit_id} value={u.unit_id}>{u.kode} - {u.nama}</option>
                   ))}
                 </select>
               </div>
@@ -623,25 +1089,62 @@ export function DataMasterPage() {
                   placeholder="Nomor HP aktif (cth: 08123456789)"
                 />
               </div>
-
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setShowSantriModal(false)}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Organisasi Daerah</label>
+                <select
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+                  value={editingSantri.organisasi_daerah_id ?? ''}
+                  onChange={e => setEditingSantri(s => ({ ...s, organisasi_daerah_id: e.target.value ? Number(e.target.value) : null }))}
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={santriLoading}
+                  <option value="">-- Belum Ditetapkan --</option>
+                  {santriOptions.organisasi_daerah.map(organisasi => (
+                    <option key={organisasi.organisasi_daerah_id} value={organisasi.organisasi_daerah_id}>{organisasi.kode} — {organisasi.nama}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Kelas Formal</label>
+                <select style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.kelas_formal_id ?? ''} onChange={e => setEditingSantri(s => ({ ...s, kelas_formal_id: e.target.value ? Number(e.target.value) : null }))}>
+                  <option value="">-- Belum dipetakan --</option>{santriOptions.kelas_formal.map(item => <option key={item.kelas_formal_id} value={item.kelas_formal_id}>{item.nama_kelas}</option>)}
+                </select>
+              </div>
+              <div><label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Kelompok Madin</label><select style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.kelompok_madin_id ?? ''} onChange={e => setEditingSantri(s => ({ ...s, kelompok_madin_id: e.target.value ? Number(e.target.value) : null }))}><option value="">-- Belum dipetakan --</option>{santriOptions.kelompok_madin.map(item => <option key={item.kelompok_madin_id} value={item.kelompok_madin_id}>{item.nama_kelas_madin}</option>)}</select></div>
+              <div><label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Kelompok Al-Qur’an Subuh</label><select style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.kelompok_pbs_id ?? ''} onChange={e => setEditingSantri(s => ({ ...s, kelompok_pbs_id: e.target.value ? Number(e.target.value) : null }))}><option value="">-- Belum dipetakan --</option>{santriOptions.kelompok_pbs.map(item => <option key={item.kelompok_pbs_id} value={item.kelompok_pbs_id}>{item.nama_kelompok}</option>)}</select></div>
+              <div><label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Kelompok Takhasus Maghrib</label><select style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }} value={editingSantri.kelompok_pbm_id ?? ''} onChange={e => setEditingSantri(s => ({ ...s, kelompok_pbm_id: e.target.value ? Number(e.target.value) : null }))}><option value="">-- Belum dipetakan --</option>{santriOptions.kelompok_pbm.map(item => <option key={item.kelompok_pbm_id} value={item.kelompok_pbm_id}>{item.nama_kelompok}</option>)}</select></div>
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
+                <h3 style={{ fontSize: 14, marginBottom: 8 }}>Keikutsertaan kegiatan</h3>
+                <p style={{ fontSize: 12, color: '#475569', marginTop: 0 }}>Pilih “Tidak ikut” bila memang tidak menjadi peserta; pilihan ini mencegah data terbaca sebagai alfa atau belum diisi.</p>
+                {([
+                  ['sekolah', 'Sekolah formal'], ['kamar', 'Kamar'], ['diniyah', 'Madin'], ['pbs', 'Al-Qur’an Subuh'], ['pbm', 'Takhasus Maghrib'],
+                ] as const).map(([slug, label]) => {
+                  const status = editingSantri.kegiatan_partisipasi?.[slug]?.status || 'perlu_verifikasi';
+                  return <div key={slug} style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10, alignItems: 'center', marginBottom: 8 }}><label style={{ fontSize: 13, fontWeight: 600 }}>{label}</label><select style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1' }} value={status} onChange={e => setEditingSantri(s => ({ ...s, kegiatan_partisipasi: { ...(s.kegiatan_partisipasi || {}), [slug]: { status: e.target.value as 'terdaftar' | 'tidak_ikut' | 'perlu_verifikasi' } } }))}><option value="perlu_verifikasi">Perlu verifikasi</option><option value="terdaftar">Terdaftar</option><option value="tidak_ikut">Tidak ikut</option></select></div>;
+                })}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Status Verifikasi</label>
+                <select
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+                  value={editingSantri.status_verifikasi || 'perlu_verifikasi'}
+                  onChange={e => setEditingSantri(s => ({ ...s, status_verifikasi: e.target.value }))}
                 >
-                  {santriLoading ? 'Menyimpan...' : 'Simpan Data'}
-                </button>
+                  <option value="perlu_verifikasi">Perlu verifikasi</option>
+                  <option value="perlu_lengkapi_profil">Perlu lengkapi profil</option>
+                  <option value="perlu_tentukan_kelas">Perlu tentukan kelas</option>
+                  <option value="perlu_mapping_kegiatan">Perlu mapping kegiatan</option>
+                  <option value="perlu_review_identitas">Perlu review identitas</option>
+                  <option value="kandidat_alumni">Kandidat alumni</option>
+                  <option value="terverifikasi_aktif">Terverifikasi aktif</option>
+                  <option value="nonaktif">Nonaktif</option>
+                </select>
+              </div>
               </div>
             </form>
-          </div>
+            <footer className="santri-modal-footer">
+              <button type="button" className="secondary-button" disabled={santriLoading} onClick={() => setShowSantriModal(false)}>Batal</button>
+              <button type="submit" form="santri-form" className="primary-button" disabled={santriLoading}>{santriLoading ? 'Menyimpan...' : 'Simpan Data'}</button>
+            </footer>
+          </section>
         </div>
       )}
 
@@ -660,23 +1163,440 @@ export function DataMasterPage() {
         <div className="table-scroll"><table className="master-table"><thead><tr><th>Petugas</th><th>Jabatan</th><th>Jenis</th><th>Kelompok</th><th>Aksi</th></tr></thead><tbody>{penugasan.map(item => <tr key={item.penugasan_id}><td>{item.nama_petugas}</td><td>{item.jabatan}</td><td>{item.tipe_target}</td><td>{item.nama_target ?? `ID ${item.penugasan_id}`}</td><td><button className="danger-button" onClick={() => void removeAssignment(item.penugasan_id)}>Hapus</button></td></tr>)}</tbody></table></div>
       </section>}
 
-      {/* REVIEW TAB */}
-      {activeTab === 'review' && <section className="master-section">
-        <div className="section-heading"><div><h2>Review impor santri</h2><p>Konfirmasi kandidat nama yang mirip. Keputusan disimpan agar tidak berubah saat sinkronisasi ulang.</p></div><button className="primary-button" onClick={() => void syncReviews()} disabled={reviewLoading}>{reviewLoading ? 'Menyinkronkan...' : 'Sinkronkan 971 data review'}</button></div>
-        <div className="assignment-form compact-form"><div><label>Status review</label><select value={reviewStatus} onChange={event => setReviewStatus(event.target.value)}><option value="perlu_tinjau">Perlu tinjau</option><option value="perlu_mapping_kamar">Perlu mapping kamar</option><option value="terpisah">Sudah diputuskan terpisah</option><option value="digabung">Sudah digabung</option></select></div></div>
-        {!reviews.length ? <div className="empty-state">Belum ada review pada status ini. Tekan “Sinkronkan 971 data review” untuk memuat data impor awal.</div> : <div className="table-scroll"><table className="master-table review-table"><thead><tr><th>Sumber</th><th>Santri dari impor</th><th>Kode kamar</th><th>Kandidat data induk</th><th>Skor</th><th>Aksi</th></tr></thead><tbody>{reviews.map(item => <tr key={item.review_id}><td>{item.sumber_sheet}<small>Baris {item.baris_sumber}</small></td><td><strong>{item.nama_sumber}</strong><small>{item.nama_santri_otomatis ? `ID otomatis ${item.santri_otomatis_id}${item.kamar_santri_otomatis ? ` · ${item.kamar_santri_otomatis}` : ''}` : 'Belum ditemukan di data otomatis'}</small></td><td>{item.kode_kamar_sumber || '—'}</td><td>{item.nama_kandidat ? <><strong>{item.nama_kandidat}</strong><small>{item.kamar_kandidat || 'Kamar kosong'}</small></> : 'Tidak ada kandidat yang cukup mirip'}</td><td>{item.skor_kemiripan ? `${item.skor_kemiripan}%` : '—'}</td><td className="review-actions">{item.status === 'perlu_tinjau' && item.kandidat_santri_id && <><button className="primary-button" onClick={() => void mergeReview(item)}>Gabungkan</button><button className="secondary-button" onClick={() => void markSeparate(item)}>Tetap terpisah</button></>}{item.status === 'perlu_tinjau' && !item.kandidat_santri_id && <span>Perlu data tambahan</span>}{item.status !== 'perlu_tinjau' && <span>{item.status.replaceAll('_', ' ')}</span>}</td></tr>)}</tbody></table></div>}
-      </section>}
-
       {/* KAMAR TAB */}
-      {activeTab === 'kamar' && <section className="master-section">
+      {isVerificationData && activeTab === 'kamar' && <section className="master-section">
         <h2>Mapping kode kamar</h2><p>Hubungkan singkatan dari file sumber ke kamar resmi. Mapping akan digunakan pada impor berikutnya dan melengkapi santri otomatis yang kamarnya masih kosong.</p>
         <form className="kamar-create-form" onSubmit={createKamarAndMapping}>
           <div><label>Kode dari workbook (opsional)</label><input value={kodeKamarBaru} onChange={event => setKodeKamarBaru(event.target.value)} placeholder="Contoh: KK 201 atau 104.0" /></div>
           <div><label>Nama kamar resmi</label><input value={namaKamarBaru} onChange={event => setNamaKamarBaru(event.target.value)} placeholder="Contoh: Kamar Kiai 201" required /></div>
           <button className="primary-button">Tambah kamar & mapping</button>
         </form>
-        {!mappings.length ? <div className="empty-state">Mapping akan tampil setelah review impor disinkronkan.</div> : <div className="table-scroll"><table className="master-table"><thead><tr><th>Kode dari sumber</th><th>Jumlah review</th><th>Kamar saat ini</th><th>Ubah / konfirmasi kamar</th><th>Aksi</th></tr></thead><tbody>{mappings.map(item => <tr key={item.kode_sumber}><td><strong>{item.kode_sumber}</strong></td><td>{item.jumlah_review}</td><td>{item.nama_kamar || <span className="warning-text">Belum dipetakan</span>}</td><td><select value={mappingChoices[item.kode_sumber] ?? String(item.kamar_id ?? '')} onChange={event => setMappingChoices(current => ({ ...current, [item.kode_sumber]: event.target.value }))}><option value="">Pilih kamar resmi</option>{kamar.map(room => <option key={room.kamar_id} value={room.kamar_id}>{room.nama}</option>)}</select></td><td><button className="primary-button" onClick={() => void saveMapping(item)}>Simpan mapping</button></td></tr>)}</tbody></table></div>}
+        {!mappings.length ? <div className="empty-state">Belum ada kode kamar yang perlu dipetakan.</div> : <div className="table-scroll"><table className="master-table"><thead><tr><th>Kode dari sumber</th><th>Jumlah review</th><th>Kamar saat ini</th><th>Ubah / konfirmasi kamar</th><th>Aksi</th></tr></thead><tbody>{mappings.map(item => <tr key={item.kode_sumber}><td><strong>{item.kode_sumber}</strong></td><td>{item.jumlah_review}</td><td>{item.nama_kamar || <span className="warning-text">Belum dipetakan</span>}</td><td><select value={mappingChoices[item.kode_sumber] ?? String(item.kamar_id ?? '')} onChange={event => setMappingChoices(current => ({ ...current, [item.kode_sumber]: event.target.value }))}><option value="">Pilih kamar resmi</option>{kamar.map(room => <option key={room.kamar_id} value={room.kamar_id}>{room.nama}</option>)}</select></td><td><button className="primary-button" onClick={() => void saveMapping(item)}>Simpan mapping</button></td></tr>)}</tbody></table></div>}
       </section>}
+
+      {/* REVIEW KEMIRIPAN DATA TAB */}
+      {isVerificationData && activeTab === 'review' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Review Kemiripan Data Santri</h2>
+              <p>Pencocokan data santri dari file impor/legacy dengan master santri terdaftar. Evaluasi kemiripan nama (tanda baca/typo) dan pemetaan kamar.</p>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => void handleSyncReview()} disabled={reviewLoading}>
+              {reviewLoading ? 'Menyinkronkan...' : 'Sinkronkan Data Review'}
+            </button>
+          </div>
+
+          {/* Interactive Stat Cards Bar */}
+          <div className="dashboard-grid-premium" style={{ marginBottom: 20 }}>
+            <button
+              type="button"
+              className="stat-card"
+              style={{
+                cursor: 'pointer',
+                textAlign: 'left',
+                border: reviewStatusFilter === 'perlu_tinjau' ? '2px solid var(--aksen)' : '1px solid var(--garis)',
+                background: reviewStatusFilter === 'perlu_tinjau' ? '#f0fdf4' : 'var(--kertas-kartu)',
+              }}
+              onClick={() => setReviewStatusFilter(current => current === 'perlu_tinjau' ? '' : 'perlu_tinjau')}
+            >
+              <span className="stat-card-value">{validReviewList.filter(r => r.status === 'perlu_tinjau').length}</span>
+              <span className="stat-card-label">Perlu Tinjau</span>
+            </button>
+            <button
+              type="button"
+              className="stat-card"
+              style={{
+                cursor: 'pointer',
+                textAlign: 'left',
+                border: reviewStatusFilter === 'perlu_mapping_kamar' ? '2px solid #d97706' : '1px solid var(--garis)',
+                background: reviewStatusFilter === 'perlu_mapping_kamar' ? '#fff7ed' : 'var(--kertas-kartu)',
+              }}
+              onClick={() => setReviewStatusFilter(current => current === 'perlu_mapping_kamar' ? '' : 'perlu_mapping_kamar')}
+            >
+              <span className="stat-card-value" style={{ color: '#d97706' }}>{validReviewList.filter(r => r.status === 'perlu_mapping_kamar').length}</span>
+              <span className="stat-card-label">Perlu Mapping Kamar</span>
+            </button>
+            <button
+              type="button"
+              className="stat-card"
+              style={{
+                cursor: 'pointer',
+                textAlign: 'left',
+                border: reviewStatusFilter === 'digabung' ? '2px solid #16a34a' : '1px solid var(--garis)',
+                background: reviewStatusFilter === 'digabung' ? '#f0fdf4' : 'var(--kertas-kartu)',
+              }}
+              onClick={() => setReviewStatusFilter(current => current === 'digabung' ? '' : 'digabung')}
+            >
+              <span className="stat-card-value" style={{ color: '#16a34a' }}>{validReviewList.filter(r => r.status === 'digabung').length}</span>
+              <span className="stat-card-label">Telah Digabung</span>
+            </button>
+            <button
+              type="button"
+              className="stat-card"
+              style={{
+                cursor: 'pointer',
+                textAlign: 'left',
+                border: reviewStatusFilter === 'terpisah' ? '2px solid #6b7280' : '1px solid var(--garis)',
+                background: reviewStatusFilter === 'terpisah' ? '#f8fafc' : 'var(--kertas-kartu)',
+              }}
+              onClick={() => setReviewStatusFilter(current => current === 'terpisah' ? '' : 'terpisah')}
+            >
+              <span className="stat-card-value" style={{ color: '#6b7280' }}>{validReviewList.filter(r => r.status === 'terpisah').length}</span>
+              <span className="stat-card-label">Tandai Terpisah</span>
+            </button>
+          </div>
+
+          {/* Controls */}
+          <div className="account-table-controls">
+            <div className="account-search-control">
+              <label htmlFor="review-search">Cari Nama / Kode Kamar</label>
+              <input
+                id="review-search"
+                value={reviewSearch}
+                onChange={e => setReviewSearch(e.target.value)}
+                placeholder="Cari nama sumber, kandidat master, atau kamar..."
+              />
+            </div>
+            <div>
+              <label htmlFor="review-status">Status</label>
+              <select id="review-status" value={reviewStatusFilter} onChange={e => setReviewStatusFilter(e.target.value)}>
+                <option value="">Semua Status</option>
+                <option value="perlu_tinjau">Perlu Tinjau</option>
+                <option value="perlu_mapping_kamar">Perlu Mapping Kamar</option>
+                <option value="digabung">Digabung</option>
+                <option value="terpisah">Terpisah</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="review-sheet">Sumber File/Sheet</label>
+              <select id="review-sheet" value={reviewSheetFilter} onChange={e => setReviewSheetFilter(e.target.value)}>
+                <option value="">Semua Sumber</option>
+                <option value="Database Siswa">Database Siswa</option>
+                <option value="Database Siswa Madin">Database Siswa Madin</option>
+                <option value="Database Al-Qur'an">Database Al-Qur'an</option>
+                <option value="Database Takhassus">Database Takhassus</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="account-result-count">
+            {reviewLoading ? 'Memuat data review kemiripan...' : `Menampilkan ${validReviewList.length} baris review kemiripan data yang memiliki kandidat.`}
+          </p>
+
+          <div className="table-scroll">
+            <table className="master-table">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Data Sumber (File Lama/Impor)</th>
+                  <th>Kandidat Santri Master</th>
+                  <th>Kemiripan</th>
+                  <th>Status & Informasi Kamar</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedReviewList.map((item, idx) => {
+                  const hasCandidate = Boolean(item.nama_kandidat || item.nama_santri_otomatis || item.kandidat_santri_id || item.santri_otomatis_id);
+                  const kamarMaster = item.kamar_kandidat || item.kamar_santri_otomatis || 'Belum terisi';
+                  const isRoomMismatch = item.kode_kamar_sumber && (!item.kamar_kandidat && !item.kamar_santri_otomatis);
+
+                  return (
+                    <tr key={item.review_id}>
+                      <td>{(reviewPage - 1) * reviewItemsPerPage + idx + 1}</td>
+                      <td>
+                        <strong style={{ fontSize: 14 }}>{item.nama_sumber}</strong>
+                        <div style={{ fontSize: '0.85em', color: '#64748b', marginTop: 2 }}>
+                          Sumber: {item.sumber_sheet} | Kamar Impor: {item.kode_kamar_sumber ? <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>{item.kode_kamar_sumber}</code> : '—'}
+                        </div>
+                        {item.data_tambahan && (
+                          <div style={{ fontSize: '0.8em', color: '#64748b', marginTop: 2 }}>
+                            Info: {item.data_tambahan}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {hasCandidate ? (
+                          <div>
+                            <strong style={{ fontSize: 14 }}>{item.nama_kandidat || item.nama_santri_otomatis}</strong>
+                            <div style={{ fontSize: '0.85em', color: '#64748b', marginTop: 2 }}>
+                              Kamar Master: <span>{kamarMaster}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="warning-text">Belum ada kandidat serupa di master</span>
+                        )}
+                      </td>
+                      <td>
+                        {hasCandidate && item.skor_kemiripan > 0 ? (
+                          <span style={{ color: item.skor_kemiripan >= 85 ? '#15803d' : '#b45309', fontWeight: 700 }}>
+                            {Math.round(item.skor_kemiripan)}%
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ marginBottom: 4 }}>
+                          {item.status === 'perlu_tinjau' && <span style={{ color: '#b45309', fontWeight: 600 }}>Perlu Tinjau</span>}
+                          {item.status === 'perlu_mapping_kamar' && <span style={{ color: '#b91c1c', fontWeight: 600 }}>Perlu Mapping Kamar</span>}
+                          {item.status === 'digabung' && <span style={{ color: '#15803d', fontWeight: 600 }}>Digabung</span>}
+                          {item.status === 'terpisah' && <span style={{ color: '#475569', fontWeight: 600 }}>Terpisah</span>}
+                        </div>
+                        {isRoomMismatch && (
+                          <small style={{ color: '#d97706', display: 'block', marginTop: 2 }}>
+                            Peringatan: Kamar di data lama ({item.kode_kamar_sumber}), tapi master belum terisi kamar.
+                          </small>
+                        )}
+                      </td>
+                      <td>
+                        {item.status !== 'digabung' && item.status !== 'terpisah' && (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              style={{ padding: '6px 12px', fontSize: '0.85em', fontWeight: 600 }}
+                              onClick={() => openReviewModal(item)}
+                            >
+                              Gabungkan
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{ padding: '6px 12px', fontSize: '0.85em', fontWeight: 600, borderColor: '#cbd5e1', color: '#475569' }}
+                              onClick={() => void handleSeparateDirect(item)}
+                            >
+                              Terpisah
+                            </button>
+                          </div>
+                        )}
+                        {item.status === 'digabung' && (
+                          <span style={{ fontSize: '0.85em', color: '#16a34a', fontWeight: 600 }}>Telah digabungkan</span>
+                        )}
+                        {item.status === 'terpisah' && (
+                          <span style={{ fontSize: '0.85em', color: '#6b7280' }}>Dua orang terpisah</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {validReviewList.length === 0 && !reviewLoading && (
+              <div className="empty-state">Tidak ada data review kemiripan yang sesuai dengan filter.</div>
+            )}
+          </div>
+
+          {totalReviewPages > 1 && (
+            <div className="pagination-controls" style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={reviewPage === 1}
+                onClick={() => setReviewPage(p => Math.max(1, p - 1))}
+              >
+                Sebelumnya
+              </button>
+              <div className="pagination-pages">
+                {getPaginationItems(reviewPage, totalReviewPages).map((pageItem, index) =>
+                  pageItem === 'ellipsis' ? (
+                    <span key={`review-ellipsis-${index}`} className="pagination-ellipsis">…</span>
+                  ) : (
+                    <button
+                      key={`review-page-${pageItem}`}
+                      type="button"
+                      className={`pagination-page ${reviewPage === pageItem ? 'active' : ''}`}
+                      onClick={() => setReviewPage(pageItem)}
+                    >
+                      {pageItem}
+                    </button>
+                  )
+                )}
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={reviewPage === totalReviewPages}
+                onClick={() => setReviewPage(p => Math.min(totalReviewPages, p + 1))}
+              >
+                Selanjutnya
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* REVIEW & VERIFICATION MODAL */}
+      {activeReviewItem && (
+        <div
+          className="santri-modal-backdrop"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && !isMerging) closeReviewModal();
+          }}
+        >
+          <section className="santri-modal review-modal" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+            <header className="santri-modal-header review-modal-header">
+              <div>
+                <h2 id="review-modal-title">Verifikasi & Penggabungan Data Santri</h2>
+                <p>Sumber Data: {activeReviewItem.sumber_sheet} • Baris ke-{activeReviewItem.baris_sumber}</p>
+              </div>
+              <button type="button" className="santri-modal-close" aria-label="Tutup modal" disabled={isMerging} onClick={closeReviewModal}>×</button>
+            </header>
+
+            <div className="santri-modal-body review-modal-body">
+              {/* Score Banner */}
+              <div className={`review-match-banner ${activeReviewItem.skor_kemiripan >= 80 ? 'high-match' : ''}`}>
+                <div>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>
+                    {activeReviewItem.skor_kemiripan >= 80 ? 'Kemiripan Sangat Tinggi' : 'Kemiripan Sedang (Perlu Evaluasi)'}
+                  </span>
+                  <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
+                    Tingkat kemiripan penulisan nama sebesar <strong>{Math.round(activeReviewItem.skor_kemiripan)}%</strong>
+                  </div>
+                </div>
+                <span className="schedule-label" style={{ backgroundColor: activeReviewItem.skor_kemiripan >= 80 ? '#dcfce7' : '#fef3c7', color: activeReviewItem.skor_kemiripan >= 80 ? '#15803d' : '#b45309', fontWeight: 700, fontSize: 14 }}>
+                  {Math.round(activeReviewItem.skor_kemiripan)}% Match
+                </span>
+              </div>
+
+              {/* Compare Grid */}
+              <div className="review-compare-grid">
+                {/* Source Box */}
+                <div className="review-compare-card source">
+                  <div className="review-card-title source-title">Data Sumber (File Impor/Lama)</div>
+                  <div className="review-field-group">
+                    <div className="review-field-label">Nama Sumber</div>
+                    <div className="review-field-value" style={{ fontSize: 15, color: '#1e293b' }}>{activeReviewItem.nama_sumber}</div>
+                  </div>
+                  <div className="review-field-group">
+                    <div className="review-field-label">Kode Kamar dari Impor</div>
+                    <div className="review-field-value">
+                      {activeReviewItem.kode_kamar_sumber ? (
+                        <code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{activeReviewItem.kode_kamar_sumber}</code>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>Tidak ada kamar</span>
+                      )}
+                    </div>
+                  </div>
+                  {activeReviewItem.data_tambahan && (
+                    <div className="review-field-group">
+                      <div className="review-field-label">Informasi Tambahan</div>
+                      <div className="review-field-value" style={{ fontSize: 12, color: '#475569' }}>{activeReviewItem.data_tambahan}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Target Master Box */}
+                <div className="review-compare-card target">
+                  <div className="review-card-title target-title">Data Master Santri Terdaftar</div>
+                  
+                  {/* Selected Target Preview */}
+                  {(() => {
+                    const selectedSantri = santriList.find(s => s.santri_id === selectedCandidateId);
+                    const defaultName = activeReviewItem.nama_kandidat || activeReviewItem.nama_santri_otomatis;
+                    const displayName = selectedSantri ? selectedSantri.nama : (defaultName || 'Pilih Kandidat Master');
+                    const displayKamar = selectedSantri ? (selectedSantri.nama_kamar || 'Belum terisi') : (activeReviewItem.kamar_kandidat || activeReviewItem.kamar_santri_otomatis || 'Belum terisi');
+                    const displayId = selectedSantri ? (selectedSantri.no_id_induk || selectedSantri.nis || '-') : '-';
+
+                    return (
+                      <>
+                        <div className="review-field-group">
+                          <div className="review-field-label">Nama Santri Master</div>
+                          <div className="review-field-value" style={{ fontSize: 15, color: '#065f46' }}>{displayName}</div>
+                        </div>
+                        <div className="review-field-group">
+                          <div className="review-field-label">No. ID Induk / NIS</div>
+                          <div className="review-field-value" style={{ fontSize: 13, fontFamily: 'monospace' }}>{displayId}</div>
+                        </div>
+                        <div className="review-field-group">
+                          <div className="review-field-label">Kamar Terdaftar Saat Ini</div>
+                          <div className="review-field-value" style={{ fontSize: 13 }}>{displayKamar}</div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Change candidate toggle */}
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #cbd5e1' }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ padding: '4px 10px', fontSize: 11, width: '100%' }}
+                      onClick={() => setIsCandidateSearchOpen(!isCandidateSearchOpen)}
+                    >
+                      {isCandidateSearchOpen ? 'Sembunyikan Pencarian Kandidat' : 'Ganti / Cari Santri Master Lain'}
+                    </button>
+
+                    {isCandidateSearchOpen && (
+                      <div style={{ marginTop: 8 }}>
+                        <input
+                          type="text"
+                          value={candidateSearchText}
+                          onChange={e => setCandidateSearchText(e.target.value)}
+                          placeholder="Ketik nama santri master..."
+                          style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 6 }}
+                        />
+                        <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 4, background: 'white', border: '1px solid #cbd5e1', borderRadius: 6 }}>
+                          {santriList
+                            .filter(s => !candidateSearchText.trim() || s.nama.toLowerCase().includes(candidateSearchText.toLowerCase()))
+                            .slice(0, 20)
+                            .map(s => (
+                              <button
+                                key={s.santri_id}
+                                type="button"
+                                style={{
+                                  display: 'block',
+                                  width: '100%',
+                                  padding: '6px 10px',
+                                  textAlign: 'left',
+                                  border: '0',
+                                  borderBottom: '1px solid #f1f5f9',
+                                  background: selectedCandidateId === s.santri_id ? '#dcfce7' : 'white',
+                                  fontSize: 12,
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => {
+                                  setSelectedCandidateId(s.santri_id);
+                                  setIsCandidateSearchOpen(false);
+                                }}
+                              >
+                                <strong>{s.nama}</strong> <small style={{ color: '#64748b' }}>({s.kode_unit || 'Unit'} - {s.nama_kamar || 'Tanpa Kamar'})</small>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Notice */}
+              <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: 10, fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                <strong>Dampak Penggabungan:</strong> Seluruh riwayat absensi, perizinan, dan pelanggaran dari santri otomatis akan dialihkan ke data santri master terpilih. Profil master yang masih kosong akan otomatis dilengkapi dari data sumber.
+              </div>
+            </div>
+
+            <footer className="santri-modal-footer review-modal-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ borderColor: '#ef4444', color: '#b91c1c' }}
+                disabled={isMerging}
+                onClick={() => void confirmSeparateInModal()}
+              >
+                Tandai Berbeda (Terpisah)
+              </button>
+              <div className="review-modal-footer-right">
+                <button type="button" className="secondary-button" disabled={isMerging} onClick={closeReviewModal}>Batal</button>
+                <button type="button" className="primary-button" disabled={isMerging || !selectedCandidateId} onClick={() => void confirmMergeInModal()}>
+                  {isMerging ? 'Memproses Merge...' : 'Konfirmasi & Gabungkan Data'}
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {/* AKUN PETUGAS TAB */}
       {activeTab === 'akun' && <section className="master-section">
@@ -692,7 +1612,7 @@ export function DataMasterPage() {
       </section>}
 
       {/* DATA ALUMNI TAB */}
-      {activeTab === 'alumni' && (
+      {!isVerificationData && activeTab === 'alumni' && (
         <section className="master-section">
           <div className="section-heading">
             <div>
@@ -809,6 +1729,274 @@ export function DataMasterPage() {
               >
                 Muat {Math.min(100, alumniList.length - alumniPage * 100)} data berikutnya
               </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ORGANISASI DAERAH TAB */}
+      {activeTab === 'organisasi-daerah' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Organisasi Daerah (Orda) Santri</h2>
+              <p>Kelola data master Orda dan pemetaan wilayah santri.</p>
+            </div>
+            {ordaSubTab === 'master' && (
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setEditingOrda({ organisasi_daerah_id: 0, kode_singkat: '', nama_organisasi: '', deskripsi_wilayah: '', status_aktif: true });
+                  setShowOrdaModal(true);
+                }}
+              >
+                + Tambah Orda
+              </button>
+            )}
+          </div>
+
+          {/* Sub Tab Switcher */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            <button
+              className={`secondary-button ${ordaSubTab === 'master' ? 'active' : ''}`}
+              style={{ background: ordaSubTab === 'master' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'master' ? '#fff' : undefined }}
+              onClick={() => setOrdaSubTab('master')}
+            >
+              📋 Master Orda ({ordaList.length})
+            </button>
+            <button
+              className={`secondary-button ${ordaSubTab === 'mapping' ? 'active' : ''}`}
+              style={{ background: ordaSubTab === 'mapping' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'mapping' ? '#fff' : undefined }}
+              onClick={() => setOrdaSubTab('mapping')}
+            >
+              🔗 Pemetaan Bulk Santri
+            </button>
+          </div>
+
+          {ordaSubTab === 'master' && (
+            <div className="table-scroll">
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}>No</th>
+                    <th>Kode Singkat</th>
+                    <th>Nama Organisasi Daerah</th>
+                    <th>Cakupan Wilayah</th>
+                    <th style={{ textAlign: 'center' }}>Total Santri</th>
+                    <th style={{ textAlign: 'center' }}>Status</th>
+                    <th style={{ textAlign: 'center', width: '80px' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordaList.map((o, idx) => (
+                    <tr key={o.organisasi_daerah_id}>
+                      <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td><strong>{o.kode_singkat}</strong></td>
+                      <td>{o.nama_organisasi}</td>
+                      <td>{o.deskripsi_wilayah || <small style={{ color: '#888' }}>—</small>}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{o.total_santri} santri</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`status-pill ${o.status_aktif ? 'status-hadir' : 'status-alpha'}`}>
+                          {o.status_aktif ? 'Aktif' : 'Non-aktif'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="secondary-button"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                          onClick={() => {
+                            setEditingOrda(o);
+                            setShowOrdaModal(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {ordaList.length === 0 && !ordaLoading && (
+                <div className="empty-state">Belum ada data Organisasi Daerah.</div>
+              )}
+            </div>
+          )}
+
+          {ordaSubTab === 'mapping' && (
+            <div>
+              <div className="account-table-controls" style={{ marginBottom: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="orda-target-select">Orda Tujuan (Pemetaan Bulk)</label>
+                  <select
+                    id="orda-target-select"
+                    value={selectedOrdaTargetId ?? ''}
+                    onChange={e => setSelectedOrdaTargetId(Number(e.target.value) || null)}
+                  >
+                    <option value="">— Kosongkan Orda (Hapus Pemetaan) —</option>
+                    {ordaList.filter(o => o.status_aktif).map(o => (
+                      <option key={o.organisasi_daerah_id} value={o.organisasi_daerah_id}>
+                        {o.kode_singkat} — {o.nama_organisasi} ({o.total_santri} santri)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="account-search-control" style={{ flex: 1 }}>
+                  <label htmlFor="orda-santri-search">Cari Santri</label>
+                  <input
+                    id="orda-santri-search"
+                    value={santriSearch}
+                    onChange={e => setSantriSearch(e.target.value)}
+                    placeholder="Cari Nama, NIS, Orda..."
+                  />
+                </div>
+
+                <div style={{ alignSelf: 'flex-end' }}>
+                  <button
+                    className="primary-button"
+                    disabled={selectedSantriIds.size === 0 || bulkOrdaSaving}
+                    onClick={() => void saveBulkOrda()}
+                  >
+                    {bulkOrdaSaving ? 'Menyimpan...' : `Simpan Pemetaan (${selectedSantriIds.size} Santri)`}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  className="secondary-button"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => {
+                    const allIds = new Set(filteredSantri.map(s => s.santri_id));
+                    setSelectedSantriIds(allIds);
+                  }}
+                >
+                  ✓ Pilih Semua ({filteredSantri.length})
+                </button>
+                <button
+                  className="secondary-button"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => setSelectedSantriIds(new Set())}
+                >
+                  ✕ Batal Pilih All
+                </button>
+              </div>
+
+              <div className="table-scroll">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>Pilih</th>
+                      <th>No</th>
+                      <th>NIS</th>
+                      <th>Nama Santri</th>
+                      <th>Unit</th>
+                      <th>Kamar</th>
+                      <th>Organisasi Daerah Saat Ini</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentSantriPageData.map((s, idx) => {
+                      const isChecked = selectedSantriIds.has(s.santri_id);
+                      return (
+                        <tr key={s.santri_id} style={{ background: isChecked ? 'rgba(15, 110, 86, 0.06)' : undefined }}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const next = new Set(selectedSantriIds);
+                                if (e.target.checked) next.add(s.santri_id);
+                                else next.delete(s.santri_id);
+                                setSelectedSantriIds(next);
+                              }}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'center' }}>{(santriPage - 1) * itemsPerPage + idx + 1}</td>
+                          <td>{s.nis || '—'}</td>
+                          <td><strong>{s.nama}</strong></td>
+                          <td><span className="schedule-label">{s.kode_unit || '—'}</span></td>
+                          <td>{s.nama_kamar || '—'}</td>
+                          <td>
+                            {s.kode_orda ? (
+                              <span style={{ fontWeight: 600, color: 'var(--aksen)' }}>
+                                {s.kode_orda} ({s.nama_orda})
+                              </span>
+                            ) : (
+                              <small style={{ color: '#888' }}>Belum Dipetakan</small>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalSantriPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+                  <button className="secondary-button" disabled={santriPage <= 1} onClick={() => setSantriPage(p => p - 1)}>Sebelumnya</button>
+                  <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px' }}>Halaman {santriPage} dari {totalSantriPages}</span>
+                  <button className="secondary-button" disabled={santriPage >= totalSantriPages} onClick={() => setSantriPage(p => p + 1)}>Berikutnya</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ORDA MODAL */}
+          {showOrdaModal && (
+            <div className="save-modal-backdrop" role="presentation">
+              <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog">
+                <h2>{editingOrda.organisasi_daerah_id ? 'Edit Organisasi Daerah' : 'Tambah Organisasi Daerah'}</h2>
+                <form onSubmit={e => void saveOrda(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <div>
+                    <label className="ui-text-label">Kode Singkat (singkatan)</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      required
+                      value={editingOrda.kode_singkat || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, kode_singkat: e.target.value }))}
+                      placeholder="Contoh: HISPA, OPIM, IKSMA"
+                    />
+                  </div>
+                  <div>
+                    <label className="ui-text-label">Nama Resmi Organisasi</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      required
+                      value={editingOrda.nama_organisasi || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, nama_organisasi: e.target.value }))}
+                      placeholder="Contoh: Himpunan Santri Pasundan"
+                    />
+                  </div>
+                  <div>
+                    <label className="ui-text-label">Cakupan Wilayah / Daerah Asal</label>
+                    <input
+                      className="raport-select"
+                      style={{ width: '100%' }}
+                      value={editingOrda.deskripsi_wilayah || ''}
+                      onChange={e => setEditingOrda(p => ({ ...p, deskripsi_wilayah: e.target.value }))}
+                      placeholder="Contoh: Jawa Barat & Banten"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="orda-aktif-chk"
+                      checked={editingOrda.status_aktif ?? true}
+                      onChange={e => setEditingOrda(p => ({ ...p, status_aktif: e.target.checked }))}
+                    />
+                    <label htmlFor="orda-aktif-chk" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label>
+                  </div>
+
+                  <div className="save-modal-actions" style={{ marginTop: '16px' }}>
+                    <button type="button" className="secondary-button" onClick={() => setShowOrdaModal(false)}>Batal</button>
+                    <button type="submit" className="primary-button">Simpan</button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </section>

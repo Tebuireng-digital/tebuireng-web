@@ -6,7 +6,7 @@ interface PageMetaOptions {
   ogImage?: string;
 }
 
-export function usePageMeta({ title, description, ogImage = '/LOGO_TEBUIRENG_.jpg' }: PageMetaOptions) {
+export function usePageMeta({ title, description, ogImage = '/new_icon.jpeg' }: PageMetaOptions) {
   useEffect(() => {
     if (!title) return;
 

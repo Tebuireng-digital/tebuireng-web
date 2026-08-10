@@ -32,11 +32,11 @@ class SantriController extends Controller
             SantriAccess::scopeAssigned($query, $petugas);
         }
 
-        if ($request->has('q')) {
-            $q = $request->q;
-            $query->where(function($w) use ($q) {
-                $w->where('santri.nama', 'like', "%{$q}%")
-                  ->orWhere('santri.nis', 'like', "%{$q}%");
+        $search = $request->input('q') ?? $request->input('search');
+        if (!empty($search)) {
+            $query->where(function($w) use ($search) {
+                $w->where('santri.nama', 'like', "%{$search}%")
+                  ->orWhere('santri.nis', 'like', "%{$search}%");
             });
         }
 

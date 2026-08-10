@@ -5,7 +5,7 @@ import { api } from '../api';
 import type { StatusAbsensi } from '../components/PillStatus';
 import { usePageMeta } from '../hooks/usePageMeta';
 
-interface TargetKelas { target_id: number; nama_target: string }
+interface TargetKelas { target_id: number; nama_target: string; unit_kode?: string; unit_nama?: string }
 interface JadwalKelas { jadwal_id: number; nama_jadwal: string }
 interface OpsiSekolah { jenis: string; targets: TargetKelas[]; jadwal: JadwalKelas[] }
 interface BarisRekap { santri_id: number; nis: string | null; nama: string; status: StatusAbsensi | null }
@@ -24,7 +24,7 @@ const statuses: Array<StatusAbsensi | 'Belum diisi'> = ['Hadir', 'Izin', 'Sakit'
 export function RekapKelasPage() {
   usePageMeta({
     title: 'Rekap Kelas Formal',
-    description: 'Pantau rekap kehadiran harian santri untuk kelas formal penugasan wali kelas Pondok Pesantren Tebuireng.',
+    description: 'Pantau rekap kehadiran harian santri untuk kelas formal Pondok Pesantren Tebuireng.',
   });
 
   const [searchParams] = useSearchParams();
@@ -60,8 +60,8 @@ export function RekapKelasPage() {
     return result;
   }, [sessionQuery.data]);
 
-  if (optionsQuery.isLoading) return <div className="empty-state">Memuat kelas yang ditugaskan...</div>;
-  if (!sekolah?.targets.length) return <div className="empty-state">Belum ada kelas formal yang ditugaskan kepada akun ini.</div>;
+  if (optionsQuery.isLoading) return <div className="empty-state">Memuat kelas formal...</div>;
+  if (!sekolah?.targets.length) return <div className="empty-state">Belum ada kelas formal yang terdaftar pada akun ini.</div>;
 
   return (
     <section className="rekap-page">
@@ -69,12 +69,12 @@ export function RekapKelasPage() {
         <div>
           <span className="page-eyebrow">Absensi kelas</span>
           <h1>Rekap Kelas</h1>
-          <p>Pantau hasil absensi harian hanya untuk kelas yang menjadi tanggung jawab Anda.</p>
+          <p>Pantau hasil absensi harian santri untuk kelas formal Pondok Pesantren Tebuireng.</p>
         </div>
       </header>
 
       <div className="rekap-filters">
-        <div><label>Kelas</label><select value={targetId} onChange={event => setTargetId(Number(event.target.value))}>{sekolah.targets.map(target => <option key={target.target_id} value={target.target_id}>{target.nama_target}</option>)}</select></div>
+        <div><label>Kelas</label><select value={targetId} onChange={event => setTargetId(Number(event.target.value))}>{sekolah.targets.map(target => <option key={target.target_id} value={target.target_id}>{target.unit_kode ? `[${target.unit_kode}] ${target.nama_target}` : target.nama_target}</option>)}</select></div>
         <div><label>Tanggal</label><input type="date" value={tanggal} onChange={event => setTanggal(event.target.value)} /></div>
       </div>
 

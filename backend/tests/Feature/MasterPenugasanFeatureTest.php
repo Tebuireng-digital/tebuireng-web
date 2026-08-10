@@ -69,7 +69,7 @@ class MasterPenugasanFeatureTest extends TestCase
             ->assertJsonPath('message', 'Kelas 7A sudah dikelola oleh Wali Kelas sebagai wali kelas.');
     }
 
-    public function test_madin_source_class_cannot_be_assigned_as_formal_school_class(): void
+    public function test_formal_class_from_any_unit_can_be_assigned_for_school_attendance(): void
     {
         $mtsUnitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'MTS', 'nama' => 'MTs Lain']);
         $madinSourceClassId = DB::table('kelas_formal')->insertGetId([
@@ -84,8 +84,7 @@ class MasterPenugasanFeatureTest extends TestCase
             'petugas_id' => $this->waliPertama->petugas_id,
             'jenis' => 'sekolah',
             'target_id' => $madinSourceClassId,
-        ])->assertStatus(422)
-            ->assertJsonPath('message', 'Kelompok tujuan tidak ditemukan');
+        ])->assertCreated();
     }
 
     public function test_staff_list_shows_active_attendance_responsibility_or_dash(): void

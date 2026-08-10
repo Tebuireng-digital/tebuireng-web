@@ -89,6 +89,9 @@ class ImportReviewController extends Controller
     public function index(Request $request)
     {
         $status = $request->query('status');
+        $search = $request->query('search');
+        $sheet = $request->query('sheet');
+
         $query = DB::table('santri_import_reviews as r')
             ->leftJoin('santri as otomatis', 'r.santri_otomatis_id', '=', 'otomatis.santri_id')
             ->leftJoin('kamar as kamar_otomatis', 'otomatis.kamar_id', '=', 'kamar_otomatis.kamar_id')
@@ -102,11 +105,32 @@ class ImportReviewController extends Controller
             ->orderByRaw("FIELD(r.status, 'perlu_tinjau', 'perlu_mapping_kamar', 'terpisah', 'digabung')")
             ->orderByDesc('r.skor_kemiripan')
             ->orderBy('r.sumber_sheet')->orderBy('r.baris_sumber');
+
         if ($status && in_array($status, ['perlu_tinjau', 'perlu_mapping_kamar', 'terpisah', 'digabung'], true)) {
             $query->where('r.status', $status);
         }
 
-        return response()->json($query->get());
+        if ($sheet) {
+            $query->where('r.sumber_sheet', $sheet);
+        }
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('r.nama_sumber', 'like', "%{$search}%")
+                  ->orWhere('r.kode_kamar_sumber', 'like', "%{$search}%")
+                  ->orWhere('otomatis.nama', 'like', "%{$search}%")
+                  ->orWhere('kandidat.nama', 'like', "%{$search}%");
+            });
+        }
+
+        $items = $query->get()->map(function ($row) {
+            if (!$row->kandidat_santri_id && !$row->santri_otomatis_id) {
+                $row->skor_kemiripan = 0;
+            }
+            return $row;
+        });
+
+        return response()->json($items);
     }
 
     public function markSeparate(Request $request, int $id)
@@ -265,7 +289,7 @@ class ImportReviewController extends Controller
             $score = 100 * (1 - $distance / max(strlen($normalized), strlen($other), 1));
             if ($score > $bestScore) { $bestScore = $score; $bestId = $candidate->santri_id; }
         }
-        return $bestScore >= 80 ? [$bestId, round($bestScore, 2)] : [null, round($bestScore, 2)];
+        return $bestScore >= 80 ? [$bestId, round($bestScore, 2)] : [null, 0.0];
     }
 
     private function normalize(string $value): string

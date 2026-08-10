@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(PetugasSeeder::class);
+        $this->call(OrganisasiDaerahSeeder::class);
 
         DB::table('unit_pendidikan')->insert([
             ['kode' => 'MTS', 'nama' => 'MTs Salafiyah Syafi\'iyah'],

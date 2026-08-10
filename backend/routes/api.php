@@ -49,6 +49,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/master/kamar', [\App\Http\Controllers\MasterController::class, 'storeKamar'])->middleware('role:Admin');
     Route::get('/master/santri/count', [\App\Http\Controllers\MasterController::class, 'countSantri'])->middleware('role:Admin');
     Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
+    Route::get('/master/santri/options', [\App\Http\Controllers\MasterController::class, 'santriOptions'])->middleware('role:Admin');
+    Route::get('/master/santri/verifikasi', [\App\Http\Controllers\MasterController::class, 'verificationQueue'])->middleware('role:Admin');
+    Route::get('/master/santri/verifikasi-orda', [\App\Http\Controllers\MasterController::class, 'ordaVerificationQueue'])->middleware('role:Admin');
     Route::post('/master/santri', [\App\Http\Controllers\MasterController::class, 'storeSantri'])->middleware('role:Admin');
     Route::get('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'getPenugasan'])->middleware('role:Admin');
     Route::post('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'storePenugasan'])->middleware('role:Admin');
@@ -59,6 +62,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/master/import-reviews/{id}/separate', [\App\Http\Controllers\ImportReviewController::class, 'markSeparate'])->middleware('role:Admin');
     Route::get('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'mappings'])->middleware('role:Admin');
     Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
+    Route::get('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'index'])->middleware('role:Admin');
+    Route::post('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'store'])->middleware('role:Admin');
+    Route::post('/master/santri/bulk-orda', [\App\Http\Controllers\OrganisasiDaerahController::class, 'bulkUpdateSantri'])->middleware('role:Admin');
+    Route::get('/laporan/organisasi-daerah', [\App\Http\Controllers\LaporanController::class, 'organisasiDaerah'])->middleware('role:Admin,Pengasuh');
+
+    // Raport Pengajian
+    Route::get('/raport-pengajian/options', [\App\Http\Controllers\RaportPengajianController::class, 'options']);
+    Route::get('/raport-pengajian/session', [\App\Http\Controllers\RaportPengajianController::class, 'session']);
+    Route::post('/raport-pengajian/bulk', [\App\Http\Controllers\RaportPengajianController::class, 'bulkUpsert'])->middleware('role:Admin,Ustadz');
+    Route::get('/raport-pengajian/rekap-semester', [\App\Http\Controllers\RaportPengajianController::class, 'rekapSemester'])->middleware('role:Admin,Pengasuh');
+    Route::get('/raport-pengajian/kelompok/{jenis}/{kelompokId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdfBulk'])->middleware('role:Admin,Ustadz');
+    Route::get('/raport-pengajian/{santriId}', [\App\Http\Controllers\RaportPengajianController::class, 'show']);
+    Route::get('/raport-pengajian/{santriId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdf']);
 
     // Alumni
     Route::get('/master/alumni', [\App\Http\Controllers\AlumniController::class, 'index'])->middleware('role:Admin');

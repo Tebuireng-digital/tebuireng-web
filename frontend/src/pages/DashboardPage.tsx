@@ -9,6 +9,8 @@ interface TargetAbsensi {
   target_id: number;
   nama_target: string;
   tingkat?: string;
+  unit_kode?: string;
+  unit_nama?: string;
   kategori_target?: string;
   nomor_target?: string | null;
 }
@@ -121,8 +123,10 @@ export function DashboardPage() {
 
     let firstGroupKey = `${kegiatan.jenis}:all`;
     if (kegiatan.jenis === 'sekolah') {
-      const firstGrade = ['7', '8', '9'].find(grade => kegiatan.targets.some(target => String(target.tingkat) === grade));
-      if (firstGrade) firstGroupKey = `sekolah:${firstGrade}`;
+      const schoolUnits = [...new Set(kegiatan.targets.map(target => (target.unit_nama || target.unit_kode || (target.tingkat ? `Tingkat ${target.tingkat}` : 'Kelas Formal')).trim()))]
+        .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }));
+      const firstUnit = schoolUnits[0];
+      if (firstUnit) firstGroupKey = `sekolah:${firstUnit}`;
     } else if (kegiatan.jenis === 'kamar') {
       const firstCategory = [...new Set(kegiatan.targets.map(target => target.kategori_target ?? 'Kamar lainnya'))]
         .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))[0];
@@ -148,25 +152,30 @@ export function DashboardPage() {
     setExpandedRosterGroup(current => current === key ? null : key);
   };
 
-  const targetCards = (kegiatan: KelompokTampilan, targets: TargetAbsensi[]) => (
-    <div className="target-grid">
-      {targets.map(target => (
-        <Link
-          className="target-card"
-          key={target.target_id}
-          aria-label={`Buka absensi ${target.nama_target}`}
-          to={`/absensi/${kegiatan.jenis}/${target.target_id}?jadwal=${kegiatan.jadwal[0].jadwal_id}`}
-        >
-          <span className="target-card-label">{target.nama_target}</span>
-          <span className="target-card-action" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </span>
-        </Link>
-      ))}
-    </div>
-  );
+  const targetCards = (kegiatan: KelompokTampilan, targets: TargetAbsensi[]) => {
+    const sortedTargets = [...targets].sort((left, right) =>
+      left.nama_target.localeCompare(right.nama_target, 'id', { numeric: true, sensitivity: 'base' })
+    );
+    return (
+      <div className="target-grid">
+        {sortedTargets.map(target => (
+          <Link
+            className="target-card"
+            key={target.target_id}
+            aria-label={`Buka absensi ${target.nama_target}`}
+            to={`/absensi/${kegiatan.jenis}/${target.target_id}?jadwal=${kegiatan.jadwal[0].jadwal_id}`}
+          >
+            <span className="target-card-label">{target.nama_target}</span>
+            <span className="target-card-action" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </span>
+          </Link>
+        ))}
+      </div>
+    );
+  };
 
   const collapsibleTargetGroup = (
     kegiatan: KelompokTampilan,
@@ -345,11 +354,13 @@ export function DashboardPage() {
                 <div className="warning-box">Jadwal belum diatur oleh Admin.</div>
               ) : kegiatan.jenis === 'sekolah' ? (
                 <div className="roster-category-groups">
-                  {['7', '8', '9'].map(grade => {
-                    const targets = kegiatan.targets.filter(target => String(target.tingkat) === grade);
-                    if (targets.length === 0) return null;
-                    return collapsibleTargetGroup(kegiatan, `sekolah:${grade}`, `Kelas ${grade}`, targets);
-                  })}
+                  {[...new Set(kegiatan.targets.map(target => (target.unit_nama || target.unit_kode || (target.tingkat ? `Tingkat ${target.tingkat}` : 'Kelas Formal')).trim()))]
+                    .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))
+                    .map(unitName => {
+                      const targets = kegiatan.targets.filter(target => (target.unit_nama || target.unit_kode || (target.tingkat ? `Tingkat ${target.tingkat}` : 'Kelas Formal')).trim() === unitName);
+                      if (targets.length === 0) return null;
+                      return collapsibleTargetGroup(kegiatan, `sekolah:${unitName}`, unitName, targets);
+                    })}
                 </div>
               ) : kegiatan.jenis === 'kamar' ? (
                 <div className="roster-category-groups">

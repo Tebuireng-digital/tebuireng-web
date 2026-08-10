@@ -39,6 +39,7 @@ services:
       - ./backend:/var/www/html
       - ./xlsx:/var/www/xlsx:ro
       - ./docs:/var/www/docs:ro
+      - ./new data:/var/www/new data:ro
       - backend_vendor:/var/www/html/vendor
     depends_on:
       mysql:

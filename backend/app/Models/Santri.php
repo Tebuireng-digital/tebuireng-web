@@ -28,6 +28,7 @@ class Santri extends Authenticatable
         'nama',
         'unit_id',
         'kamar_id',
+        'organisasi_daerah_id',
         'kelas_formal_id',
         'kelompok_madin_id',
         'kelompok_pbs_id',

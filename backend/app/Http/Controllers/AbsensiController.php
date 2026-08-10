@@ -16,7 +16,7 @@ class AbsensiController extends Controller
         'sekolah' => [
             'kode' => 'SEKOLAH',
             'nama' => 'Kelas Formal',
-            'sumber' => 'Database Siswa Kelas 7/8/9',
+            'sumber' => 'Kelas formal dari data santri',
             'tipe_target' => 'KelasFormal',
             'santri_column' => 'kelas_formal_id',
             'target_table' => 'kelas_formal',
@@ -88,17 +88,25 @@ class AbsensiController extends Controller
                 continue;
             }
 
-            $targetQuery = DB::table($config['target_table'])
-                ->select([
-                    $config['target_pk'].' as target_id',
-                    $config['target_label'].' as nama_target',
-                ]);
+            if ($config['tipe_target'] === 'KelasFormal') {
+                $targetQuery = DB::table('kelas_formal')
+                    ->leftJoin('unit_pendidikan', 'kelas_formal.unit_id', '=', 'unit_pendidikan.unit_id')
+                    ->select([
+                        'kelas_formal.kelas_formal_id as target_id',
+                        'kelas_formal.nama_kelas as nama_target',
+                        'kelas_formal.tingkat',
+                        'unit_pendidikan.kode as unit_kode',
+                        'unit_pendidikan.nama as unit_nama',
+                    ]);
+            } else {
+                $targetQuery = DB::table($config['target_table'])
+                    ->select([
+                        $config['target_pk'].' as target_id',
+                        $config['target_label'].' as nama_target',
+                    ]);
+            }
 
             $this->constrainTargetQuery($targetQuery, $config);
-
-            if ($config['tipe_target'] === 'KelasFormal') {
-                $targetQuery->addSelect('tingkat');
-            }
 
             if ($config['target_table'] === 'kelompok_pbs') {
                 $targetQuery->addSelect('kategori as kategori_target');
@@ -115,7 +123,7 @@ class AbsensiController extends Controller
                     })
                     ->pluck('target_id');
 
-                $targetQuery->whereIn($config['target_pk'], $assignedIds);
+                $targetQuery->whereIn($config['target_table'].'.'.$config['target_pk'], $assignedIds);
             }
 
             if ($config['target_table'] === 'kamar') {
@@ -479,19 +487,9 @@ class AbsensiController extends Controller
         return $kegiatan ? [$config, $kegiatan] : [null, null];
     }
 
-    /**
-     * Kelas sekolah bersumber eksklusif dari workbook Database Siswa Kelas 7/8/9.
-     * Baris kelas dari workbook Madin tidak boleh menjadi target absensi sekolah.
-     */
     private function constrainTargetQuery($query, array $config): void
     {
-        if ($config['tipe_target'] !== 'KelasFormal') {
-            return;
-        }
-
-        $smpUnitId = DB::table('unit_pendidikan')->where('kode', 'SMP')->value('unit_id');
-        $query->where('unit_id', $smpUnitId)
-            ->whereIn('tingkat', ['7', '8', '9']);
+        // Semua kelas formal aktif dari Pend + Kls dapat menjadi target absensi sekolah.
     }
 
     private function canAccessTarget($petugas, array $config, int $targetId): bool

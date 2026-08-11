@@ -85,7 +85,7 @@ export function RaportInputPage() {
   });
 
   // 1. Fetch options
-  const { data: options = [], isLoading: loadingOptions } = useQuery<OptionGroup[]>({
+  const { data: options = [], isLoading: loadingOptions, isError: optionsError, refetch: refetchOptions } = useQuery<OptionGroup[]>({
     queryKey: ['raport-options', user?.petugas_id],
     queryFn: async () => (await api.get('/api/raport-pengajian/options')).data,
     enabled: !!user,
@@ -220,12 +220,20 @@ export function RaportInputPage() {
     <section className="app-container raport-page">
       <h1 className="ui-text-title" style={{ marginBottom: '20px' }}>Input Raport Pengajian</h1>
 
+      {optionsError && (
+        <div className="error-box" role="alert">
+          Sesi login tidak valid atau sudah berakhir. Masuk kembali untuk memuat data Raport.
+          <button type="button" className="secondary-button" onClick={() => void refetchOptions()}>Coba lagi</button>
+        </div>
+      )}
+
       {/* Parameter selectors */}
       <div className="raport-selectors">
         <div className="raport-selector-row">
           <div className="raport-field">
-            <label className="ui-text-label">Jenis Pengajian</label>
+            <label className="ui-text-label" htmlFor="raport-input-jenis">Jenis Pengajian</label>
             <select
+              id="raport-input-jenis"
               className="raport-select"
               value={selectedJenis}
               onChange={e => { setSelectedJenis(e.target.value); setSelectedTargetId(null); setLastSessionKey(''); }}
@@ -238,8 +246,9 @@ export function RaportInputPage() {
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label">Kelompok</label>
+            <label className="ui-text-label" htmlFor="raport-input-kelompok">Kelompok</label>
             <select
+              id="raport-input-kelompok"
               className="raport-select"
               value={selectedTargetId ?? ''}
               onChange={e => { setSelectedTargetId(Number(e.target.value) || null); setLastSessionKey(''); }}
@@ -255,8 +264,8 @@ export function RaportInputPage() {
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label">Bulan</label>
-            <select className="raport-select" value={bulan} onChange={e => { setBulan(Number(e.target.value)); setLastSessionKey(''); }}>
+            <label className="ui-text-label" htmlFor="raport-input-bulan">Bulan</label>
+            <select id="raport-input-bulan" className="raport-select" value={bulan} onChange={e => { setBulan(Number(e.target.value)); setLastSessionKey(''); }}>
               {Array.from({ length: 12 }, (_, i) => (
                 <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
               ))}
@@ -264,8 +273,8 @@ export function RaportInputPage() {
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label">Tahun</label>
-            <select className="raport-select" value={tahun} onChange={e => { setTahun(Number(e.target.value)); setLastSessionKey(''); }}>
+            <label className="ui-text-label" htmlFor="raport-input-tahun">Tahun</label>
+            <select id="raport-input-tahun" className="raport-select" value={tahun} onChange={e => { setTahun(Number(e.target.value)); setLastSessionKey(''); }}>
               {Array.from({ length: 5 }, (_, i) => {
                 const y = initTahun - 2 + i;
                 return <option key={y} value={y}>{y}</option>;
@@ -436,7 +445,7 @@ export function RaportInputPage() {
         <div className="empty-state">Pilih jenis pengajian dan kelompok untuk mulai input raport.</div>
       )}
 
-      {!loadingOptions && options.length === 0 && (
+      {!loadingOptions && !optionsError && options.length === 0 && (
         <div className="empty-state">Tidak ada kelompok yang ditugaskan kepada Anda. Hubungi Admin untuk menambahkan penugasan.</div>
       )}
     </section>

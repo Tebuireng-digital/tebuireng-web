@@ -13,3 +13,14 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+      window.location.assign('/login?reason=session-expired');
+    }
+
+    return Promise.reject(error);
+  },
+);

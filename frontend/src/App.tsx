@@ -70,8 +70,18 @@ function Layout() {
   const currentJenis = searchParams.get('jenis');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 768px)').matches);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => mediaQuery.removeEventListener('change', updateViewport);
+  }, []);
 
   useEffect(() => {
     const handleScrollHide = () => {
@@ -275,7 +285,11 @@ function Layout() {
       <div className={`sidebar-overlay ${isMobileMenuOpen ? 'open' : ''}`} onClick={closeMenu}></div>
 
       {/* Sidebar / Navigation */}
-      <div className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+      <div
+        className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''}`}
+        aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+        inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div className="sidebar-brand"><span className="brand-mark"><img src="/new_icon.jpeg" alt="Logo SIMANTEB" /></span><div><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div></div>
           <button className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
@@ -288,7 +302,7 @@ function Layout() {
           <div><p>{user.nama}</p><span>{user.jabatan}</span></div>
         </div>
 
-        <nav id="primary-navigation" className="sidebar-nav" aria-label="Navigasi utama">
+        <nav id="primary-navigation" className="sidebar-nav" aria-label="Navigasi sidebar">
           <Link
             to="/dashboard"
             className={`sidebar-nav-link ${location.pathname === '/dashboard' && !currentJenis ? 'active' : ''}`}
@@ -498,26 +512,6 @@ function Layout() {
             </div>
           )}
 
-          {['Admin', 'Pengasuh', 'Ustadz'].includes(user.jabatan) && (
-            <div className="sidebar-master-menu">
-              <button
-                type="button"
-                aria-label="Buka atau tutup menu Raport Pengajian"
-                aria-expanded={isRaportMenuOpen}
-                aria-controls="raport-subnav"
-                className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/raport-pengajian') ? 'active' : ''}`}
-                onClick={toggleRaportMenu}
-              >
-                <span className="nav-label"><NavIcon name="raport"/><span>Raport Pengajian</span></span>
-                <span aria-hidden="true">{isRaportMenuOpen ? '⌃' : '⌄'}</span>
-              </button>
-              <div id="raport-subnav" className={`sidebar-subnav ${isRaportMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isRaportMenuOpen}>
-                <Link to="/raport-pengajian/input" className={`sidebar-subnav-link ${location.pathname === '/raport-pengajian/input' ? 'active' : ''}`} onClick={closeMenu}>Input Raport</Link>
-                <Link to="/raport-pengajian/view" className={`sidebar-subnav-link ${location.pathname === '/raport-pengajian/view' ? 'active' : ''}`} onClick={closeMenu}>Lihat Raport Santri</Link>
-              </div>
-            </div>
-          )}
-
           {['Admin', 'Pengasuh'].includes(user.jabatan) && (
             <Link to="/laporan/detail" className={`sidebar-nav-link ${location.pathname === '/laporan/detail' ? 'active' : ''}`} aria-current={location.pathname === '/laporan/detail' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Laporan Detail</span></Link>
           )}
@@ -591,7 +585,7 @@ function Layout() {
         </Suspense>
       </main>
 
-      <nav className={`mobile-bottom-nav ${isNavVisible ? 'is-visible' : 'is-hidden'}`} aria-label="Navigasi utama">
+      <nav className={`mobile-bottom-nav ${isNavVisible ? 'is-visible' : 'is-hidden'}`} aria-label="Navigasi mobile">
         <Link to="/dashboard" className={location.pathname === '/dashboard' ? 'active' : ''} aria-current={location.pathname === '/dashboard' ? 'page' : undefined} onClick={closeMenu}>
           <NavIcon name="home"/><span>Beranda</span>
         </Link>

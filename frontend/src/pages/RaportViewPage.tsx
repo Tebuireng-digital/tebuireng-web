@@ -174,7 +174,7 @@ export function RaportViewPage() {
   });
 
   // Options
-  const { data: options = [] } = useQuery<OptionGroup[]>({
+  const { data: options = [], isLoading: loadingOptions, isError: optionsError, refetch: refetchOptions } = useQuery<OptionGroup[]>({
     queryKey: ['raport-options', user?.petugas_id],
     queryFn: async () => (await api.get('/api/raport-pengajian/options')).data,
     enabled: !!user,
@@ -281,13 +281,21 @@ export function RaportViewPage() {
         </div>
       </div>
 
+      {optionsError && (
+        <div className="error-box" role="alert">
+          Sesi login tidak valid atau sudah berakhir. Masuk kembali untuk memuat data Raport.
+          <button type="button" className="secondary-button" onClick={() => void refetchOptions()}>Coba lagi</button>
+        </div>
+      )}
+
       {/* Selectors Panel */}
-      <div className="raport-selectors">
-        {mode === 'kelompok' ? (
+      <div className="raport-selectors" aria-busy={loadingOptions}>
+        {loadingOptions ? <ContentSkeleton rows={3} /> : mode === 'kelompok' ? (
           <div className="raport-selector-row">
             <div className="raport-field">
-              <label className="ui-text-label">Jenis Pengajian</label>
+              <label className="ui-text-label" htmlFor="raport-view-jenis">Jenis Pengajian</label>
               <select
+                id="raport-view-jenis"
                 className="raport-select"
                 value={selectedJenis}
                 onChange={e => { setSelectedJenis(e.target.value); setSelectedTargetId(null); setSelectedSantriId(null); }}
@@ -300,8 +308,9 @@ export function RaportViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label">Kelompok</label>
+              <label className="ui-text-label" htmlFor="raport-view-kelompok">Kelompok</label>
               <select
+                id="raport-view-kelompok"
                 className="raport-select"
                 value={selectedTargetId ?? ''}
                 onChange={e => { setSelectedTargetId(Number(e.target.value) || null); setSelectedSantriId(null); }}
@@ -317,8 +326,8 @@ export function RaportViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label">Bulan</label>
-              <select className="raport-select" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
+              <label className="ui-text-label" htmlFor="raport-view-kelompok-bulan">Bulan</label>
+              <select id="raport-view-kelompok-bulan" className="raport-select" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
                 {Array.from({ length: 12 }, (_, i) => (
                   <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
                 ))}
@@ -326,8 +335,8 @@ export function RaportViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label">Tahun</label>
-              <select className="raport-select" value={tahun} onChange={e => setTahun(Number(e.target.value))}>
+              <label className="ui-text-label" htmlFor="raport-view-kelompok-tahun">Tahun</label>
+              <select id="raport-view-kelompok-tahun" className="raport-select" value={tahun} onChange={e => setTahun(Number(e.target.value))}>
                 {Array.from({ length: 5 }, (_, i) => {
                   const y = initTahun - 2 + i;
                   return <option key={y} value={y}>{y}</option>;
@@ -338,8 +347,9 @@ export function RaportViewPage() {
         ) : (
           <div className="raport-selector-row">
             <div className="raport-field raport-field-wide">
-              <label className="ui-text-label">Cari Nama Santri</label>
+              <label className="ui-text-label" htmlFor="raport-view-nama">Cari Nama Santri</label>
               <input
+                id="raport-view-nama"
                 type="text"
                 className="raport-select"
                 placeholder="Ketik nama santri (min. 2 huruf)..."
@@ -363,8 +373,8 @@ export function RaportViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label">Bulan</label>
-              <select className="raport-select" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
+              <label className="ui-text-label" htmlFor="raport-view-nama-bulan">Bulan</label>
+              <select id="raport-view-nama-bulan" className="raport-select" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
                 {Array.from({ length: 12 }, (_, i) => (
                   <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
                 ))}
@@ -372,8 +382,8 @@ export function RaportViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label">Tahun</label>
-              <select className="raport-select" value={tahun} onChange={e => setTahun(Number(e.target.value))}>
+              <label className="ui-text-label" htmlFor="raport-view-nama-tahun">Tahun</label>
+              <select id="raport-view-nama-tahun" className="raport-select" value={tahun} onChange={e => setTahun(Number(e.target.value))}>
                 {Array.from({ length: 5 }, (_, i) => {
                   const y = initTahun - 2 + i;
                   return <option key={y} value={y}>{y}</option>;

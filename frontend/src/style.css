@@ -2097,6 +2097,17 @@ html {
   .dashboard-shortcut:last-child { border-bottom: 0; }
   .dashboard-mosque { position: absolute; right: -30px; bottom: -4px; width: 150px; opacity: .18; }
   .violation-page { padding: 4px 0 30px; }
+  .violation-card.stat-card,
+  .violation-card.stat-card:hover { transform: none; }
+  .category-picker-menu {
+    position: fixed;
+    top: auto;
+    right: 16px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    left: 16px;
+    max-height: calc(100dvh - 110px);
+  }
+  .category-picker-list { max-height: calc(100dvh - 270px); }
   .page-heading { margin: 2px 3px 20px; }
   .page-heading h1 { font-size: 25px; }
   .violation-card.stat-card { padding: 0 18px 23px !important; border-radius: 18px; }
@@ -2419,9 +2430,14 @@ html {
 /* ── Selectors Panel ── */
 .raport-page {
   padding: 20px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .raport-selectors {
+  width: 100%;
+  min-width: 0;
   background: var(--kertas-kartu);
   border: 1px solid var(--garis);
   border-radius: 12px;
@@ -2433,6 +2449,7 @@ html {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .raport-field {
@@ -2450,6 +2467,9 @@ html {
 }
 
 .raport-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--garis);
   border-radius: 8px;
@@ -2534,6 +2554,9 @@ html {
 
 /* ── Bulk Input Table ── */
 .raport-table-wrapper {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   background: var(--kertas-kartu);
   border: 1px solid var(--garis);
@@ -2836,7 +2859,8 @@ html {
 
   .raport-field,
   .raport-field-wide {
-    min-width: 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .raport-info-bar {

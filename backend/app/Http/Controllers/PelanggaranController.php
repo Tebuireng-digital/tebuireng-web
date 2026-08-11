@@ -78,6 +78,7 @@ class PelanggaranController extends Controller
             'poin' => 'nullable|integer|min:1',
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string',
+            'file' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
         $petugas = Auth::user();
@@ -145,38 +146,62 @@ class PelanggaranController extends Controller
         $data['created_at'] = now()->toDateTimeString();
         $data['updated_at'] = now()->toDateTimeString();
 
-        $pelanggaranId = DB::transaction(function () use ($data, $petugas) {
-            $pelanggaranId = DB::table('pelanggaran')->insertGetId($data);
+        $attachmentPath = null;
+        $attachment = $request->file('file');
+        unset($data['file']);
 
-            // Invalidate cache
-            Cache::forget("santri:{$data['santri_id']}:poin");
+        try {
+            $pelanggaranId = DB::transaction(function () use ($data, $petugas, $attachment, &$attachmentPath) {
+                $pelanggaranId = DB::table('pelanggaran')->insertGetId($data);
 
-            // Check total points
-            $totalPoin = $this->getPoinSantri($data['santri_id']);
-            $ambang = DB::table('pengaturan_sistem')->where('setting_key', 'ambang_notifikasi_poin')->value('setting_value') ?? 20;
+                if ($attachment) {
+                    $attachmentPath = $attachment->storeAs(
+                        'pelanggaran_lampiran',
+                        Str::uuid() . '.' . $attachment->getClientOriginalExtension(),
+                        'local'
+                    );
 
-            if ($totalPoin >= $ambang) {
-                // Send notification to Pengasuh
-                $pengasuhIds = DB::table('petugas')->where('jabatan', 'Pengasuh')->where('status_aktif', 1)->pluck('petugas_id');
-                $notifications = [];
-                foreach ($pengasuhIds as $pId) {
-                    $notifications[] = [
-                        'petugas_id' => $pId,
-                        'judul' => 'Ambang Poin Pelanggaran',
-                        'pesan' => "Santri ID {$data['santri_id']} telah mencapai {$totalPoin} poin pelanggaran (Ambang: {$ambang}).",
-                        'tipe' => 'ambang_poin',
-                        'referensi_tabel' => 'pelanggaran',
-                        'referensi_id' => $pelanggaranId,
-                        'created_at' => now()->toDateTimeString()
-                    ];
+                    DB::table('lampiran_pelanggaran')->insert([
+                        'pelanggaran_id' => $pelanggaranId,
+                        'path_file' => $attachmentPath,
+                        'diunggah_oleh' => $petugas->petugas_id,
+                        'created_at' => now(),
+                    ]);
                 }
-                if (!empty($notifications)) {
-                    DB::table('notifikasi')->insert($notifications);
+
+                Cache::forget("santri:{$data['santri_id']}:poin");
+
+                $totalPoin = $this->getPoinSantri($data['santri_id']);
+                $ambang = DB::table('pengaturan_sistem')->where('setting_key', 'ambang_notifikasi_poin')->value('setting_value') ?? 20;
+
+                if ($totalPoin >= $ambang) {
+                    $pengasuhIds = DB::table('petugas')->where('jabatan', 'Pengasuh')->where('status_aktif', 1)->pluck('petugas_id');
+                    $notifications = [];
+                    foreach ($pengasuhIds as $pId) {
+                        $notifications[] = [
+                            'petugas_id' => $pId,
+                            'judul' => 'Ambang Poin Pelanggaran',
+                            'pesan' => "Santri ID {$data['santri_id']} telah mencapai {$totalPoin} poin pelanggaran (Ambang: {$ambang}).",
+                            'tipe' => 'ambang_poin',
+                            'referensi_tabel' => 'pelanggaran',
+                            'referensi_id' => $pelanggaranId,
+                            'created_at' => now()->toDateTimeString()
+                        ];
+                    }
+                    if (!empty($notifications)) {
+                        DB::table('notifikasi')->insert($notifications);
+                    }
                 }
+
+                return $pelanggaranId;
+            });
+        } catch (\Throwable $exception) {
+            if ($attachmentPath) {
+                Storage::disk('local')->delete($attachmentPath);
             }
 
-            return $pelanggaranId;
-        });
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Pelanggaran berhasil disimpan',
@@ -198,7 +223,7 @@ class PelanggaranController extends Controller
         }
 
         $request->validate([
-            'file' => 'required|file|mimes:jpeg,png,jpg,pdf|max:5120',
+            'file' => 'required|file|mimes:jpeg,png,jpg,webp,pdf|max:5120',
         ]);
 
         $file = $request->file('file');

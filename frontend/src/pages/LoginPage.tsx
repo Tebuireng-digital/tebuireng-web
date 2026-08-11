@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { usePageMeta } from '../hooks/usePageMeta';
@@ -10,11 +11,12 @@ export function LoginPage() {
   });
 
   const { login } = useAuth();
+  const [searchParams] = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(searchParams.get('reason') === 'session-expired' ? 'Sesi login sudah berakhir. Silakan masuk kembali.' : '');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

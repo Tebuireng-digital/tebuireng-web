@@ -44,10 +44,25 @@ export function PelanggaranFormPage() {
   const [modalState, setModalState] = useState<{ isOpen: boolean, type: 'success' | 'error', message: string }>({ isOpen: false, type: 'success', message: '' });
   const modalRef = useRef<HTMLDivElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        setModalState({ isOpen: true, type: 'error', message: 'Foto harus berformat JPG, PNG, atau WEBP.' });
+        e.target.value = '';
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setModalState({ isOpen: true, type: 'error', message: 'Ukuran foto maksimal 5 MB.' });
+        e.target.value = '';
+        return;
+      }
+
+      if (fotoPreview) URL.revokeObjectURL(fotoPreview);
       setFoto(file);
       setFotoPreview(URL.createObjectURL(file));
     }
@@ -59,6 +74,7 @@ export function PelanggaranFormPage() {
       URL.revokeObjectURL(fotoPreview);
       setFotoPreview(null);
     }
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   const getSeverityClass = (kategori: string) => {
@@ -222,34 +238,20 @@ export function PelanggaranFormPage() {
 
     setIsSubmitting(true);
     try {
-      // 1. Submit Pelanggaran
-      const payload: any = {
-        santri_id: selectedSantri.santri_id,
-        kategori_pelanggaran_id: parseInt(kategoriId),
-        poin: parseInt(poin),
-        tanggal: tanggal,
-        keterangan: catatan,
-      };
+      const formData = new FormData();
+      formData.append('santri_id', String(selectedSantri.santri_id));
+      formData.append('kategori_pelanggaran_id', kategoriId);
+      formData.append('poin', poin);
+      formData.append('tanggal', tanggal);
+      formData.append('keterangan', catatan);
 
       if (isCustomKategori) {
-        payload.uraian_pelanggaran_custom = uraianPelanggaranCustom.trim();
-        payload.kategori_custom = kategoriCustom;
+        formData.append('uraian_pelanggaran_custom', uraianPelanggaranCustom.trim());
+        formData.append('kategori_custom', kategoriCustom);
       }
+      if (foto) formData.append('file', foto);
 
-      const res = await api.post('/api/pelanggaran', payload);
-
-      const id = res.data.pelanggaran_id;
-
-      // 2. Upload Lampiran if exists
-      if (foto && id) {
-        const formData = new FormData();
-        formData.append('file', foto);
-        await api.post(`/api/pelanggaran/${id}/lampiran`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-      }
+      await api.post('/api/pelanggaran', formData);
 
       // 3. Fetch Accumulation
       const resPoin = await api.get(`/api/santri/${selectedSantri.santri_id}/poin`);
@@ -263,6 +265,9 @@ export function PelanggaranFormPage() {
       setPoin('');
       setCatatan('');
       setFoto(null);
+      if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+      setFotoPreview(null);
+      if (photoInputRef.current) photoInputRef.current.value = '';
     } catch (err: any) {
       setModalState({ isOpen: true, type: 'error', message: err.response?.data?.message || err.message || 'Terjadi kesalahan sistem.' });
     } finally {
@@ -580,14 +585,15 @@ export function PelanggaranFormPage() {
                   </div>
                   <div className="photo-dropzone-text">
                     <strong>Ambil Foto Kejadian atau Pilih File</strong>
-                    <span>Format JPG, PNG, atau WEBP. Kamera otomatis aktif di HP.</span>
+                    <span>Format JPG, PNG, atau WEBP. Maksimal 5 MB.</span>
                   </div>
                   <input
                     id="violation-photo"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     capture="environment"
                     onChange={handleFotoChange}
+                    ref={photoInputRef}
                     className="photo-input-hidden"
                   />
                 </label>
@@ -610,7 +616,7 @@ export function PelanggaranFormPage() {
             disabled={isSubmitting}
             className="violation-submit"
           >
-            {isSubmitting ? 'Menyimpan Data...' : 'Simpan Pelanggaran'}
+            {isSubmitting ? (foto ? 'Menyimpan Data & Foto...' : 'Menyimpan Data...') : 'Simpan Pelanggaran'}
           </button>
 
         </form>

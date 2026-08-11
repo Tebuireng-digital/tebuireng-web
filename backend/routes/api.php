@@ -25,6 +25,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pelanggaran/{id}/lampiran', [\App\Http\Controllers\PelanggaranController::class, 'uploadLampiran']);
     Route::get('/santri/{id}/poin', [\App\Http\Controllers\PelanggaranController::class, 'getPoin']);
 
+    Route::get('/prestasi', [\App\Http\Controllers\PrestasiController::class, 'index']);
+    Route::post('/prestasi', [\App\Http\Controllers\PrestasiController::class, 'store']);
+    Route::delete('/prestasi/{id}', [\App\Http\Controllers\PrestasiController::class, 'destroy']);
+
     Route::get('/perizinan', [\App\Http\Controllers\PerizinanController::class, 'index'])->middleware('role:Keamanan,Pengasuh');
     Route::get('/perizinan-jenis', [\App\Http\Controllers\PerizinanController::class, 'jenis'])->middleware('role:Keamanan');
     Route::post('/perizinan', [\App\Http\Controllers\PerizinanController::class, 'store'])->middleware('role:Keamanan');

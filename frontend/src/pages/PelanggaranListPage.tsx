@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface PelanggaranRecord {
@@ -18,6 +19,7 @@ interface PelanggaranRecord {
 }
 
 export function PelanggaranListPage() {
+  const [searchParams] = useSearchParams();
   const [pelanggaran, setPelanggaran] = useState<PelanggaranRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,7 +27,6 @@ export function PelanggaranListPage() {
   const [kategoriFilter, setKategoriFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [searchParams] = useSearchParams();
   const selectedSantriId = searchParams.get('santri_id');
 
   const santriName = pelanggaran[0]?.nama_santri;
@@ -37,6 +38,7 @@ export function PelanggaranListPage() {
   });
 
   const fetchPelanggaran = async () => {
+    setLoading(true);
     try {
       const response = await api.get('/api/pelanggaran', {
         params: selectedSantriId ? { santri_id: selectedSantriId } : undefined,
@@ -75,172 +77,174 @@ export function PelanggaranListPage() {
     };
   }), [filteredPelanggaran]);
 
-  if (loading) return <div className="empty-state">Memuat daftar pelanggaran...</div>;
+  if (loading) return <PageSkeleton />;
   if (error) return <div className="error-box">{error}</div>;
 
   return (
     <div className="pelanggaran-list-page">
-      <header className="dashboard-header" style={{ marginBottom: 24 }}>
+      <header className="dashboard-header" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div>
-            <span className="page-eyebrow">Rekap Pelanggaran</span>
-            <h1>{selectedSantriId && santriName ? `Detail Pelanggaran ${santriName}` : 'Daftar Pelanggaran Santri'}</h1>
-            <p>{selectedSantriId ? 'Riwayat pelanggaran santri berdasarkan level dan poin.' : 'Riwayat dan catatan pelanggaran santri yang telah diinputkan oleh petugas.'}</p>
+            <span className="page-eyebrow">Rekap Santri</span>
+            <h1>{selectedSantriId && santriName ? `Detail Santri ${santriName}` : 'Daftar Pelanggaran Santri'}</h1>
+            <p>{selectedSantriId ? 'Riwayat pelanggaran santri.' : 'Riwayat dan catatan pelanggaran santri Pondok Pesantren Tebuireng.'}</p>
           </div>
         </div>
       </header>
 
-      {/* Stats Summary Cards */}
-      <div className="violation-summary-row">
-        <div className="dashboard-grid-premium violation-summary-cards">
-          <div className="stat-card">
-            <span className="stat-card-value">{filteredPelanggaran.length}</span>
-            <span className="stat-card-label">Total Catatan</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-value">{totalPoin}</span>
-            <span className="stat-card-label">Total Poin Sanksi</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-value">
-              {filteredPelanggaran.filter(p => p.kategori?.toLowerCase() === 'berat').length}
-            </span>
-            <span className="stat-card-label">Pelanggaran Berat</span>
-          </div>
-        </div>
-        <Link to="/pelanggaran/baru" className="primary-button violation-add-button">
-          <span aria-hidden="true">＋</span> Input Pelanggaran
-        </Link>
-      </div>
-
-      {selectedSantriId && (
-        <div className="violation-level-summary" aria-label="Ringkasan pelanggaran per level">
-          {levelSummary.map(item => (
-            <div className={`violation-level-item level-${item.level.toLowerCase()}`} key={item.level}>
-              <span className="violation-level-name">{item.level}</span>
-              <strong>{item.points} poin</strong>
-              <small>{item.count} catatan</small>
+      <>
+          {/* Stats Summary Cards */}
+          <div className="violation-summary-row">
+            <div className="dashboard-grid-premium violation-summary-cards">
+              <div className="stat-card">
+                <span className="stat-card-value">{filteredPelanggaran.length}</span>
+                <span className="stat-card-label">Total Catatan</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-card-value">{totalPoin}</span>
+                <span className="stat-card-label">Total Poin Sanksi</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-card-value">
+                  {filteredPelanggaran.filter(p => p.kategori?.toLowerCase() === 'berat').length}
+                </span>
+                <span className="stat-card-label">Pelanggaran Berat</span>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <section className="master-section">
-        {/* Search & Filter Controls */}
-        <div className="account-table-controls">
-          <div className="account-search-control">
-            <label htmlFor="search-pelanggaran">Pencarian</label>
-            <input
-              id="search-pelanggaran"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Cari nama santri, pelanggaran, catatan..."
-            />
+            <Link to="/pelanggaran/baru" className="primary-button violation-add-button">
+              + Input Pelanggaran
+            </Link>
           </div>
-          <div>
-            <label htmlFor="filter-kategori">Kategori</label>
-            <select
-              id="filter-kategori"
-              value={kategoriFilter}
-              onChange={e => setKategoriFilter(e.target.value)}
-            >
-              <option value="">Semua Kategori</option>
-              <option value="Ringan">Ringan</option>
-              <option value="Sedang">Sedang</option>
-              <option value="Berat">Berat</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="filter-dari">Dari Tanggal</label>
-            <input
-              type="date"
-              id="filter-dari"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="filter-sampai">Sampai Tanggal</label>
-            <input
-              type="date"
-              id="filter-sampai"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-            />
-          </div>
-        </div>
 
-        <p className="account-result-count">
-          Menampilkan {filteredPelanggaran.length} dari {pelanggaran.length} rekap pelanggaran.
-        </p>
-
-        {selectedSantriId && (
-          <Link to="/pelanggaran/semua" className="secondary-button violation-clear-filter" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', marginBottom: 16 }}>
-            ← Kembali ke semua pelanggaran
-          </Link>
-        )}
-
-        {/* Table */}
-        <div className="table-scroll">
-          <table className="master-table">
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Tanggal</th>
-                <th>Nama Santri</th>
-                <th>Kategori</th>
-                <th>Uraian Pelanggaran</th>
-                <th>Poin</th>
-                <th>Catatan / Tindakan</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPelanggaran.map((item, idx) => {
-                const isBerat = item.kategori?.toLowerCase() === 'berat';
-                const isSedang = item.kategori?.toLowerCase() === 'sedang';
-                const badgeColor = isBerat ? '#ef4444' : isSedang ? '#f59e0b' : '#3b82f6';
-                const badgeBg = isBerat ? '#fef2f2' : isSedang ? '#fffbeb' : '#eff6ff';
-
-                return (
-                  <tr key={item.pelanggaran_id}>
-                    <td>{idx + 1}</td>
-                    <td><strong>{item.tanggal}</strong></td>
-                    <td><strong>{item.nama_santri}</strong></td>
-                    <td>
-                      <span style={{
-                        padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                        color: badgeColor, backgroundColor: badgeBg
-                      }}>
-                        {item.kategori || 'Ringan'}
-                      </span>
-                    </td>
-                    <td>{item.uraian_pelanggaran}</td>
-                    <td>
-                      <strong style={{ color: badgeColor, fontSize: 15 }}>
-                        +{item.poin || item.poin_maks}
-                      </strong>
-                    </td>
-                    <td>{item.catatan || item.tindakan_sanksi || '—'}</td>
-                    <td>
-                      <Link
-                        to={`/pelanggaran/semua?santri_id=${item.santri_id}`}
-                        className="table-detail-link"
-                        title={`Lihat semua pelanggaran ${item.nama_santri}`}
-                      >
-                        Lihat detail
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filteredPelanggaran.length === 0 && (
-            <div className="empty-state">Belum ada rekap pelanggaran yang sesuai dengan pencarian.</div>
+          {selectedSantriId && (
+            <div className="violation-level-summary" aria-label="Ringkasan pelanggaran per level">
+              {levelSummary.map(item => (
+                <div className={`violation-level-item level-${item.level.toLowerCase()}`} key={item.level}>
+                  <span className="violation-level-name">{item.level}</span>
+                  <strong>{item.points} poin</strong>
+                  <small>{item.count} catatan</small>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
-      </section>
+
+          <section className="master-section">
+            {/* Search & Filter Controls */}
+            <div className="account-table-controls">
+              <div className="account-search-control">
+                <label htmlFor="search-pelanggaran">Pencarian</label>
+                <input
+                  id="search-pelanggaran"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Cari nama santri, pelanggaran, catatan..."
+                />
+              </div>
+              <div>
+                <label htmlFor="filter-kategori">Kategori</label>
+                <select
+                  id="filter-kategori"
+                  value={kategoriFilter}
+                  onChange={e => setKategoriFilter(e.target.value)}
+                >
+                  <option value="">Semua Kategori</option>
+                  <option value="Ringan">Ringan</option>
+                  <option value="Sedang">Sedang</option>
+                  <option value="Berat">Berat</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="filter-dari">Dari Tanggal</label>
+                <input
+                  type="date"
+                  id="filter-dari"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="filter-sampai">Sampai Tanggal</label>
+                <input
+                  type="date"
+                  id="filter-sampai"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <p className="account-result-count">
+              Menampilkan {filteredPelanggaran.length} dari {pelanggaran.length} rekap pelanggaran.
+            </p>
+
+            {selectedSantriId && (
+              <Link to="/pelanggaran/semua" className="secondary-button violation-clear-filter" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', marginBottom: 16 }}>
+                ← Kembali ke semua pelanggaran
+              </Link>
+            )}
+
+            {/* Table */}
+            <div className="table-scroll">
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Tanggal</th>
+                    <th>Nama Santri</th>
+                    <th>Kategori</th>
+                    <th>Uraian Pelanggaran</th>
+                    <th>Poin</th>
+                    <th>Catatan / Tindakan</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPelanggaran.map((item, idx) => {
+                    const isBerat = item.kategori?.toLowerCase() === 'berat';
+                    const isSedang = item.kategori?.toLowerCase() === 'sedang';
+                    const badgeColor = isBerat ? '#ef4444' : isSedang ? '#f59e0b' : '#3b82f6';
+                    const badgeBg = isBerat ? '#fef2f2' : isSedang ? '#fffbeb' : '#eff6ff';
+
+                    return (
+                      <tr key={item.pelanggaran_id}>
+                        <td>{idx + 1}</td>
+                        <td><strong>{item.tanggal}</strong></td>
+                        <td><strong>{item.nama_santri}</strong></td>
+                        <td>
+                          <span style={{
+                            padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            color: badgeColor, backgroundColor: badgeBg
+                          }}>
+                            {item.kategori || 'Ringan'}
+                          </span>
+                        </td>
+                        <td>{item.uraian_pelanggaran}</td>
+                        <td>
+                          <strong style={{ color: badgeColor, fontSize: 15 }}>
+                            +{item.poin || item.poin_maks}
+                          </strong>
+                        </td>
+                        <td>{item.catatan || item.tindakan_sanksi || '—'}</td>
+                        <td>
+                          <Link
+                            to={`/pelanggaran/semua?santri_id=${item.santri_id}`}
+                            className="table-detail-link"
+                            title={`Lihat semua pelanggaran ${item.nama_santri}`}
+                          >
+                            Lihat detail
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredPelanggaran.length === 0 && (
+                <div className="empty-state">Belum ada rekap pelanggaran yang sesuai dengan pencarian.</div>
+              )}
+            </div>
+          </section>
+        </>
     </div>
   );
 }

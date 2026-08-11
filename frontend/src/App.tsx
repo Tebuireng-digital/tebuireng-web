@@ -4,11 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { LoginPage } from './pages/LoginPage';
 import { useAuth } from './AuthContext';
+import { Spinner } from './components/LoadingSkeleton';
 
 const BulkInputPage = lazy(() => import('./pages/BulkInputPage').then(module => ({ default: module.BulkInputPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
 const PelanggaranFormPage = lazy(() => import('./pages/PelanggaranFormPage').then(module => ({ default: module.PelanggaranFormPage })));
 const PelanggaranListPage = lazy(() => import('./pages/PelanggaranListPage').then(module => ({ default: module.PelanggaranListPage })));
+const PrestasiListPage = lazy(() => import('./pages/PrestasiListPage').then(module => ({ default: module.PrestasiListPage })));
 const CatatGerbangPage = lazy(() => import('./pages/CatatGerbangPage').then(module => ({ default: module.CatatGerbangPage })));
 const PerizinanListPage = lazy(() => import('./pages/PerizinanListPage').then(module => ({ default: module.PerizinanListPage })));
 const DataMasterPage = lazy(() => import('./pages/DataMasterPage').then(module => ({ default: module.DataMasterPage })));
@@ -159,7 +161,7 @@ function Layout() {
   const hasVerificationAttention = Object.values(verificationAttention).some(total => total > 0);
 
   if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--kertas)' }}>Loading...</div>;
+    return <div className="auth-loading-screen"><Spinner size="lg" /></div>;
   }
 
   if (!user) {
@@ -367,6 +369,17 @@ function Layout() {
             </div>
           )}
 
+          {['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+            <Link
+              to="/prestasi/semua"
+              className={`sidebar-nav-link ${location.pathname.startsWith('/prestasi') ? 'active' : ''}`}
+              aria-current={location.pathname.startsWith('/prestasi') ? 'page' : undefined}
+              onClick={closeMenu}
+            >
+              <NavIcon name="report"/><span>Prestasi</span>
+            </Link>
+          )}
+
           {/* KELOMPOK MENU PERIZINAN & GERBANG (COLLAPSIBLE) */}
           {['Admin', 'Keamanan', 'Pengasuh'].includes(user.jabatan) && (
             <div className="sidebar-master-menu">
@@ -504,9 +517,6 @@ function Layout() {
               </div>
             </div>
           )}
-              </div>
-            </div>
-          )}
 
           {['Admin', 'Pengasuh'].includes(user.jabatan) && (
             <Link to="/laporan/detail" className={`sidebar-nav-link ${location.pathname === '/laporan/detail' ? 'active' : ''}`} aria-current={location.pathname === '/laporan/detail' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Laporan Detail</span></Link>
@@ -524,7 +534,7 @@ function Layout() {
       </div>
 
       <main className="dashboard-content">
-        <Suspense fallback={<div className="route-loading" role="status">Memuat halaman...</div>}>
+        <Suspense fallback={<div className="route-loading" role="status"><Spinner size="lg" /></div>}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<DashboardPage />} />
@@ -533,6 +543,8 @@ function Layout() {
             <Route path="/pelanggaran" element={<Navigate to="/pelanggaran/semua" replace />} />
             <Route path="/pelanggaran/semua" element={<PelanggaranListPage />} />
             <Route path="/pelanggaran/baru" element={<PelanggaranFormPage />} />
+            <Route path="/prestasi" element={<Navigate to="/prestasi/semua" replace />} />
+            <Route path="/prestasi/semua" element={<PrestasiListPage />} />
 
             <Route path="/perizinan" element={<Navigate to="/perizinan/semua" replace />} />
             <Route path="/perizinan/semua" element={['Admin', 'Keamanan', 'Pengasuh'].includes(user.jabatan) ? <PerizinanListPage /> : <Navigate to="/dashboard" />} />

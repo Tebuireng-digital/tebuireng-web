@@ -1016,7 +1016,7 @@ html {
   background: var(--kertas);
 }
 .dashboard-content > * { max-width: 1120px; margin-left: auto; margin-right: auto; }
-.route-loading { display: grid; min-height: 220px; place-items: center; color: var(--tinta-pudar); font-size: 14px; }
+/* route-loading moved to skeleton/spinner section at end of file */
 .dashboard-header {
   position: relative;
   display: flex;
@@ -1951,6 +1951,11 @@ html {
 .violation-add-button span { font-size: 20px; font-weight: 400; line-height: 1; }
 .table-detail-link { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; color: #fff; background: var(--aksen); border: 0; border-radius: 6px; font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .table-detail-link:hover { color: #fff; background: var(--aksen-gelap); }
+.prestasi-table { min-width: 860px; }
+.prestasi-table-scroll::before { content: none; }
+.prestasi-title { color: var(--tinta); }
+.prestasi-rank { display: inline-block; padding: 4px 10px; border: 1px solid #f2c66d; border-radius: 8px; color: #7a4b05; background: #fff6dc; font-size: 12px; font-weight: 700; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 /* Login */
 .login-page-container {
@@ -2101,6 +2106,14 @@ html {
   .violation-summary-row { flex-direction: column; gap: 12px; }
   .violation-summary-cards { width: 100%; }
   .violation-add-button { width: 100%; justify-content: center; }
+  .prestasi-table-scroll::before { content: none; }
+  .prestasi-table { min-width: 0; }
+  .prestasi-table thead { display: none; }
+  .prestasi-table, .prestasi-table tbody, .prestasi-table tr, .prestasi-table td { display: block; width: 100%; }
+  .prestasi-table tr { padding: 14px 0; border-bottom: 1px solid var(--garis); }
+  .prestasi-table td { display: grid; grid-template-columns: minmax(96px, 34%) minmax(0, 1fr); gap: 10px; padding: 4px 0; border: 0; line-height: 1.4; }
+  .prestasi-table td::before { content: attr(data-label); color: var(--tinta-pudar); font-size: 11px; font-weight: 700; }
+  .prestasi-table td:first-child { display: none; }
 
   .mobile-bottom-nav {
     position: fixed;
@@ -2865,4 +2878,104 @@ html {
   .raport-save-btn {
     width: 100%;
   }
+}
+
+/* ═══════════════════════════════════════════════
+   LOADING: Skeleton shimmer, spinner, value pulse
+   ═══════════════════════════════════════════════ */
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes spin-smooth {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-value {
+  0%, 100% { opacity: .35; }
+  50%      { opacity: .12; }
+}
+
+/* Spinner ------------------------------------------------ */
+.spinner {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2.5px solid var(--garis);
+  border-top-color: var(--aksen);
+  animation: spin-smooth .7s linear infinite;
+  flex-shrink: 0;
+}
+.spinner--sm { border-width: 2px; }
+.spinner--lg { border-width: 3px; }
+
+/* Skeleton bars ------------------------------------------ */
+.skeleton-bar {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--garis) 25%, #e8ece6 37%, var(--garis) 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* PageSkeleton layout ------------------------------------ */
+.skeleton-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 8px 0;
+  max-width: 680px;
+}
+.skeleton-header-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-content-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ContentSkeleton layout --------------------------------- */
+.skeleton-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 16px;
+  background: var(--kertas-kartu);
+  border: 1px solid var(--garis);
+  border-radius: 8px;
+}
+.skeleton-content-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  padding-top: 4px;
+}
+
+/* ValuePulse --------------------------------------------- */
+.value-pulse {
+  display: inline-block;
+  border-radius: 4px;
+  background: var(--garis);
+  animation: pulse-value 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+/* Route-level loading with spinner ----------------------- */
+.route-loading {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+}
+
+/* Auth full-screen spinner ------------------------------- */
+.auth-loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: var(--kertas);
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface SantriResult { santri_id: number; nama: string; nis: string | null; nama_kamar: string | null }
@@ -388,7 +389,7 @@ export function CatatGerbangPage() {
     }
   };
 
-  if (loading) return <div className="empty-state">Memuat perizinan...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="permit-page">

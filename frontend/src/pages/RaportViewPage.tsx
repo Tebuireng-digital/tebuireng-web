@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface Target {
@@ -268,14 +269,14 @@ export function RaportViewPage() {
             style={{ padding: '8px 16px', fontSize: '13px', border: 'none', background: mode === 'kelompok' ? 'var(--aksen)' : 'transparent', color: mode === 'kelompok' ? '#fff' : 'var(--tinta)' }}
             onClick={() => { setMode('kelompok'); setSelectedSantriId(null); }}
           >
-            👥 Per Kelompok
+            Per Kelompok
           </button>
           <button
             className={`secondary-button ${mode === 'nama' ? 'active' : ''}`}
             style={{ padding: '8px 16px', fontSize: '13px', border: 'none', background: mode === 'nama' ? 'var(--aksen)' : 'transparent', color: mode === 'nama' ? '#fff' : 'var(--tinta)' }}
             onClick={() => { setMode('nama'); setSelectedSantriId(null); }}
           >
-            🔍 Cari Nama Santri
+            Cari Nama Santri
           </button>
         </div>
       </div>
@@ -397,7 +398,7 @@ export function RaportViewPage() {
               onClick={() => void handleDownloadPdfBulk()}
               style={{ padding: '10px 20px', fontSize: '13px' }}
             >
-              {downloadingBulk ? 'Mengunduh PDF...' : '📄 Download PDF 1 Kelompok'}
+              {downloadingBulk ? 'Mengunduh PDF...' : 'Download PDF 1 Kelompok'}
             </button>
           </div>
 
@@ -424,7 +425,7 @@ export function RaportViewPage() {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {sudahDiisi ? (
-                          <span style={{ color: 'var(--status-hadir)', fontWeight: 600, fontSize: '12px' }}>✓ Sudah Diisi</span>
+                          <span style={{ color: 'var(--status-hadir)', fontWeight: 600, fontSize: '12px' }}>Sudah Diisi</span>
                         ) : (
                           <span style={{ color: 'var(--tinta-pudar)', fontSize: '12px' }}>Belum Diisi</span>
                         )}
@@ -435,7 +436,7 @@ export function RaportViewPage() {
                           style={{ padding: '6px 12px', fontSize: '12px' }}
                           onClick={() => setSelectedSantriId(s.santri_id)}
                         >
-                          {isSelected ? '✓ Terpilih' : '👁️ Lihat Raport'}
+                          {isSelected ? 'Terpilih' : 'Lihat Raport'}
                         </button>
                       </td>
                     </tr>
@@ -448,12 +449,12 @@ export function RaportViewPage() {
       )}
 
       {/* Loading states */}
-      {loadingSession && mode === 'kelompok' && <div className="empty-state">Memuat data kelompok...</div>}
-      {loadingRaport && raportEnabled && <div className="empty-state">Memuat detail raport santri...</div>}
+      {loadingSession && mode === 'kelompok' && <ContentSkeleton rows={3} />}
+      {loadingRaport && raportEnabled && <ContentSkeleton rows={6} />}
       {error && raportEnabled && <div className="empty-state">Raport belum diisi untuk santri ini pada periode {BULAN_NAMA[bulan]} {tahun}.</div>}
 
       {!selectedSantriId && mode === 'nama' && <div className="empty-state">Cari dan pilih nama santri untuk melihat detail raport.</div>}
-      {!selectedSantriId && mode === 'kelompok' && session && <div className="empty-state">Klik tombol "👁️ Lihat Raport" pada salah satu santri di atas untuk melihat detail lengkapnya.</div>}
+      {!selectedSantriId && mode === 'kelompok' && session && <div className="empty-state">Klik tombol "Lihat Raport" pada salah satu santri di atas untuk melihat detail lengkapnya.</div>}
 
       {/* Raport View Card */}
       {raport && (
@@ -542,7 +543,7 @@ export function RaportViewPage() {
               disabled={downloading}
               onClick={() => void handleDownloadPdf()}
             >
-              {downloading ? 'Mengunduh…' : '📄 Download PDF Santri Ini'}
+              {downloading ? 'Mengunduh…' : 'Download PDF Santri Ini'}
             </button>
           </div>
         </div>

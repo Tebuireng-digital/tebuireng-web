@@ -6,6 +6,7 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { BarisLedger } from '../components/BarisLedger';
 import { IndikatorSinkron } from '../components/IndikatorSinkron';
+import { PageSkeleton } from '../components/LoadingSkeleton';
 import type { StatusAbsensi } from '../components/PillStatus';
 import { db, type OfflineAbsensi } from '../db/db';
 import { useBackgroundSync } from '../hooks/useBackgroundSync';
@@ -194,7 +195,7 @@ export function BulkInputPage() {
   if (!jadwalId || !targetId) {
     return <div className="error-box">Jadwal atau kelompok tidak valid. Kembali ke Dashboard dan pilih ulang.</div>;
   }
-  if (sessionQuery.isLoading) return <div className="empty-state">Memuat daftar santri...</div>;
+  if (sessionQuery.isLoading) return <PageSkeleton />;
   if (sessionQuery.error || !sessionQuery.data) {
     return <div className="error-box">Daftar absensi tidak dapat dimuat. Pastikan akun Anda memiliki penugasan.</div>;
   }
@@ -233,7 +234,7 @@ export function BulkInputPage() {
       {saveModal && (
         <div className="save-modal-backdrop" role="presentation">
           <div aria-describedby="save-modal-message" aria-labelledby="save-modal-title" aria-modal="true" className={`save-modal ${saveModal.type}`} role="dialog">
-            <div className="save-modal-icon" aria-hidden="true">{saveModal.type === 'success' ? '✓' : '!'}</div>
+            <div className="save-modal-icon" aria-hidden="true">{saveModal.type === 'success' ? 'V' : '!'}</div>
             <h2 id="save-modal-title">{saveModal.title}</h2>
             <p id="save-modal-message">{saveModal.message}</p>
             <div className="save-modal-actions">

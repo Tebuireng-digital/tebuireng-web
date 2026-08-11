@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface Petugas { petugas_id: number; nama: string; username: string; jabatan: string; status_aktif: boolean; tanggung_jawab_absensi: string }
@@ -41,7 +42,6 @@ interface SantriMaster {
   no_hp_wali?: string | null;
   status_aktif: boolean;
   status_verifikasi?: string;
-  organisasi_daerah_id?: number | null;
   kode_organisasi_daerah?: string | null;
   nama_organisasi_daerah?: string | null;
   kegiatan_partisipasi?: Record<string, { status: 'terdaftar' | 'tidak_ikut' | 'perlu_verifikasi'; alasan?: string | null }>;
@@ -227,6 +227,21 @@ export function DataMasterPage() {
   const [alumniJkFilter, setAlumniJkFilter] = useState('');
   const [alumniPage, setAlumniPage] = useState(1);
   const [alumniLoading, setAlumniLoading] = useState(false);
+
+  // Organisasi Daerah State
+  const [ordaMasterList, setOrdaMasterList] = useState<OrganisasiDaerahItem[]>([]);
+  const [ordaSubTab, setOrdaSubTab] = useState<'master' | 'mapping'>('master');
+  const [showOrdaModal, setShowOrdaModal] = useState(false);
+  const [editingOrda, setEditingOrda] = useState<Partial<OrganisasiDaerahItem>>({
+    organisasi_daerah_id: 0,
+    kode_singkat: '',
+    nama_organisasi: '',
+    deskripsi_wilayah: '',
+    status_aktif: true,
+  });
+  const [selectedOrdaTargetId, setSelectedOrdaTargetId] = useState<number | null>(null);
+  const [selectedSantriIds, setSelectedSantriIds] = useState<Set<number>>(new Set());
+  const [bulkOrdaSaving, setBulkOrdaSaving] = useState(false);
 
   // Review Kemiripan Tab State
   const [reviewList, setReviewList] = useState<ImportReviewItem[]>([]);
@@ -487,7 +502,7 @@ export function DataMasterPage() {
     setOrdaLoading(true);
     try {
       const response = await api.get('/api/master/organisasi-daerah');
-      setOrdaList(response.data);
+      setOrdaMasterList(response.data);
     } catch {
       setMessage('Data organisasi daerah gagal dimuat.');
     } finally {
@@ -692,7 +707,7 @@ export function DataMasterPage() {
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Kamar atau mapping gagal disimpan.'); }
   };
 
-  if (loading) return <div className="empty-state">Memuat data master...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="master-page">
@@ -1200,7 +1215,7 @@ export function DataMasterPage() {
               }}
               onClick={() => setReviewStatusFilter(current => current === 'perlu_tinjau' ? '' : 'perlu_tinjau')}
             >
-              <span className="stat-card-value">{validReviewList.filter(r => r.status === 'perlu_tinjau').length}</span>
+              <span className="stat-card-value">{reviewLoading ? <ValuePulse width={40} /> : validReviewList.filter(r => r.status === 'perlu_tinjau').length}</span>
               <span className="stat-card-label">Perlu Tinjau</span>
             </button>
             <button
@@ -1214,7 +1229,7 @@ export function DataMasterPage() {
               }}
               onClick={() => setReviewStatusFilter(current => current === 'perlu_mapping_kamar' ? '' : 'perlu_mapping_kamar')}
             >
-              <span className="stat-card-value" style={{ color: '#d97706' }}>{validReviewList.filter(r => r.status === 'perlu_mapping_kamar').length}</span>
+              <span className="stat-card-value" style={{ color: '#d97706' }}>{reviewLoading ? <ValuePulse width={40} /> : validReviewList.filter(r => r.status === 'perlu_mapping_kamar').length}</span>
               <span className="stat-card-label">Perlu Mapping Kamar</span>
             </button>
             <button
@@ -1228,7 +1243,7 @@ export function DataMasterPage() {
               }}
               onClick={() => setReviewStatusFilter(current => current === 'digabung' ? '' : 'digabung')}
             >
-              <span className="stat-card-value" style={{ color: '#16a34a' }}>{validReviewList.filter(r => r.status === 'digabung').length}</span>
+              <span className="stat-card-value" style={{ color: '#16a34a' }}>{reviewLoading ? <ValuePulse width={40} /> : validReviewList.filter(r => r.status === 'digabung').length}</span>
               <span className="stat-card-label">Telah Digabung</span>
             </button>
             <button
@@ -1242,7 +1257,7 @@ export function DataMasterPage() {
               }}
               onClick={() => setReviewStatusFilter(current => current === 'terpisah' ? '' : 'terpisah')}
             >
-              <span className="stat-card-value" style={{ color: '#6b7280' }}>{validReviewList.filter(r => r.status === 'terpisah').length}</span>
+              <span className="stat-card-value" style={{ color: '#6b7280' }}>{reviewLoading ? <ValuePulse width={40} /> : validReviewList.filter(r => r.status === 'terpisah').length}</span>
               <span className="stat-card-label">Tandai Terpisah</span>
             </button>
           </div>
@@ -1281,7 +1296,7 @@ export function DataMasterPage() {
           </div>
 
           <p className="account-result-count">
-            {reviewLoading ? 'Memuat data review kemiripan...' : `Menampilkan ${validReviewList.length} baris review kemiripan data yang memiliki kandidat.`}
+            {reviewLoading ? <><Spinner size="sm" /> Memuat data review kemiripan...</> : `Menampilkan ${validReviewList.length} baris review kemiripan data yang memiliki kandidat.`}
           </p>
 
           <div className="table-scroll">
@@ -1617,19 +1632,19 @@ export function DataMasterPage() {
           <div className="section-heading">
             <div>
               <h2>Data Alumni Santri</h2>
-              <p>Seluruh data alumni Pondok Pesantren Tebuireng ({alumniStats.total.toLocaleString('id')} alumni terdaftar).</p>
+              <p>{alumniLoading ? 'Memuat data alumni Pondok Pesantren Tebuireng...' : `Seluruh data alumni Pondok Pesantren Tebuireng (${alumniStats.total.toLocaleString('id')} alumni terdaftar).`}</p>
             </div>
           </div>
 
           {/* Stats Cards */}
           <div className="dashboard-grid-premium" style={{ marginBottom: 20 }}>
             <div className="stat-card">
-              <span className="stat-card-value">{alumniStats.total.toLocaleString('id')}</span>
+              <span className="stat-card-value">{alumniLoading ? <ValuePulse width={56} /> : alumniStats.total.toLocaleString('id')}</span>
               <span className="stat-card-label">Total Alumni</span>
             </div>
             {alumniStats.by_jenjang.slice(0, 2).map(item => (
               <div key={item.jenjang} className="stat-card">
-                <span className="stat-card-value" style={{ color: '#0284c7' }}>{item.jumlah.toLocaleString('id')}</span>
+                <span className="stat-card-value" style={{ color: '#0284c7' }}>{alumniLoading ? <ValuePulse width={48} /> : item.jumlah.toLocaleString('id')}</span>
                 <span className="stat-card-label">{item.jenjang}</span>
               </div>
             ))}
@@ -1666,7 +1681,7 @@ export function DataMasterPage() {
           </div>
 
           <p className="account-result-count">
-            {alumniLoading ? 'Memuat data alumni...' : `Menampilkan ${Math.min(alumniPage * 100, alumniList.length)} dari ${alumniList.length.toLocaleString('id')} alumni.`}
+            {alumniLoading ? <><Spinner size="sm" /> Memuat data alumni...</> : `Menampilkan ${Math.min(alumniPage * 100, alumniList.length)} dari ${alumniList.length.toLocaleString('id')} alumni.`}
           </p>
 
           {/* Data Table */}
@@ -1762,14 +1777,14 @@ export function DataMasterPage() {
               style={{ background: ordaSubTab === 'master' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'master' ? '#fff' : undefined }}
               onClick={() => setOrdaSubTab('master')}
             >
-              📋 Master Orda ({ordaList.length})
+              Master Orda ({ordaList.length})
             </button>
             <button
               className={`secondary-button ${ordaSubTab === 'mapping' ? 'active' : ''}`}
               style={{ background: ordaSubTab === 'mapping' ? 'var(--aksen)' : undefined, color: ordaSubTab === 'mapping' ? '#fff' : undefined }}
               onClick={() => setOrdaSubTab('mapping')}
             >
-              🔗 Pemetaan Bulk Santri
+              Pemetaan Bulk Santri
             </button>
           </div>
 
@@ -1788,7 +1803,7 @@ export function DataMasterPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ordaList.map((o, idx) => (
+                  {ordaMasterList.map((o, idx) => (
                     <tr key={o.organisasi_daerah_id}>
                       <td style={{ textAlign: 'center' }}>{idx + 1}</td>
                       <td><strong>{o.kode_singkat}</strong></td>
@@ -1816,7 +1831,7 @@ export function DataMasterPage() {
                   ))}
                 </tbody>
               </table>
-              {ordaList.length === 0 && !ordaLoading && (
+              {ordaMasterList.length === 0 && !ordaLoading && (
                 <div className="empty-state">Belum ada data Organisasi Daerah.</div>
               )}
             </div>
@@ -1833,7 +1848,7 @@ export function DataMasterPage() {
                     onChange={e => setSelectedOrdaTargetId(Number(e.target.value) || null)}
                   >
                     <option value="">— Kosongkan Orda (Hapus Pemetaan) —</option>
-                    {ordaList.filter(o => o.status_aktif).map(o => (
+                    {ordaMasterList.filter(o => o.status_aktif).map(o => (
                       <option key={o.organisasi_daerah_id} value={o.organisasi_daerah_id}>
                         {o.kode_singkat} — {o.nama_organisasi} ({o.total_santri} santri)
                       </option>
@@ -1871,14 +1886,14 @@ export function DataMasterPage() {
                     setSelectedSantriIds(allIds);
                   }}
                 >
-                  ✓ Pilih Semua ({filteredSantri.length})
+                  Pilih Semua ({filteredSantri.length})
                 </button>
                 <button
                   className="secondary-button"
                   style={{ padding: '6px 12px', fontSize: '12px' }}
                   onClick={() => setSelectedSantriIds(new Set())}
                 >
-                  ✕ Batal Pilih All
+                  Batal Pilih All
                 </button>
               </div>
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface Target {
@@ -284,25 +285,25 @@ export function RaportInputPage() {
       </div>
 
       {/* Loading / Error states */}
-      {loadingOptions && <div className="empty-state">Memuat data kelompok...</div>}
-      {loadingSession && sessionEnabled && <div className="empty-state">Memuat daftar santri...</div>}
+      {loadingOptions && <ContentSkeleton rows={3} />}
+      {loadingSession && sessionEnabled && <ContentSkeleton rows={5} />}
       {sessionError && <div className="error-box">Gagal memuat data. Pastikan Anda memiliki penugasan pada kelompok ini.</div>}
 
       {/* Save result modal */}
       {saveResult && (
         <div className="save-modal-backdrop" role="presentation">
           <div aria-modal="true" className={`save-modal ${saveResult.type}`} role="dialog">
-            <div className="save-modal-icon" aria-hidden="true">{saveResult.type === 'success' ? '✓' : '!'}</div>
+            <div className="save-modal-icon" aria-hidden="true">{saveResult.type === 'success' ? 'V' : '!'}</div>
             <h2>{saveResult.type === 'success' ? 'Berhasil' : 'Gagal'}</h2>
             <p>{saveResult.message}</p>
             <div className="save-modal-actions" style={{ flexDirection: 'column', gap: '8px' }}>
               {saveResult.type === 'success' && (
                 <>
                   <button className="secondary-button" disabled={downloadingBulk} onClick={() => void handleDownloadPdfBulk()}>
-                    {downloadingBulk ? 'Mengunduh...' : '📄 Download PDF 1 Kelompok'}
+                    {downloadingBulk ? 'Mengunduh...' : 'Download PDF 1 Kelompok'}
                   </button>
                   <button className="secondary-button" onClick={() => navigate(`/raport/lihat?jenis=${selectedJenis}&kelompok=${selectedTargetId}&bulan=${bulan}&tahun=${tahun}`)}>
-                    👁️ Lihat Hasil Raport Kelompok
+                    Lihat Hasil Raport Kelompok
                   </button>
                 </>
               )}
@@ -414,7 +415,7 @@ export function RaportInputPage() {
               disabled={downloadingBulk}
               onClick={() => void handleDownloadPdfBulk()}
             >
-              {downloadingBulk ? 'Mengunduh…' : '📄 Download PDF 1 Kelompok'}
+              {downloadingBulk ? 'Mengunduh…' : 'Download PDF 1 Kelompok'}
             </button>
             <button
               className="primary-button raport-save-btn"

@@ -345,10 +345,10 @@ export function PelanggaranFormPage() {
               {selectedSantri && (
                 <div style={{ position: 'absolute', right: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#047857', backgroundColor: '#D1FAE5', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                    ✓ {selectedSantri.nama_kamar || selectedSantri.nama_unit || 'Terpilih'}
+                    {selectedSantri.nama_kamar || selectedSantri.nama_unit || 'Terpilih'}
                   </span>
                   <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih" style={{ position: 'static' }}>
-                    ✕
+                    X
                   </button>
                 </div>
               )}
@@ -411,7 +411,7 @@ export function PelanggaranFormPage() {
             >
               <span className={selectedKategori || isCustomKategori ? 'category-picker-value' : 'category-picker-placeholder'}>
                 {isCustomKategori
-                  ? (uraianPelanggaranCustom ? `[Manual] ${uraianPelanggaranCustom}` : '➕ Lainnya / Input Manual (Tidak ada di panduan)')
+                  ? (uraianPelanggaranCustom ? `[Manual] ${uraianPelanggaranCustom}` : '+ Lainnya / Input Manual (Tidak ada di panduan)')
                   : (selectedKategori ? selectedKategori.uraian_pelanggaran : 'Pilih jenis pelanggaran')}
               </span>
               {selectedKategori && (
@@ -473,7 +473,7 @@ export function PelanggaranFormPage() {
                     }}
                   >
                     <span className="category-option-copy">
-                      <strong style={{ color: 'var(--aksen)', fontWeight: 600 }}>➕ Lainnya / Input Manual (Tidak ada di panduan)</strong>
+                      <strong style={{ color: 'var(--aksen)', fontWeight: 600 }}>+ Lainnya / Input Manual (Tidak ada di panduan)</strong>
                     </span>
                     <span className="category-option-points">Input Baru</span>
                   </button>
@@ -564,9 +564,9 @@ export function PelanggaranFormPage() {
                 <div className="photo-preview-container">
                   <img src={fotoPreview} alt="Bukti Foto Pelanggaran" className="photo-preview-img" />
                   <div className="photo-preview-actions">
-                    <span className="photo-filename">📎 {foto?.name}</span>
+                    <span className="photo-filename">{foto?.name}</span>
                     <button type="button" onClick={handleRemoveFoto} className="btn-remove-photo">
-                      ✕ Hapus / Ganti Foto
+                      Hapus / Ganti Foto
                     </button>
                   </div>
                 </div>

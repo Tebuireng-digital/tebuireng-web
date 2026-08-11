@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { ContentSkeleton, PageSkeleton } from '../components/LoadingSkeleton';
 import type { StatusAbsensi } from '../components/PillStatus';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -60,7 +61,7 @@ export function RekapKelasPage() {
     return result;
   }, [sessionQuery.data]);
 
-  if (optionsQuery.isLoading) return <div className="empty-state">Memuat kelas formal...</div>;
+  if (optionsQuery.isLoading) return <PageSkeleton />;
   if (!sekolah?.targets.length) return <div className="empty-state">Belum ada kelas formal yang terdaftar pada akun ini.</div>;
 
   return (
@@ -78,7 +79,7 @@ export function RekapKelasPage() {
         <div><label>Tanggal</label><input type="date" value={tanggal} onChange={event => setTanggal(event.target.value)} /></div>
       </div>
 
-      {sessionQuery.isLoading && <div className="empty-state">Memuat rekap absensi...</div>}
+      {sessionQuery.isLoading && <ContentSkeleton rows={5} />}
       {sessionQuery.error && <div className="error-box">Rekap kelas gagal dimuat. Periksa koneksi lalu coba kembali.</div>}
 
       {sessionQuery.data && <>

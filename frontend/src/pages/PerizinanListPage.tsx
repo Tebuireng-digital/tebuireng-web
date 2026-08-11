@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface PerizinanRecord {
@@ -153,7 +154,7 @@ export function PerizinanListPage() {
   const activeCount = useMemo(() => perizinan.filter(p => ['disetujui', 'sedang berjalan'].includes(p.status.toLowerCase())).length, [perizinan]);
   const finishedCount = useMemo(() => perizinan.filter(p => p.status.toLowerCase() === 'selesai').length, [perizinan]);
 
-  if (loading) return <div className="empty-state">Memuat daftar perizinan...</div>;
+  if (loading) return <PageSkeleton />;
   if (error) return <div className="error-box">{error}</div>;
 
   return (

@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { usePageMeta } from '../hooks/usePageMeta';
+import { ContentSkeleton, ValuePulse } from '../components/LoadingSkeleton';
 
 interface TargetAbsensi {
   target_id: number;
@@ -233,7 +234,7 @@ export function DashboardPage() {
         <div className="dashboard-mosque" aria-hidden="true"><span></span></div>
       </header>
 
-      {isLoading && <div className="empty-state">Memuat data beranda...</div>}
+      {isLoading && <ContentSkeleton rows={4} />}
       {error && <div className="error-box">Data tidak dapat dimuat. Periksa koneksi lalu muat ulang halaman.</div>}
 
       {!isLoading && !error && data.length === 0 && (
@@ -259,7 +260,7 @@ export function DashboardPage() {
               <span className="dashboard-data-item-copy">
                 <span className="dashboard-data-item-label">Data Santri</span>
                 <strong className="dashboard-data-item-value">
-                  {isSantriLoading ? '…' : isSantriError ? '—' : santriCount?.total.toLocaleString('id') ?? '—'}
+                  {isSantriLoading ? <ValuePulse width={48} /> : isSantriError ? '—' : santriCount?.total.toLocaleString('id') ?? '—'}
                 </strong>
               </span>
               <span className="dashboard-data-item-arrow"><DashboardIcon name="arrow" /></span>
@@ -269,7 +270,7 @@ export function DashboardPage() {
               <span className="dashboard-data-item-copy">
                 <span className="dashboard-data-item-label">Data Alumni</span>
                 <strong className="dashboard-data-item-value">
-                  {isAlumniLoading ? '…' : isAlumniError ? '—' : alumniStats?.total.toLocaleString('id') ?? '—'}
+                  {isAlumniLoading ? <ValuePulse width={48} /> : isAlumniError ? '—' : alumniStats?.total.toLocaleString('id') ?? '—'}
                 </strong>
               </span>
               <span className="dashboard-data-item-arrow"><DashboardIcon name="arrow" /></span>

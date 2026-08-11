@@ -1489,6 +1489,37 @@ html {
   background: #FFFFFF;
   box-shadow: 0 4px 18px rgba(17, 37, 31, 0.05);
 }
+
+.violation-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(15, 33, 28, .52); backdrop-filter: blur(5px); }
+.violation-modal { width: min(100%, 420px); padding: 30px; border: 1px solid var(--garis); border-radius: 22px; background: #fff; box-shadow: 0 24px 70px rgba(17, 37, 31, .24); text-align: center; animation: modalIn 180ms ease-out; }
+.violation-modal.success { border-color: #ccebdd; }
+.violation-modal.error { border-color: #f3d1ce; }
+.violation-modal-icon { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto 17px; border-radius: 18px; }
+.violation-modal.success .violation-modal-icon { color: #087451; background: #e4f6ed; }
+.violation-modal.error .violation-modal-icon { color: #a3372d; background: #fbe9e7; }
+.violation-modal-eyebrow { display: block; margin-bottom: 6px; color: var(--tinta-pudar); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.violation-modal h2 { margin: 0; color: var(--tinta); font-size: 21px; line-height: 1.3; }
+.violation-modal-message { margin: 10px auto 24px; color: var(--tinta-pudar); font-size: 14px; line-height: 1.55; }
+.violation-modal-actions { display: flex; justify-content: center; }
+.violation-modal-close { min-width: 130px; padding: 11px 20px; color: white; background: var(--aksen); border: 0; border-radius: 10px; font-weight: 700; cursor: pointer; }
+.violation-modal.error .violation-modal-close { background: var(--status-alpha); }
+.violation-modal-close:hover { filter: brightness(.94); }
+
+.violation-success-summary { margin-top: 22px; overflow: hidden; border: 1px solid #ccebdd; border-radius: 16px; background: #f7fcf9; }
+.violation-success-header { display: flex; align-items: center; gap: 12px; padding: 17px 20px; border-bottom: 1px solid #dcefe4; }
+.violation-success-check { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; color: #087451; background: #dff4e8; border-radius: 50%; }
+.violation-success-header h2 { margin: 0; color: #155b43; font-size: 15px; line-height: 1.35; }
+.violation-success-header p { margin: 3px 0 0; color: #5d796c; font-size: 12px; line-height: 1.4; }
+.violation-success-content { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 18px 20px 16px; }
+.violation-success-label { display: block; margin-bottom: 5px; color: #688176; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.violation-success-points { display: block; color: #155b43; font-size: 34px; line-height: 1; }
+.violation-success-points small { color: #56806e; font-size: 14px; font-weight: 700; }
+.violation-success-note { max-width: 180px; color: #688176; font-size: 12px; line-height: 1.45; text-align: right; }
+.violation-success-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 20px; border-top: 1px solid #dcefe4; background: #fff; }
+.violation-history-link { display: inline-flex; align-items: center; gap: 7px; color: #087451; font-size: 13px; font-weight: 700; text-decoration: none; }
+.violation-history-link:hover { color: #064e3b; }
+.violation-new-entry { padding: 8px 12px; color: #557166; background: #fff; border: 1px solid #cfe0d6; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.violation-new-entry:hover { color: #155b43; border-color: #8dc8a7; background: #f2faf5; }
 .form-section-heading {
   display: flex;
   align-items: center;
@@ -2114,6 +2145,10 @@ html {
   .violation-card.stat-card { padding: 0 18px 23px !important; border-radius: 18px; }
   .form-section-heading { margin: 0 -18px 23px; padding: 21px 18px 17px; }
   .violation-form { gap: 18px; }
+  .violation-success-content { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .violation-success-note { max-width: none; text-align: left; }
+  .violation-success-actions { align-items: stretch; flex-direction: column; }
+  .violation-history-link, .violation-new-entry { justify-content: center; width: 100%; }
   .violation-level-summary { grid-template-columns: 1fr; gap: 8px; }
   .violation-summary-row { flex-direction: column; gap: 12px; }
   .violation-summary-cards { width: 100%; }

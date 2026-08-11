@@ -327,26 +327,29 @@ export function PelanggaranFormPage() {
       
       {/* Modal Pesan Sukses / Error */}
       {modalState.isOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="violation-modal-title" aria-describedby="violation-modal-message" style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: modalState.type === 'success' ? '1px solid #BBF7D0' : '1px solid #FECACA' }}>
-            <h2 id="violation-modal-title" style={{ margin: '0 0 16px 0', color: modalState.type === 'success' ? '#16A34A' : '#DC2626', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="violation-modal-backdrop">
+          <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="violation-modal-title" aria-describedby="violation-modal-message" className={`violation-modal ${modalState.type}`}>
+            <div className="violation-modal-icon" aria-hidden="true">
               {modalState.type === 'success' ? (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               ) : (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
               )}
-              {modalState.type === 'success' ? 'Berhasil' : 'Data Belum Lengkap'}
+            </div>
+            <span className="violation-modal-eyebrow">{modalState.type === 'success' ? 'Tersimpan' : 'Perlu diperiksa'}</span>
+            <h2 id="violation-modal-title">
+              {modalState.type === 'success' ? 'Pelanggaran berhasil dicatat' : 'Data belum lengkap'}
             </h2>
-            <p id="violation-modal-message" style={{ margin: '0 0 24px 0', fontSize: '15px', color: '#334155', lineHeight: '1.5' }}>
+            <p id="violation-modal-message" className="violation-modal-message">
               {modalState.message}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="violation-modal-actions">
               <button 
                 ref={modalCloseRef}
                 onClick={() => setModalState({ ...modalState, isOpen: false })}
-                style={{ padding: '10px 24px', backgroundColor: modalState.type === 'success' ? '#0F6E56' : '#DC2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                className="violation-modal-close"
               >
-                Tutup
+                Lanjutkan
               </button>
             </div>
           </div>
@@ -683,17 +686,32 @@ export function PelanggaranFormPage() {
         </form>
 
         {poinAccumulated !== null && (
-          <Link
-            to={`/pelanggaran/semua?santri_id=${selectedSantri?.santri_id}`}
-            className="violation-points-summary"
-            aria-label={`Lihat detail pelanggaran ${selectedSantri?.nama || 'santri ini'}`}
-          >
-            <p style={{ color: '#991B1B', fontWeight: 600, fontSize: '15px', marginBottom: '8px' }}>Total Akumulasi Poin Pelanggaran Santri Saat Ini:</p>
-            <p style={{ fontSize: '48px', color: '#7F1D1D', fontWeight: 800, margin: 0, lineHeight: 1 }}>
-              {poinAccumulated} <span style={{ fontSize: '20px', fontWeight: 600 }}>Poin</span>
-            </p>
-            <span className="violation-points-summary-link">Lihat detail riwayat pelanggaran santri →</span>
-          </Link>
+          <section className="violation-success-summary" aria-labelledby="violation-success-title">
+            <div className="violation-success-header">
+              <span className="violation-success-check" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </span>
+              <div>
+                <h2 id="violation-success-title">Pelanggaran berhasil dicatat</h2>
+                <p>Data baru sudah masuk ke riwayat {selectedSantri?.nama || 'santri'}.</p>
+              </div>
+            </div>
+            <div className="violation-success-content">
+              <div>
+                <span className="violation-success-label">Akumulasi poin saat ini</span>
+                <strong className="violation-success-points">{poinAccumulated}<small> poin</small></strong>
+              </div>
+              <span className="violation-success-note">Pastikan poin ditinjau kembali bila diperlukan.</span>
+            </div>
+            <div className="violation-success-actions">
+              <Link to={`/pelanggaran/semua?santri_id=${selectedSantri?.santri_id}`} className="violation-history-link">
+                Lihat riwayat pelanggaran <span aria-hidden="true">→</span>
+              </Link>
+              <button type="button" className="violation-new-entry" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                Input lagi
+              </button>
+            </div>
+          </section>
         )}
       </div>
     </div>

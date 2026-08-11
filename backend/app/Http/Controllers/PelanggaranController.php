@@ -79,6 +79,18 @@ class PelanggaranController extends Controller
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string',
             'file' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
+        ], [
+            'santri_id.required' => 'Santri wajib dipilih.',
+            'santri_id.exists' => 'Santri yang dipilih tidak ditemukan.',
+            'kategori_pelanggaran_id.required' => 'Kategori pelanggaran wajib dipilih.',
+            'kategori_pelanggaran_id.integer' => 'Kategori pelanggaran tidak valid.',
+            'tanggal.required' => 'Tanggal kejadian wajib diisi.',
+            'tanggal.date' => 'Tanggal kejadian tidak valid.',
+            'poin.integer' => 'Jumlah poin harus berupa angka.',
+            'poin.min' => 'Jumlah poin minimal adalah 1.',
+            'file.file' => 'Bukti foto harus berupa file yang dapat diunggah.',
+            'file.mimes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
+            'file.max' => 'Ukuran bukti foto maksimal 5 MB.',
         ]);
 
         $petugas = Auth::user();
@@ -96,6 +108,15 @@ class PelanggaranController extends Controller
                 'uraian_pelanggaran_custom' => 'required|string|max:255',
                 'kategori_custom' => 'required|string|in:Ringan,Sedang,Berat,Kewajiban',
                 'poin' => 'required|integer|min:1|max:100',
+            ], [
+                'uraian_pelanggaran_custom.required' => 'Nama atau uraian pelanggaran baru wajib diisi.',
+                'uraian_pelanggaran_custom.max' => 'Nama atau uraian pelanggaran maksimal 255 karakter.',
+                'kategori_custom.required' => 'Tingkat kategori pelanggaran wajib dipilih.',
+                'kategori_custom.in' => 'Tingkat kategori pelanggaran tidak valid.',
+                'poin.required' => 'Jumlah poin pelanggaran manual wajib diisi.',
+                'poin.integer' => 'Jumlah poin pelanggaran manual harus berupa angka.',
+                'poin.min' => 'Jumlah poin pelanggaran manual minimal 1.',
+                'poin.max' => 'Jumlah poin pelanggaran manual maksimal 100.',
             ]);
 
             $kodePasal = 'CUSTOM-' . strtoupper(Str::random(6));

@@ -4,6 +4,42 @@ import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { usePageMeta } from '../hooks/usePageMeta';
 
+const validationFieldMessages: Record<string, string> = {
+  santri_id: 'Silakan pilih santri terlebih dahulu.',
+  kategori_pelanggaran_id: 'Silakan pilih kategori pelanggaran terlebih dahulu.',
+  tanggal: 'Tanggal kejadian wajib diisi dengan benar.',
+  poin: 'Jumlah poin harus diisi sesuai batas poin kategori yang dipilih.',
+  keterangan: 'Catatan tambahan tidak dapat diproses. Periksa kembali isinya.',
+};
+
+const getReadableValidationMessage = (error: any): string => {
+  const responseData = error.response?.data;
+  const validationErrors = responseData?.errors as Record<string, string[]> | undefined;
+  const firstValidationField = validationErrors ? Object.keys(validationErrors)[0] : undefined;
+  const rawMessage = firstValidationField && validationErrors?.[firstValidationField]?.[0]
+    ? validationErrors[firstValidationField][0]
+    : responseData?.message || error.message;
+  const normalizedMessage = String(rawMessage || '').toLowerCase();
+
+  if (firstValidationField === 'file' || normalizedMessage.includes('file field must be a file')) {
+    return 'Bukti foto tidak terbaca. Silakan pilih ulang foto JPG, PNG, atau WEBP dengan ukuran maksimal 5 MB.';
+  }
+  if (normalizedMessage.includes('mimes') || normalizedMessage.includes('must be a file of type')) {
+    return 'Format bukti foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
+  }
+  if (normalizedMessage.includes('may not be greater than') || normalizedMessage.includes('maximum')) {
+    return 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 5 MB.';
+  }
+  if (firstValidationField && validationFieldMessages[firstValidationField]) {
+    return validationFieldMessages[firstValidationField];
+  }
+  if (responseData?.message === 'Role kamu tidak memiliki akses ini.') {
+    return 'Akun Anda tidak memiliki izin untuk mencatat pelanggaran ini.';
+  }
+
+  return responseData?.message || 'Data pelanggaran belum dapat disimpan. Periksa kembali isian formulir lalu coba lagi.';
+};
+
 export function PelanggaranFormPage() {
   usePageMeta({
     title: 'Input Pelanggaran Baru',
@@ -17,6 +53,7 @@ export function PelanggaranFormPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedSantri, setSelectedSantri] = useState<any | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isSearchingSantri, setIsSearchingSantri] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const categorySearchRef = useRef<HTMLInputElement>(null);
@@ -28,6 +65,7 @@ export function PelanggaranFormPage() {
   const [isKategoriOpen, setIsKategoriOpen] = useState(false);
   const [kategoriSearch, setKategoriSearch] = useState('');
   const [activeKategoriIndex, setActiveKategoriIndex] = useState(0);
+  const [isLoadingKategori, setIsLoadingKategori] = useState(true);
 
   // Custom violation state
   const [uraianPelanggaranCustom, setUraianPelanggaranCustom] = useState('');
@@ -42,6 +80,7 @@ export function PelanggaranFormPage() {
   const [poinAccumulated, setPoinAccumulated] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalState, setModalState] = useState<{ isOpen: boolean, type: 'success' | 'error', message: string }>({ isOpen: false, type: 'success', message: '' });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const modalRef = useRef<HTMLDivElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +126,7 @@ export function PelanggaranFormPage() {
 
   useEffect(() => {
     // Fetch Kategori Pelanggaran
+    setIsLoadingKategori(true);
     api.get('/api/pelanggaran/kategori').then(res => {
       let filtered = res.data;
       if (user && (user as any).jabatan === 'Pembina Kamar') {
@@ -95,7 +135,7 @@ export function PelanggaranFormPage() {
         filtered = res.data.filter((k: any) => ['sedang', 'berat'].includes(k.kategori?.toLowerCase().trim()));
       }
       setKategoriList(filtered);
-    }).catch(console.error);
+    }).catch(console.error).finally(() => setIsLoadingKategori(false));
 
     // Click outside handler for dropdown
     const handleClickOutside = (event: MouseEvent) => {
@@ -132,10 +172,11 @@ export function PelanggaranFormPage() {
   useEffect(() => {
     if (searchTerm.trim().length >= 2 && (!selectedSantri || searchTerm !== selectedSantri.nama)) {
       const delayDebounceFn = setTimeout(() => {
+        setIsSearchingSantri(true);
         api.get(`/api/santri?q=${encodeURIComponent(searchTerm.trim())}`).then(res => {
           setSearchResults(res.data);
           setShowDropdown(true);
-        }).catch(console.error);
+        }).catch(console.error).finally(() => setIsSearchingSantri(false));
       }, 300);
       return () => clearTimeout(delayDebounceFn);
     } else {
@@ -207,31 +248,37 @@ export function PelanggaranFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldErrors({});
+    const showFormError = (field: string, message: string) => {
+      setFieldErrors({ [field]: message });
+      setModalState({ isOpen: true, type: 'error', message });
+    };
+
     if (!selectedSantri) {
-      setModalState({ isOpen: true, type: 'error', message: 'Pilih santri terlebih dahulu sebelum menyimpan pelanggaran.' });
+      showFormError('santri', 'Pilih santri terlebih dahulu sebelum menyimpan pelanggaran.');
       return;
     }
     if (!kategoriId) {
-      setModalState({ isOpen: true, type: 'error', message: 'Pilih kategori pelanggaran terlebih dahulu.' });
+      showFormError('kategori', 'Pilih kategori pelanggaran terlebih dahulu.');
       return;
     }
     if (!tanggal) {
-      setModalState({ isOpen: true, type: 'error', message: 'Isi tanggal kejadian terlebih dahulu.' });
+      showFormError('tanggal', 'Isi tanggal kejadian terlebih dahulu.');
       return;
     }
 
     if (isCustomKategori) {
       if (!uraianPelanggaranCustom.trim()) {
-        setModalState({ isOpen: true, type: 'error', message: 'Ketik nama / uraian pelanggaran baru secara manual.' });
+        showFormError('uraian', 'Ketik nama atau uraian pelanggaran baru terlebih dahulu.');
         return;
       }
       if (!poin || Number(poin) < 1 || Number(poin) > 100) {
-        setModalState({ isOpen: true, type: 'error', message: 'Jumlah poin pelanggaran manual harus antara 1 dan 100.' });
+        showFormError('poin', 'Jumlah poin pelanggaran manual harus antara 1 dan 100.');
         return;
       }
     } else {
       if (!poin || Number(poin) < 1 || (poinMaks !== null && Number(poin) > poinMaks)) {
-        setModalState({ isOpen: true, type: 'error', message: `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.` });
+        showFormError('poin', `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.`);
         return;
       }
     }
@@ -269,7 +316,7 @@ export function PelanggaranFormPage() {
       setFotoPreview(null);
       if (photoInputRef.current) photoInputRef.current.value = '';
     } catch (err: any) {
-      setModalState({ isOpen: true, type: 'error', message: err.response?.data?.message || err.message || 'Terjadi kesalahan sistem.' });
+      setModalState({ isOpen: true, type: 'error', message: getReadableValidationMessage(err) });
     } finally {
       setIsSubmitting(false);
     }
@@ -288,7 +335,7 @@ export function PelanggaranFormPage() {
               ) : (
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
               )}
-              {modalState.type === 'success' ? 'Berhasil' : 'Peringatan'}
+              {modalState.type === 'success' ? 'Berhasil' : 'Data Belum Lengkap'}
             </h2>
             <p id="violation-modal-message" style={{ margin: '0 0 24px 0', fontSize: '15px', color: '#334155', lineHeight: '1.5' }}>
               {modalState.message}
@@ -320,7 +367,7 @@ export function PelanggaranFormPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="violation-form">
+        <form onSubmit={handleSubmit} noValidate className="violation-form">
           
           {/* Autocomplete Pencarian Santri */}
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
@@ -345,7 +392,8 @@ export function PelanggaranFormPage() {
                   backgroundColor: selectedSantri ? '#F0FDF4' : undefined,
                   fontWeight: selectedSantri ? 600 : undefined
                 }}
-                required
+                aria-invalid={Boolean(fieldErrors.santri)}
+                aria-describedby={fieldErrors.santri ? 'student-search-error' : undefined}
               />
               {selectedSantri && (
                 <div style={{ position: 'absolute', right: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -358,12 +406,14 @@ export function PelanggaranFormPage() {
                 </div>
               )}
             </div>
+            {isSearchingSantri && <small className="field-hint">Sedang mencari santri...</small>}
+            {fieldErrors.santri && <small id="student-search-error" className="field-error" role="alert">{fieldErrors.santri}</small>}
 
             {/* Dropdown Hasil Pencarian */}
             {showDropdown && searchResults.length > 0 && (
               <div id="student-search-results" role="listbox" className="student-search-dropdown">
                 {searchResults.map((s, idx) => (
-                  <button 
+              <button
                     className={`student-search-result ${selectedSantri?.santri_id === s.santri_id ? 'is-selected' : ''}`} 
                     type="button" 
                     role="option" 
@@ -394,7 +444,10 @@ export function PelanggaranFormPage() {
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
               required
+              aria-invalid={Boolean(fieldErrors.tanggal)}
+              aria-describedby={fieldErrors.tanggal ? 'violation-date-error' : undefined}
             />
+            {fieldErrors.tanggal && <small id="violation-date-error" className="field-error" role="alert">{fieldErrors.tanggal}</small>}
           </div>
 
           {/* Combobox Kategori Pelanggaran */}
@@ -408,6 +461,8 @@ export function PelanggaranFormPage() {
               aria-expanded={isKategoriOpen}
               aria-controls="violation-category-menu"
               aria-haspopup="listbox"
+              aria-invalid={Boolean(fieldErrors.kategori)}
+              aria-describedby={fieldErrors.kategori ? 'violation-category-error' : undefined}
               onClick={() => {
                 setIsKategoriOpen(open => !open);
                 setTimeout(() => categorySearchRef.current?.focus(), 0);
@@ -415,7 +470,7 @@ export function PelanggaranFormPage() {
               onKeyDown={handleKategoriKeyDown}
             >
               <span className={selectedKategori || isCustomKategori ? 'category-picker-value' : 'category-picker-placeholder'}>
-                {isCustomKategori
+                {isLoadingKategori ? 'Memuat kategori pelanggaran...' : isCustomKategori
                   ? (uraianPelanggaranCustom ? `[Manual] ${uraianPelanggaranCustom}` : '+ Lainnya / Input Manual (Tidak ada di panduan)')
                   : (selectedKategori ? selectedKategori.uraian_pelanggaran : 'Pilih jenis pelanggaran')}
               </span>
@@ -432,7 +487,8 @@ export function PelanggaranFormPage() {
                 </span>
               )}
               <span className="category-picker-chevron" aria-hidden="true">⌄</span>
-            </button>
+              </button>
+            {fieldErrors.kategori && <small id="violation-category-error" className="field-error" role="alert">{fieldErrors.kategori}</small>}
 
             {isKategoriOpen && (
               <div id="violation-category-menu" className="category-picker-menu" role="listbox" aria-label="Pilihan jenis pelanggaran">
@@ -520,7 +576,10 @@ export function PelanggaranFormPage() {
                   onChange={(e) => setUraianPelanggaranCustom(e.target.value)}
                   placeholder="Ketik nama pelanggaran (mis. Menggunakan HP di luar jadwal)..."
                   required
+                  aria-invalid={Boolean(fieldErrors.uraian)}
+                  aria-describedby={fieldErrors.uraian ? 'custom-uraian-error' : undefined}
                 />
+                {fieldErrors.uraian && <small id="custom-uraian-error" className="field-error" role="alert">{fieldErrors.uraian}</small>}
               </div>
 
               <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
@@ -556,9 +615,11 @@ export function PelanggaranFormPage() {
               onChange={(e) => setPoin(e.target.value)}
               placeholder={poinMaks !== null ? `Masukkan 1 - ${poinMaks}` : 'Pilih kategori terlebih dahulu'}
               disabled={poinMaks === null}
-              required
+              aria-invalid={Boolean(fieldErrors.poin)}
+              aria-describedby={fieldErrors.poin ? 'violation-points-error' : undefined}
             />
             {poinMaks !== null && <small className="field-hint">Masukkan poin aktual, maksimal sesuai poin kategori yang dipilih.</small>}
+            {fieldErrors.poin && <small id="violation-points-error" className="field-error" role="alert">{fieldErrors.poin}</small>}
           </div>
 
           {/* Custom File Dropzone & Camera Input with Real-time Preview */}

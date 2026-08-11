@@ -294,6 +294,7 @@ body {
 
 .empty-state { background: var(--kertas-kartu); border: 1px solid var(--garis); }
 .error-box { background: #FCEBE8; border: 1px solid #E8B8B0; color: #7C2D23; }
+.field-error { display: block; margin-top: 6px; color: #A1372D; font-size: 12px; font-weight: 600; line-height: 1.45; }
 .warning-box, .offline-banner { background: #FFF5DF; border: 1px solid #E5CA91; color: #725016; }
 .sync-banner { margin: 8px 16px; background: #EAF2FF; border: 1px solid #AFC8EE; color: #285487; }
 .success-box { background: #E7F4EF; border: 1px solid #91CBB5; color: #245C48; }

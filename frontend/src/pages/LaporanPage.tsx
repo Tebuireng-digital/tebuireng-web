@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { AppDropdown } from '../components/AppDropdown';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 export function LaporanPage() {
@@ -42,19 +43,19 @@ export function LaporanPage() {
       <div style={{ backgroundColor: 'var(--kertas-kartu)', border: '1px solid var(--garis)', borderRadius: '8px', padding: '24px' }}>
         
         <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px' }}>
-          <label className="ui-text-label" style={{ marginBottom: '8px' }}>Jenis Laporan</label>
-          <select 
-            className="ui-text-body"
-            style={{ padding: '12px', border: '1px solid var(--garis)', borderRadius: '4px', backgroundColor: 'var(--kertas)' }}
+          <AppDropdown
+            id="laporan-type"
+            label="Jenis Laporan"
             value={laporanType}
-            onChange={(e) => setLaporanType(e.target.value)}
-          >
-            <option value="kehadiran">Rekap Kehadiran Harian</option>
-            <option value="pelanggaran">Rekap Pelanggaran</option>
-            <option value="perizinan">Rekap Perizinan</option>
-            <option value="bulanan">Rekap Gabungan Bulanan</option>
-            <option value="organisasi-daerah">Rekap Santri per Organisasi Daerah</option>
-          </select>
+            onChange={setLaporanType}
+            options={[
+              { value: 'kehadiran', label: 'Rekap Kehadiran Harian' },
+              { value: 'pelanggaran', label: 'Rekap Pelanggaran' },
+              { value: 'perizinan', label: 'Rekap Perizinan' },
+              { value: 'bulanan', label: 'Rekap Gabungan Bulanan' },
+              { value: 'organisasi-daerah', label: 'Rekap Santri per Organisasi Daerah' },
+            ]}
+          />
         </div>
 
         <div style={{ display: 'flex', gap: '16px' }}>

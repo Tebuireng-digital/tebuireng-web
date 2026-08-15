@@ -378,7 +378,7 @@ export function PelanggaranFormPage() {
         <form onSubmit={handleSubmit} noValidate className="violation-form">
           
           {/* Autocomplete Pencarian Santri */}
-          <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
+          <div className="student-search-field" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
             <label htmlFor="student-search">Cari Santri (Nama / NIS)</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input 

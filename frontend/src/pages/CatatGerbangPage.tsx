@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -29,6 +30,15 @@ type GateCorrection = {
   masukAwal: string;
   jadwalKeluar: string;
   jadwalMasuk: string;
+};
+
+type PaginationItem = number | 'ellipsis';
+
+const getPaginationItems = (current: number, total: number): PaginationItem[] => {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, 6, 'ellipsis', total];
+  if (current >= total - 3) return [1, 'ellipsis', total - 5, total - 4, total - 3, total - 2, total - 1, total];
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
 };
 
 const jakartaDateTime = (date = new Date()) => {
@@ -80,49 +90,31 @@ function DateTimeWibField({ id, label, value, min, onChange, required = true }: 
 function PaginationControls({
   currentPage,
   totalPages,
-  totalItems,
-  pageSize = 10,
   onPageChange
 }: {
   currentPage: number;
   totalPages: number;
-  totalItems: number;
-  pageSize?: number;
   onPageChange: (page: number) => void;
 }) {
   if (totalPages <= 1) return null;
 
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
-
   return (
-    <div className="pagination-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, paddingTop: 14, borderTop: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 12 }}>
-      <div style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>
-        Menampilkan {startItem}–{endItem} dari {totalItems} data
+    <div className="pagination-controls">
+      <button type="button" className="secondary-button" disabled={currentPage <= 1} onClick={() => onPageChange(Math.max(1, currentPage - 1))}>
+        ← Sebelumnya
+      </button>
+      <div className="pagination-pages" aria-label="Pilih halaman catatan gerbang">
+        {getPaginationItems(currentPage, totalPages).map((item, index) => item === 'ellipsis' ? (
+          <span className="pagination-ellipsis" key={`ellipsis-${index}`} aria-hidden="true">…</span>
+        ) : (
+          <button type="button" className={`pagination-page${currentPage === item ? ' active' : ''}`} aria-label={`Halaman ${item}`} aria-current={currentPage === item ? 'page' : undefined} onClick={() => onPageChange(item)} key={item}>
+            {item}
+          </button>
+        ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={currentPage <= 1}
-          onClick={() => onPageChange(currentPage - 1)}
-          style={{ padding: '6px 12px', fontSize: 12, minHeight: 32 }}
-        >
-          &laquo; Sblm
-        </button>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', padding: '0 8px' }}>
-          Halaman {currentPage} dari {totalPages}
-        </span>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={currentPage >= totalPages}
-          onClick={() => onPageChange(currentPage + 1)}
-          style={{ padding: '6px 12px', fontSize: 12, minHeight: 32 }}
-        >
-          Slnjt &raquo;
-        </button>
-      </div>
+      <button type="button" className="secondary-button" disabled={currentPage >= totalPages} onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}>
+        Berikutnya →
+      </button>
     </div>
   );
 }
@@ -459,7 +451,15 @@ export function CatatGerbangPage() {
           </div>
 
           <div className="form-grid">
-            <div><label htmlFor="jenis-izin">Jenis izin</label><select id="jenis-izin" value={jenisId} onChange={event => setJenisId(event.target.value)} required={isFormOpen}>{jenisList.map(jenis => <option key={jenis.jenis_izin_id} value={jenis.jenis_izin_id}>{jenis.nama}</option>)}</select></div>
+            <AppDropdown
+              id="jenis-izin"
+              label="Jenis izin"
+              value={jenisId}
+              onChange={setJenisId}
+              required={isFormOpen}
+              placeholder="Pilih jenis izin"
+              options={jenisList.map(jenis => ({ value: String(jenis.jenis_izin_id), label: jenis.nama }))}
+            />
             <div><label htmlFor="keperluan-izin">Keperluan</label><input id="keperluan-izin" value={keperluan} onChange={event => setKeperluan(event.target.value)} required={isFormOpen} maxLength={255} placeholder="Alasan izin / keperluan" /></div>
             <DateTimeWibField id="mulai-izin" label="Mulai izin" value={tanggalMulai} onChange={setTanggalMulai} required={isFormOpen} />
             <DateTimeWibField id="rencana-kembali" label="Rencana kembali" value={rencanaKembali} min={tanggalMulai} onChange={setRencanaKembali} required={isFormOpen} />
@@ -532,8 +532,6 @@ export function CatatGerbangPage() {
               <PaginationControls
                 currentPage={activePage}
                 totalPages={activeTotalPages}
-                totalItems={activeList.length}
-                pageSize={ITEMS_PER_PAGE}
                 onPageChange={setActivePage}
               />
             </>
@@ -646,8 +644,6 @@ export function CatatGerbangPage() {
           <PaginationControls
             currentPage={inactivePage}
             totalPages={inactiveTotalPages}
-            totalItems={filteredInactiveList.length}
-            pageSize={ITEMS_PER_PAGE}
             onPageChange={setInactivePage}
           />
         </section>

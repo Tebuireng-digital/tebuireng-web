@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -747,32 +748,22 @@ export function DataMasterPage() {
                 placeholder="Cari Nama, NIS, Nama Wali, Kamar..."
               />
             </div>
-            <div>
-              <label htmlFor="santri-unit">Unit Pendidikan</label>
-              <select
-                id="santri-unit"
-                value={santriUnitFilter}
-                onChange={e => setSantriUnitFilter(e.target.value)}
-              >
-                <option value="">Semua Unit</option>
-                {unitOptions.map(u => (
-                  <option key={u.unit_id} value={u.unit_id}>{u.kode} - {u.nama}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="santri-kamar">Filter Kamar</label>
-              <select
-                id="santri-kamar"
-                value={santriKamarFilter}
-                onChange={e => setSantriKamarFilter(e.target.value)}
-              >
-                <option value="">Semua Kamar</option>
-                {kamar.map(k => (
-                  <option key={k.kamar_id} value={k.kamar_id}>{k.nama}</option>
-                ))}
-              </select>
-            </div>
+            <AppDropdown
+              id="santri-unit"
+              label="Unit Pendidikan"
+              value={santriUnitFilter}
+              onChange={setSantriUnitFilter}
+              placeholder="Semua Unit"
+              options={[{ value: '', label: 'Semua Unit' }, ...unitOptions.map(u => ({ value: String(u.unit_id), label: `${u.kode} - ${u.nama}` }))]}
+            />
+            <AppDropdown
+              id="santri-kamar"
+              label="Filter Kamar"
+              value={santriKamarFilter}
+              onChange={setSantriKamarFilter}
+              placeholder="Semua Kamar"
+              options={[{ value: '', label: 'Semua Kamar' }, ...kamar.map(k => ({ value: String(k.kamar_id), label: k.nama }))]}
+            />
           </div>
 
           <p className="account-result-count">
@@ -1273,26 +1264,34 @@ export function DataMasterPage() {
                 placeholder="Cari nama sumber, kandidat master, atau kamar..."
               />
             </div>
-            <div>
-              <label htmlFor="review-status">Status</label>
-              <select id="review-status" value={reviewStatusFilter} onChange={e => setReviewStatusFilter(e.target.value)}>
-                <option value="">Semua Status</option>
-                <option value="perlu_tinjau">Perlu Tinjau</option>
-                <option value="perlu_mapping_kamar">Perlu Mapping Kamar</option>
-                <option value="digabung">Digabung</option>
-                <option value="terpisah">Terpisah</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="review-sheet">Sumber File/Sheet</label>
-              <select id="review-sheet" value={reviewSheetFilter} onChange={e => setReviewSheetFilter(e.target.value)}>
-                <option value="">Semua Sumber</option>
-                <option value="Database Siswa">Database Siswa</option>
-                <option value="Database Siswa Madin">Database Siswa Madin</option>
-                <option value="Database Al-Qur'an">Database Al-Qur'an</option>
-                <option value="Database Takhassus">Database Takhassus</option>
-              </select>
-            </div>
+            <AppDropdown
+              id="review-status"
+              label="Status"
+              value={reviewStatusFilter}
+              onChange={setReviewStatusFilter}
+              placeholder="Semua Status"
+              options={[
+                { value: '', label: 'Semua Status' },
+                { value: 'perlu_tinjau', label: 'Perlu Tinjau' },
+                { value: 'perlu_mapping_kamar', label: 'Perlu Mapping Kamar' },
+                { value: 'digabung', label: 'Digabung' },
+                { value: 'terpisah', label: 'Terpisah' },
+              ]}
+            />
+            <AppDropdown
+              id="review-sheet"
+              label="Sumber File/Sheet"
+              value={reviewSheetFilter}
+              onChange={setReviewSheetFilter}
+              placeholder="Semua Sumber"
+              options={[
+                { value: '', label: 'Semua Sumber' },
+                { value: 'Database Siswa', label: 'Database Siswa' },
+                { value: 'Database Siswa Madin', label: 'Database Siswa Madin' },
+                { value: "Database Al-Qur'an", label: "Database Al-Qur'an" },
+                { value: 'Database Takhassus', label: 'Database Takhassus' },
+              ]}
+            />
           </div>
 
           <p className="account-result-count">
@@ -1618,9 +1617,9 @@ export function DataMasterPage() {
         <h2>Akun petugas</h2>
         <div className="account-table-controls">
           <div className="account-search-control"><label htmlFor="account-search">Cari akun</label><input id="account-search" value={accountSearch} onChange={event => setAccountSearch(event.target.value)} placeholder="Nama, username, kelas..." /></div>
-          <div><label htmlFor="account-role">Jabatan</label><select id="account-role" value={accountRole} onChange={event => setAccountRole(event.target.value)}><option value="">Semua jabatan</option>{accountRoles.map(role => <option key={role} value={role}>{role}</option>)}</select></div>
-          <div><label htmlFor="account-assignment">Penugasan</label><select id="account-assignment" value={accountAssignment} onChange={event => setAccountAssignment(event.target.value)}><option value="">Semua</option><option value="ditugaskan">Ada penugasan</option><option value="belum">Belum ditugaskan</option></select></div>
-          <div><label htmlFor="account-status">Status akun</label><select id="account-status" value={accountStatus} onChange={event => setAccountStatus(event.target.value)}><option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+          <AppDropdown id="account-role" label="Jabatan" value={accountRole} onChange={setAccountRole} placeholder="Semua jabatan" options={[{ value: '', label: 'Semua jabatan' }, ...accountRoles.map(role => ({ value: role, label: role }))]} />
+          <AppDropdown id="account-assignment" label="Penugasan" value={accountAssignment} onChange={setAccountAssignment} placeholder="Semua" options={[{ value: '', label: 'Semua' }, { value: 'ditugaskan', label: 'Ada penugasan' }, { value: 'belum', label: 'Belum ditugaskan' }]} />
+          <AppDropdown id="account-status" label="Status akun" value={accountStatus} onChange={setAccountStatus} placeholder="Semua status" options={[{ value: '', label: 'Semua status' }, { value: 'aktif', label: 'Aktif' }, { value: 'nonaktif', label: 'Nonaktif' }]} />
         </div>
         <p className="account-result-count">Menampilkan {visibleAccounts.length} dari {petugas.length} akun.</p>
         <div className="table-scroll"><table className="master-table account-table"><thead><tr><th><button className="table-sort-button" onClick={() => toggleAccountSort('nama')}>Nama{accountSortIndicator('nama')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('username')}>Username{accountSortIndicator('username')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('jabatan')}>Jabatan{accountSortIndicator('jabatan')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('tanggung_jawab_absensi')}>Tanggung Jawab Absensi{accountSortIndicator('tanggung_jawab_absensi')}</button></th><th>Aksi</th></tr></thead><tbody>{visibleAccounts.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td>{item.tanggung_jawab_absensi || '-'}</td><td><button className="danger-button" onClick={() => void resetPassword(item.petugas_id)}>Reset password</button></td></tr>)}</tbody></table>{visibleAccounts.length === 0 && <div className="empty-state">Tidak ada akun yang sesuai dengan filter.</div>}</div>
@@ -1661,23 +1660,8 @@ export function DataMasterPage() {
                 placeholder="Cari nama, No ID, orang tua..."
               />
             </div>
-            <div>
-              <label htmlFor="alumni-jenjang">Jenjang</label>
-              <select id="alumni-jenjang" value={alumniJenjangFilter} onChange={e => setAlumniJenjangFilter(e.target.value)}>
-                <option value="">Semua Jenjang</option>
-                {alumniStats.by_jenjang.map(j => (
-                  <option key={j.jenjang} value={j.jenjang}>{j.jenjang} ({j.jumlah.toLocaleString('id')})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="alumni-jk">L/P</label>
-              <select id="alumni-jk" value={alumniJkFilter} onChange={e => setAlumniJkFilter(e.target.value)}>
-                <option value="">Semua</option>
-                <option value="L">Laki-laki</option>
-                <option value="P">Perempuan</option>
-              </select>
-            </div>
+            <AppDropdown id="alumni-jenjang" label="Jenjang" value={alumniJenjangFilter} onChange={setAlumniJenjangFilter} placeholder="Semua Jenjang" options={[{ value: '', label: 'Semua Jenjang' }, ...alumniStats.by_jenjang.map(j => ({ value: j.jenjang, label: `${j.jenjang} (${j.jumlah.toLocaleString('id')})` }))]} />
+            <AppDropdown id="alumni-jk" label="L/P" value={alumniJkFilter} onChange={setAlumniJkFilter} placeholder="Semua" options={[{ value: '', label: 'Semua' }, { value: 'L', label: 'Laki-laki' }, { value: 'P', label: 'Perempuan' }]} />
           </div>
 
           <p className="account-result-count">
@@ -1949,10 +1933,22 @@ export function DataMasterPage() {
               </div>
 
               {totalSantriPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
-                  <button className="secondary-button" disabled={santriPage <= 1} onClick={() => setSantriPage(p => p - 1)}>Sebelumnya</button>
-                  <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px' }}>Halaman {santriPage} dari {totalSantriPages}</span>
-                  <button className="secondary-button" disabled={santriPage >= totalSantriPages} onClick={() => setSantriPage(p => p + 1)}>Berikutnya</button>
+                <div className="pagination-controls">
+                  <button type="button" className="secondary-button" disabled={santriPage <= 1} onClick={() => setSantriPage(p => Math.max(1, p - 1))}>
+                    ← Sebelumnya
+                  </button>
+                  <div className="pagination-pages" aria-label="Pilih halaman pemetaan ORDA">
+                    {getPaginationItems(santriPage, totalSantriPages).map((item, index) => item === 'ellipsis' ? (
+                      <span className="pagination-ellipsis" key={`mapping-ellipsis-${index}`} aria-hidden="true">…</span>
+                    ) : (
+                      <button type="button" className={`pagination-page${santriPage === item ? ' active' : ''}`} aria-label={`Halaman ${item}`} aria-current={santriPage === item ? 'page' : undefined} onClick={() => setSantriPage(item)} key={item}>
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="secondary-button" disabled={santriPage >= totalSantriPages} onClick={() => setSantriPage(p => Math.min(totalSantriPages, p + 1))}>
+                    Berikutnya →
+                  </button>
                 </div>
               )}
             </div>

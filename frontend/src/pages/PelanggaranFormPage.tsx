@@ -395,25 +395,28 @@ export function PelanggaranFormPage() {
                   if (selectedSantri) setSelectedSantri(null);
                 }}
                 style={{
-                  paddingRight: selectedSantri ? '140px' : '36px',
+                  paddingRight: '44px',
                   borderColor: selectedSantri ? '#10B981' : undefined,
                   backgroundColor: selectedSantri ? '#F0FDF4' : undefined,
-                  fontWeight: selectedSantri ? 600 : undefined
+                  fontWeight: selectedSantri ? 600 : undefined,
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
                 }}
                 aria-invalid={Boolean(fieldErrors.santri)}
                 aria-describedby={fieldErrors.santri ? 'student-search-error' : undefined}
               />
               {selectedSantri && (
-                <div style={{ position: 'absolute', right: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#047857', backgroundColor: '#D1FAE5', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                    {selectedSantri.nama_kamar || selectedSantri.nama_unit || 'Terpilih'}
-                  </span>
-                  <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih" style={{ position: 'static' }}>
-                    X
-                  </button>
-                </div>
+                <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih" style={{ position: 'absolute', right: '8px' }}>
+                  X
+                </button>
               )}
             </div>
+            {selectedSantri && (
+              <small className="selected-student-school">
+                Asal sekolah: {selectedSantri.nama_unit || 'Belum tercatat'}
+              </small>
+            )}
             {isSearchingSantri && <small className="field-hint">Sedang mencari santri...</small>}
             {fieldErrors.santri && <small id="student-search-error" className="field-error" role="alert">{fieldErrors.santri}</small>}
 
@@ -639,8 +642,16 @@ export function PelanggaranFormPage() {
                   <img src={fotoPreview} alt="Bukti Foto Pelanggaran" className="photo-preview-img" />
                   <div className="photo-preview-actions">
                     <span className="photo-filename">{foto?.name}</span>
-                    <button type="button" onClick={handleRemoveFoto} className="btn-remove-photo">
-                      Hapus / Ganti Foto
+                    <button
+                      type="button"
+                      onClick={handleRemoveFoto}
+                      className="btn-remove-photo"
+                      aria-label="Hapus atau ganti foto"
+                      title="Hapus atau ganti foto"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                      </svg>
                     </button>
                   </div>
                 </div>

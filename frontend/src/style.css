@@ -1567,6 +1567,14 @@ html {
   border-color: var(--aksen) !important;
   box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.14) !important;
 }
+.selected-student-school {
+  display: block;
+  margin-top: -2px;
+  color: var(--aksen-gelap);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
 
 /* Category Picker Combobox */
 .category-picker-field { position: relative; display: flex; flex-direction: column; }
@@ -1834,20 +1842,32 @@ html {
 }
 
 .btn-remove-photo {
-  padding: 6px 14px;
-  border: 1px solid #FCA5A5;
-  border-radius: 8px;
-  background: #FEF2F2;
-  color: #991B1B;
-  font-size: 12px;
-  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: #B42318;
   cursor: pointer;
-  transition: all .16s ease;
+  transition: color .16s ease, transform .16s ease;
+}
+
+.btn-remove-photo svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .btn-remove-photo:hover {
-  background: #FEE2E2;
-  border-color: #EF4444;
+  background: transparent;
+  color: #8F1D14;
+  transform: scale(1.08);
 }
 
 .btn-clear-input {

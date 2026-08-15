@@ -660,7 +660,6 @@ export function PelanggaranFormPage() {
                     id="violation-photo"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    capture="environment"
                     onChange={handleFotoChange}
                     ref={photoInputRef}
                     className="photo-input-hidden"

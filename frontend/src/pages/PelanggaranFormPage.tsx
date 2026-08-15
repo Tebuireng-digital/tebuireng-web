@@ -300,9 +300,14 @@ export function PelanggaranFormPage() {
 
       await api.post('/api/pelanggaran', formData);
 
-      // 3. Fetch Accumulation
-      const resPoin = await api.get(`/api/santri/${selectedSantri.santri_id}/poin`);
-      setPoinAccumulated(resPoin.data.total_poin);
+      // Fetching the refreshed total is secondary to the successful save.
+      try {
+        const resPoin = await api.get(`/api/santri/${selectedSantri.santri_id}/poin`);
+        setPoinAccumulated(resPoin.data.total_poin);
+      } catch (poinError) {
+        console.warn('Pelanggaran tersimpan, tetapi total poin belum dapat dimuat.', poinError);
+        setPoinAccumulated(null);
+      }
       
       setModalState({ isOpen: true, type: 'success', message: 'Berhasil menyimpan pelanggaran!' });
       

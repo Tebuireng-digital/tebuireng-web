@@ -76,12 +76,19 @@ function Layout() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
-    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+    const updateViewport = () => {
+      setIsMobileViewport(mediaQuery.matches);
+      if (mediaQuery.matches) setIsMobileMenuOpen(false);
+    };
 
     updateViewport();
     mediaQuery.addEventListener('change', updateViewport);
     return () => mediaQuery.removeEventListener('change', updateViewport);
   }, []);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleScrollHide = () => {

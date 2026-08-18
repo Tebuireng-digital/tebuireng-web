@@ -80,6 +80,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/raport-pengajian/{santriId}', [\App\Http\Controllers\RaportPengajianController::class, 'show']);
     Route::get('/raport-pengajian/{santriId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdf']);
 
+    // Ubudiyah Yaumiyah
+    Route::get('/ubudiyah/options', [\App\Http\Controllers\UbudiyahController::class, 'options']);
+    Route::get('/ubudiyah/session', [\App\Http\Controllers\UbudiyahController::class, 'session']);
+    Route::post('/ubudiyah/bulk', [\App\Http\Controllers\UbudiyahController::class, 'bulkUpsert'])->middleware('role:Admin,Pembina Kamar');
+    Route::get('/ubudiyah/rekap-semester', [\App\Http\Controllers\UbudiyahController::class, 'rekapSemester'])->middleware('role:Admin,Pengasuh');
+    Route::get('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterIndex']);
+    Route::post('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterStore'])->middleware('role:Admin,Pembina Kamar');
+    Route::patch('/ubudiyah/master/{id}/toggle', [\App\Http\Controllers\UbudiyahController::class, 'masterToggle'])->middleware('role:Admin,Pembina Kamar');
+    Route::get('/ubudiyah/{santriId}', [\App\Http\Controllers\UbudiyahController::class, 'show']);
+    Route::get('/ubudiyah/{santriId}/pdf', [\App\Http\Controllers\UbudiyahController::class, 'downloadPdf']);
+    Route::get('/ubudiyah/kamar/{kamarId}/pdf', [\App\Http\Controllers\UbudiyahController::class, 'downloadPdfBulk'])->middleware('role:Admin,Pembina Kamar');
+
     // Alumni
     Route::get('/master/alumni', [\App\Http\Controllers\AlumniController::class, 'index'])->middleware('role:Admin');
     Route::get('/master/alumni/stats', [\App\Http\Controllers\AlumniController::class, 'stats'])->middleware('role:Admin');

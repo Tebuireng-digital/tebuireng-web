@@ -19,8 +19,11 @@ const GantiPasswordPage = lazy(() => import('./pages/GantiPasswordPage').then(mo
 const RekapKelasPage = lazy(() => import('./pages/RekapKelasPage').then(module => ({ default: module.RekapKelasPage })));
 const RaportInputPage = lazy(() => import('./pages/RaportInputPage').then(module => ({ default: module.RaportInputPage })));
 const RaportViewPage = lazy(() => import('./pages/RaportViewPage').then(module => ({ default: module.RaportViewPage })));
+const UbudiyahFormPage = lazy(() => import('./pages/UbudiyahFormPage').then(module => ({ default: module.UbudiyahFormPage })));
+const UbudiyahViewPage = lazy(() => import('./pages/UbudiyahViewPage').then(module => ({ default: module.UbudiyahViewPage })));
+const UbudiyahMasterPage = lazy(() => import('./pages/UbudiyahMasterPage').then(module => ({ default: module.UbudiyahMasterPage })));
 
-type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'verify' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport';
+type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'verify' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport' | 'ubudiyah';
 
 interface OpsiAbsensiItem {
   jenis: string;
@@ -59,6 +62,7 @@ function NavIcon({ name }: { name: IconName }) {
     logout: <><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></>,
     more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
     raport: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
+    ubudiyah: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
   };
   return <svg className="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -112,6 +116,7 @@ function Layout() {
   const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(() => location.pathname.startsWith('/data-master'));
   const [isRaportMenuOpen, setIsRaportMenuOpen] = useState(true);
   const [isVerificationMenuOpen, setIsVerificationMenuOpen] = useState(() => location.pathname.startsWith('/verifikasi-data'));
+  const [isUbudiyahMenuOpen, setIsUbudiyahMenuOpen] = useState(() => location.pathname.startsWith('/ubudiyah'));
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -205,6 +210,7 @@ function Layout() {
         setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -217,6 +223,7 @@ function Layout() {
         setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -229,6 +236,7 @@ function Layout() {
         setIsPelanggaranMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -242,6 +250,7 @@ function Layout() {
         setIsPerizinanMenuOpen(false);
         setIsRaportMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -255,6 +264,7 @@ function Layout() {
         setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -267,6 +277,21 @@ function Layout() {
         setIsPelanggaranMenuOpen(false);
         setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
+      }
+      return next;
+    });
+  };
+  const toggleUbudiyahMenu = () => {
+    setIsUbudiyahMenuOpen(open => {
+      const next = !open;
+      if (next) {
+        setIsAbsensiMenuOpen(false);
+        setIsPelanggaranMenuOpen(false);
+        setIsPerizinanMenuOpen(false);
+        setIsMasterMenuOpen(false);
+        setIsRaportMenuOpen(false);
+        setIsVerificationMenuOpen(false);
       }
       return next;
     });
@@ -479,6 +504,53 @@ function Layout() {
             </div>
           )}
 
+          {/* KELOMPOK MENU UBUDIYAH (COLLAPSIBLE) */}
+          {['Admin', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+            <div className="sidebar-master-menu">
+              <button
+                type="button"
+                aria-label="Buka atau tutup menu Ubudiyah"
+                aria-expanded={isUbudiyahMenuOpen}
+                aria-controls="ubudiyah-subnav"
+                className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/ubudiyah') ? 'active' : ''}`}
+                onClick={toggleUbudiyahMenu}
+              >
+                <span className="nav-label"><NavIcon name="ubudiyah"/><span>Menu Ubudiyah</span></span>
+                <span aria-hidden="true">{isUbudiyahMenuOpen ? '⌃' : '⌄'}</span>
+              </button>
+              <div id="ubudiyah-subnav" className={`sidebar-subnav ${isUbudiyahMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isUbudiyahMenuOpen}>
+                  {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+                    <Link
+                      to="/ubudiyah/input"
+                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/input' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/ubudiyah/input' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Input Ubudiyah
+                    </Link>
+                  )}
+                  <Link
+                    to="/ubudiyah/lihat"
+                    className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/lihat' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/ubudiyah/lihat' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Lihat Ubudiyah
+                  </Link>
+                  {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+                    <Link
+                      to="/ubudiyah/master"
+                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/master' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/ubudiyah/master' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Master Kriteria
+                    </Link>
+                  )}
+              </div>
+            </div>
+          )}
+
           {user.jabatan === 'Admin' && (
             <div className="sidebar-master-menu">
               <button type="button" aria-label="Buka atau tutup Verifikasi Data" aria-expanded={isVerificationMenuOpen} aria-controls="verification-subnav" className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/verifikasi-data') ? 'active' : ''}`} onClick={toggleVerificationMenu}>
@@ -567,6 +639,22 @@ function Layout() {
                 : <Navigate to="/dashboard" />
             } />
             <Route path="/raport/lihat" element={<RaportViewPage />} />
+
+            <Route path="/ubudiyah/input" element={
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
+                ? <UbudiyahFormPage />
+                : <Navigate to="/dashboard" />
+            } />
+            <Route path="/ubudiyah/lihat" element={
+              ['Admin', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan)
+                ? <UbudiyahViewPage />
+                : <Navigate to="/dashboard" />
+            } />
+            <Route path="/ubudiyah/master" element={
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
+                ? <UbudiyahMasterPage />
+                : <Navigate to="/dashboard" />
+            } />
 
             <Route path="/data-master" element={
               user.jabatan === 'Admin'

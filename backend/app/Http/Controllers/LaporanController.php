@@ -21,7 +21,14 @@ class LaporanController extends Controller
             $query->where('santri_id', $santriId);
         }
         
-        if ($periode) {
+        if ($request->filled('dari')) {
+            $query->whereDate('tanggal', '>=', $request->query('dari'));
+        }
+        if ($request->filled('sampai')) {
+            $query->whereDate('tanggal', '<=', $request->query('sampai'));
+        }
+        
+        if ($periode && !$request->filled('dari') && !$request->filled('sampai')) {
             $query->where('tanggal', 'like', $periode . '%');
         }
 
@@ -32,7 +39,14 @@ class LaporanController extends Controller
         }
         
         if ($request->query('format') === 'pdf') {
-            $pdf = Pdf::loadView('exports.laporan', ['data' => $data, 'judul' => 'Laporan Kehadiran']);
+            $pdf = Pdf::loadView('exports.laporan', [
+                'data' => $data, 
+                'judul' => 'Laporan Kehadiran',
+                'dari' => $request->query('dari'),
+                'sampai' => $request->query('sampai'),
+                'bulan' => null,
+                'tahun' => null
+            ]);
             return $pdf->download('laporan-kehadiran.pdf');
         }
 
@@ -45,11 +59,11 @@ class LaporanController extends Controller
             ->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id')
             ->join('kategori_pelanggaran', 'pelanggaran.kategori_pelanggaran_id', '=', 'kategori_pelanggaran.kategori_pelanggaran_id')
             ->select(
-                'pelanggaran.*',
-                'santri.nama',
+                'pelanggaran.tanggal',
+                'santri.nama as nama_santri',
                 'kategori_pelanggaran.uraian_pelanggaran',
                 'kategori_pelanggaran.kategori',
-                'kategori_pelanggaran.poin_maks'
+                'pelanggaran.poin'
             );
 
         if ($request->filled('dari')) {
@@ -66,7 +80,14 @@ class LaporanController extends Controller
         }
         
         if ($request->query('format') === 'pdf') {
-            $pdf = Pdf::loadView('exports.laporan', ['data' => $data, 'judul' => 'Laporan Pelanggaran']);
+            $pdf = Pdf::loadView('exports.laporan', [
+                'data' => $data, 
+                'judul' => 'Laporan Pelanggaran',
+                'dari' => $request->query('dari'),
+                'sampai' => $request->query('sampai'),
+                'bulan' => null,
+                'tahun' => null
+            ]);
             return $pdf->download('laporan-pelanggaran.pdf');
         }
 
@@ -75,10 +96,22 @@ class LaporanController extends Controller
     
     public function perizinan(Request $request)
     {
-        // Simple query for now
         $query = DB::table('perizinan')
             ->join('santri', 'perizinan.santri_id', '=', 'santri.santri_id')
-            ->select('perizinan.*', 'santri.nama');
+            ->select(
+                'perizinan.tanggal_mulai',
+                'perizinan.tanggal_kembali',
+                'santri.nama as nama_santri',
+                'perizinan.alasan',
+                'perizinan.status'
+            );
+
+        if ($request->filled('dari')) {
+            $query->whereDate('perizinan.tanggal_mulai', '>=', $request->query('dari'));
+        }
+        if ($request->filled('sampai')) {
+            $query->whereDate('perizinan.tanggal_mulai', '<=', $request->query('sampai'));
+        }
             
         $data = $query->get();
 
@@ -87,7 +120,14 @@ class LaporanController extends Controller
         }
         
         if ($request->query('format') === 'pdf') {
-            $pdf = Pdf::loadView('exports.laporan', ['data' => $data, 'judul' => 'Laporan Perizinan']);
+            $pdf = Pdf::loadView('exports.laporan', [
+                'data' => $data, 
+                'judul' => 'Laporan Perizinan',
+                'dari' => $request->query('dari'),
+                'sampai' => $request->query('sampai'),
+                'bulan' => null,
+                'tahun' => null
+            ]);
             return $pdf->download('laporan-perizinan.pdf');
         }
 
@@ -119,31 +159,30 @@ class LaporanController extends Controller
         $data = $query
             ->select(
                 'jenis_kegiatan.kode as jenis_kegiatan',
+                'jenis_kegiatan.nama as nama_kegiatan',
                 DB::raw("SUM(CASE WHEN absensi.status = 'Hadir' THEN 1 ELSE 0 END) as total_hadir"),
                 DB::raw("SUM(CASE WHEN absensi.status = 'Izin' THEN 1 ELSE 0 END) as total_izin"),
                 DB::raw("SUM(CASE WHEN absensi.status = 'Sakit' THEN 1 ELSE 0 END) as total_sakit"),
                 DB::raw("SUM(CASE WHEN absensi.status = 'Alpha' THEN 1 ELSE 0 END) as total_alpha"),
                 DB::raw("SUM(CASE WHEN absensi.status = 'Terlambat' THEN 1 ELSE 0 END) as total_terlambat")
             )
-            ->groupBy('jenis_kegiatan.kode')
+            ->groupBy('jenis_kegiatan.kode', 'jenis_kegiatan.nama')
             ->orderBy('jenis_kegiatan.kode')
-            ->get()
-            ->map(function ($row) use ($bulan, $tahun) {
-                foreach (['total_hadir', 'total_izin', 'total_sakit', 'total_alpha', 'total_terlambat'] as $field) {
-                    $row->{$field} = (int) $row->{$field};
-                }
-                $row->bulan = $bulan;
-                $row->tahun = $tahun;
-
-                return $row;
-            });
+            ->get();
         
         if ($request->query('format') === 'xlsx') {
             return Excel::download(new LaporanExport($data), 'laporan-bulanan.xlsx');
         }
         
         if ($request->query('format') === 'pdf') {
-            $pdf = Pdf::loadView('exports.laporan', ['data' => $data, 'judul' => 'Laporan Bulanan']);
+            $pdf = Pdf::loadView('exports.laporan', [
+                'data' => $data, 
+                'judul' => 'Laporan Bulanan',
+                'dari' => null,
+                'sampai' => null,
+                'bulan' => $bulan,
+                'tahun' => $tahun
+            ]);
             return $pdf->download('laporan-bulanan.pdf');
         }
 

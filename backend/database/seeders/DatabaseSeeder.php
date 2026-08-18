@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(PetugasSeeder::class);
         $this->call(OrganisasiDaerahSeeder::class);
+        $this->call(UbudiyahSeeder::class);
 
         DB::table('unit_pendidikan')->insert([
             ['kode' => 'MTS', 'nama' => 'MTs Salafiyah Syafi\'iyah'],

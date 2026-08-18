@@ -3142,3 +3142,131 @@ html {
   height: 100vh;
   background-color: var(--kertas);
 }
+
+/* Responsive overrides for Ubudiyah grading tables and cards on mobile screen sizes */
+.ubudiyah-card-header {
+  width: 100%;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+.ubudiyah-card-name-box {
+  flex: 1;
+  min-width: 0;
+  padding-right: 12px;
+}
+.ubudiyah-card-stats-wrapper {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.ubudiyah-card-stats-box {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.ubudiyah-card-stats-box .stat-label {
+  display: block;
+  font-size: 11px;
+  color: var(--tinta-pudar);
+  margin-bottom: 2px;
+}
+.ubudiyah-card-stats-box .stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tinta);
+}
+.ubudiyah-card-arrow {
+  font-size: 16px;
+  color: var(--tinta-pudar);
+  transition: transform 0.2s;
+  margin-left: 8px;
+}
+
+@media (max-width: 500px) {
+  .ubudiyah-card-header {
+    align-items: flex-start;
+    position: relative;
+    padding-right: 40px; /* Space for arrow */
+    flex-direction: column;
+  }
+  .ubudiyah-card-stats-wrapper {
+    width: 100%;
+    margin-top: 10px;
+  }
+  .ubudiyah-card-stats-box {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 28px;
+    border-top: 1px dashed var(--garis);
+    padding-top: 10px;
+  }
+  .ubudiyah-card-arrow {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .ubudiyah-input-table {
+    min-width: 100% !important;
+    display: block;
+  }
+  .ubudiyah-input-table thead {
+    display: none; /* Hide standard headers */
+  }
+  .ubudiyah-input-table tbody {
+    display: block;
+  }
+  .ubudiyah-input-table tr {
+    display: block;
+    background: #ffffff;
+    border: 1px solid var(--garis);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .ubudiyah-input-table td {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border: none !important;
+    padding: 8px 0 !important;
+    text-align: left !important;
+    font-size: 13px !important;
+  }
+  .ubudiyah-input-table td::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--tinta-pudar);
+    text-transform: uppercase;
+    margin-right: 12px;
+  }
+  .ubudiyah-input-table td.no-cell {
+    display: none !important; /* Hide row number */
+  }
+  .ubudiyah-input-table td.aspek-cell {
+    display: block !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--aksen) !important;
+    border-bottom: 1px dashed var(--garis) !important;
+    margin-bottom: 8px;
+    padding-bottom: 8px !important;
+    padding-top: 0 !important;
+  }
+  .ubudiyah-input-table td.aspek-cell::before {
+    display: none !important; /* No label for title */
+  }
+}
+

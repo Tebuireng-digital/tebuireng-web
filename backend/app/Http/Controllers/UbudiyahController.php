@@ -33,18 +33,8 @@ class UbudiyahController extends Controller
         $query = DB::table('kamar')
             ->select('kamar_id as target_id', 'nama as nama_target');
 
-        if ($petugas->jabatan !== 'Admin') {
-            $assignedIds = DB::table('petugas_penugasan')
-                ->where('petugas_id', $petugas->petugas_id)
-                ->where('tipe_target', 'Kamar')
-                ->where('tanggal_mulai', '<=', now()->toDateString())
-                ->where(function ($q) {
-                    $q->whereNull('tanggal_selesai')
-                        ->orWhere('tanggal_selesai', '>=', now()->toDateString());
-                })
-                ->pluck('target_id');
-
-            $query->whereIn('kamar_id', $assignedIds);
+        if (!in_array($petugas->jabatan, ['Admin', 'Pengasuh'], true)) {
+            $query->whereIn('kamar_id', $this->assignedRoomIds($petugas->petugas_id));
         }
 
         $rooms = $query->orderBy('nama')->get();
@@ -67,21 +57,8 @@ class UbudiyahController extends Controller
         $kamarId = $data['target_id'];
 
         // Access check
-        if ($petugas->jabatan !== 'Admin') {
-            $hasAccess = DB::table('petugas_penugasan')
-                ->where('petugas_id', $petugas->petugas_id)
-                ->where('tipe_target', 'Kamar')
-                ->where('target_id', $kamarId)
-                ->where('tanggal_mulai', '<=', now()->toDateString())
-                ->where(function ($q) {
-                    $q->whereNull('tanggal_selesai')
-                        ->orWhere('tanggal_selesai', '>=', now()->toDateString());
-                })
-                ->exists();
-
-            if (!$hasAccess) {
-                return response()->json(['message' => 'Anda tidak ditugaskan pada kamar ini'], 403);
-            }
+        if (!$this->hasRoomAccess($petugas, $kamarId)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kamar ini'], 403);
         }
 
         $kamar = DB::table('kamar')->where('kamar_id', $kamarId)->first();
@@ -165,7 +142,7 @@ class UbudiyahController extends Controller
             'tahun_pelajaran' => 'required|string|max:20',
             'semester' => 'required|in:Ganjil,Genap',
             'entries' => 'required|array|min:1',
-            'entries.*.santri_id' => 'required|integer|exists:santri,santri_id',
+            'entries.*.santri_id' => 'required|integer|distinct|exists:santri,santri_id',
             'entries.*.nilai' => 'present|array',
             'entries.*.nilai.*' => 'nullable|integer|between:0,100',
             'entries.*.catatan' => 'present|array',
@@ -174,22 +151,20 @@ class UbudiyahController extends Controller
 
         $kamarId = $data['target_id'];
 
-        // Access check
-        if ($petugas->jabatan !== 'Admin') {
-            $hasAccess = DB::table('petugas_penugasan')
-                ->where('petugas_id', $petugas->petugas_id)
-                ->where('tipe_target', 'Kamar')
-                ->where('target_id', $kamarId)
-                ->where('tanggal_mulai', '<=', now()->toDateString())
-                ->where(function ($q) {
-                    $q->whereNull('tanggal_selesai')
-                        ->orWhere('tanggal_selesai', '>=', now()->toDateString());
-                })
-                ->exists();
+        if (!$this->hasRoomAccess($petugas, $kamarId)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kamar ini'], 403);
+        }
 
-            if (!$hasAccess) {
-                return response()->json(['message' => 'Anda tidak ditugaskan pada kamar ini'], 403);
-            }
+        $santriIds = collect($data['entries'])->pluck('santri_id');
+        $validSantriCount = Santri::whereIn('santri_id', $santriIds)
+            ->where('kamar_id', $kamarId)
+            ->where('status_aktif', 1)
+            ->count();
+
+        if ($validSantriCount !== $santriIds->count()) {
+            return response()->json([
+                'message' => 'Semua santri yang diinput harus berasal dari kamar yang dipilih dan masih aktif',
+            ], 422);
         }
 
         $now = now();
@@ -336,6 +311,10 @@ class UbudiyahController extends Controller
             return response()->json(['message' => 'Santri tidak ditemukan'], 404);
         }
 
+        if (!$this->hasRoomAccess($request->user(), (int) $santri->kamar_id)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kamar santri ini'], 403);
+        }
+
         $raport = RaportUbudiyah::where('santri_id', $santriId)
             ->where('bulan', $data['bulan'])
             ->where('tahun', $data['tahun'])
@@ -371,6 +350,10 @@ class UbudiyahController extends Controller
             return response()->json(['message' => 'Santri tidak ditemukan'], 404);
         }
 
+        if (!$this->hasRoomAccess($request->user(), (int) $santri->kamar_id)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kamar santri ini'], 403);
+        }
+
         $raport = RaportUbudiyah::where('santri_id', $santriId)
             ->where('bulan', $data['bulan'])
             ->where('tahun', $data['tahun'])
@@ -403,6 +386,10 @@ class UbudiyahController extends Controller
             'bulan' => 'required|integer|between:1,12',
             'tahun' => 'required|integer|between:2020,2100',
         ]);
+
+        if (!$this->hasRoomAccess($request->user(), (int) $kamarId)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kamar ini'], 403);
+        }
 
         $santriList = Santri::leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
             ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
@@ -490,6 +477,28 @@ class UbudiyahController extends Controller
     }
 
     // ─── Helper Methods ─────────────────────────────────────────────
+
+    private function assignedRoomIds(int $petugasId)
+    {
+        return DB::table('petugas_penugasan')
+            ->where('petugas_id', $petugasId)
+            ->where('tipe_target', 'Kamar')
+            ->where('tanggal_mulai', '<=', now()->toDateString())
+            ->where(function ($query) {
+                $query->whereNull('tanggal_selesai')
+                    ->orWhere('tanggal_selesai', '>=', now()->toDateString());
+            })
+            ->pluck('target_id');
+    }
+
+    private function hasRoomAccess($petugas, int $kamarId): bool
+    {
+        if (in_array($petugas->jabatan, ['Admin', 'Pengasuh'], true)) {
+            return true;
+        }
+
+        return $this->assignedRoomIds($petugas->petugas_id)->contains($kamarId);
+    }
 
     private function getLetterGrade(int $score): string
     {

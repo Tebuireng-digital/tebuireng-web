@@ -147,4 +147,73 @@ class UbudiyahFeatureTest extends TestCase
         $response = $this->actingAs($otherPembina)->getJson("/api/ubudiyah/session?target_id={$this->kamarId}&bulan=8&tahun=2026");
         $response->assertStatus(403);
     }
+
+    public function test_unassigned_petugas_cannot_view_or_download_report()
+    {
+        DB::table('raport_ubudiyah')->insert([
+            'santri_id' => $this->santriId,
+            'kamar_id' => $this->kamarId,
+            'bulan' => 8,
+            'tahun' => 2026,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'diisi_oleh' => $this->admin->petugas_id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $otherPembina = Petugas::create([
+            'nama' => 'Pembina Tanpa Penugasan',
+            'username' => 'pembina_tanpa_penugasan',
+            'password_hash' => Hash::make('password'),
+            'jabatan' => 'Pembina Kamar',
+            'status_aktif' => 1,
+            'wajib_ganti_password' => 0,
+        ]);
+
+        $this->actingAs($otherPembina)
+            ->getJson("/api/ubudiyah/{$this->santriId}?bulan=8&tahun=2026")
+            ->assertStatus(403);
+
+        $this->actingAs($otherPembina)
+            ->get("/api/ubudiyah/{$this->santriId}/pdf?bulan=8&tahun=2026")
+            ->assertStatus(403);
+
+        $this->actingAs($otherPembina)
+            ->get("/api/ubudiyah/kamar/{$this->kamarId}/pdf?bulan=8&tahun=2026")
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_input_rejects_santri_from_another_room()
+    {
+        $otherKamarId = DB::table('kamar')->insertGetId([
+            'nama' => 'Kamar Lain',
+            'kode_singkat' => 'LAIN',
+            'unit_id' => DB::table('unit_pendidikan')->value('unit_id'),
+        ]);
+
+        $otherSantriId = DB::table('santri')->insertGetId([
+            'nama' => 'Santri Kamar Lain',
+            'kamar_id' => $otherKamarId,
+            'unit_id' => DB::table('unit_pendidikan')->value('unit_id'),
+            'status_aktif' => 1,
+        ]);
+
+        $payload = [
+            'target_id' => $this->kamarId,
+            'bulan' => 8,
+            'tahun' => 2026,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'entries' => [[
+                'santri_id' => $otherSantriId,
+                'nilai' => [$this->instrumenIds[0] => 90],
+                'catatan' => [$this->instrumenIds[0] => null],
+            ]],
+        ];
+
+        $this->actingAs($this->pembina)
+            ->postJson('/api/ubudiyah/bulk', $payload)
+            ->assertStatus(422);
+    }
 }

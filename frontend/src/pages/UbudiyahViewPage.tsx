@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { AppDropdown } from '../components/AppDropdown';
 import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -293,47 +294,37 @@ export function UbudiyahViewPage() {
         {mode === 'kamar' ? (
           <div className="raport-selector-row">
             <div className="raport-field" style={{ flex: '2 1 200px' }}>
-              <label className="ui-text-label" htmlFor="ubudiyah-view-kamar">Kamar</label>
-              <select
+              <AppDropdown
                 id="ubudiyah-view-kamar"
-                className="raport-select"
-                value={selectedKamarId ?? ''}
-                onChange={e => { setSelectedKamarId(Number(e.target.value) || null); setSelectedSantriId(null); }}
-              >
-                <option value="">— Pilih Kamar —</option>
-                {rooms.map(r => (
-                  <option key={r.target_id} value={r.target_id}>{r.nama_target}</option>
-                ))}
-              </select>
+                label="Kamar"
+                value={selectedKamarId ? String(selectedKamarId) : ''}
+                placeholder="— Pilih Kamar —"
+                options={rooms.map(room => ({ value: String(room.target_id), label: room.nama_target }))}
+                onChange={value => { setSelectedKamarId(Number(value) || null); setSelectedSantriId(null); }}
+              />
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label" htmlFor="ubudiyah-view-kamar-bulan">Bulan</label>
-              <select
+              <AppDropdown
                 id="ubudiyah-view-kamar-bulan"
-                className="raport-select"
-                value={bulan}
-                onChange={e => { setBulan(Number(e.target.value)); setSelectedSantriId(null); }}
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
-                ))}
-              </select>
+                label="Bulan"
+                value={String(bulan)}
+                options={BULAN_NAMA.slice(1).map((nama, index) => ({ value: String(index + 1), label: nama }))}
+                onChange={value => { setBulan(Number(value)); setSelectedSantriId(null); }}
+              />
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label" htmlFor="ubudiyah-view-kamar-tahun">Tahun</label>
-              <select
+              <AppDropdown
                 id="ubudiyah-view-kamar-tahun"
-                className="raport-select"
-                value={tahun}
-                onChange={e => { setTahun(Number(e.target.value)); setSelectedSantriId(null); }}
-              >
-                {Array.from({ length: 5 }, (_, i) => {
-                  const y = initTahun - 2 + i;
-                  return <option key={y} value={y}>{y}</option>;
+                label="Tahun"
+                value={String(tahun)}
+                options={Array.from({ length: 5 }, (_, i) => {
+                  const year = initTahun - 2 + i;
+                  return { value: String(year), label: String(year) };
                 })}
-              </select>
+                onChange={value => { setTahun(Number(value)); setSelectedSantriId(null); }}
+              />
             </div>
           </div>
         ) : (
@@ -381,32 +372,26 @@ export function UbudiyahViewPage() {
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label" htmlFor="ubudiyah-view-nama-bulan">Bulan</label>
-              <select
+              <AppDropdown
                 id="ubudiyah-view-nama-bulan"
-                className="raport-select"
-                value={bulan}
-                onChange={e => setBulan(Number(e.target.value))}
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
-                ))}
-              </select>
+                label="Bulan"
+                value={String(bulan)}
+                options={BULAN_NAMA.slice(1).map((nama, index) => ({ value: String(index + 1), label: nama }))}
+                onChange={value => setBulan(Number(value))}
+              />
             </div>
 
             <div className="raport-field">
-              <label className="ui-text-label" htmlFor="ubudiyah-view-nama-tahun">Tahun</label>
-              <select
+              <AppDropdown
                 id="ubudiyah-view-nama-tahun"
-                className="raport-select"
-                value={tahun}
-                onChange={e => setTahun(Number(e.target.value))}
-              >
-                {Array.from({ length: 5 }, (_, i) => {
-                  const y = initTahun - 2 + i;
-                  return <option key={y} value={y}>{y}</option>;
+                label="Tahun"
+                value={String(tahun)}
+                options={Array.from({ length: 5 }, (_, i) => {
+                  const year = initTahun - 2 + i;
+                  return { value: String(year), label: String(year) };
                 })}
-              </select>
+                onChange={value => setTahun(Number(value))}
+              />
             </div>
           </div>
         )}

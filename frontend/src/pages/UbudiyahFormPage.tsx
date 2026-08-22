@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { AppDropdown } from '../components/AppDropdown';
 import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -254,39 +255,39 @@ export function UbudiyahFormPage() {
 
       {/* Selectors */}
       <div className="raport-selectors">
-        <div className="raport-selector-row">
-          <div className="raport-field" style={{ flex: '2 1 200px' }}>
-            <label className="ui-text-label" htmlFor="ubudiyah-input-kamar">Kamar</label>
-            <select
-              id="ubudiyah-input-kamar"
-              className="raport-select"
-              value={selectedKamarId ?? ''}
-              onChange={e => { setSelectedKamarId(Number(e.target.value) || null); setLastSessionKey(''); setExpandedSantriId(null); }}
-            >
-              <option value="">— Pilih Kamar —</option>
-              {rooms.map(r => (
-                <option key={r.target_id} value={r.target_id}>{r.nama_target}</option>
-              ))}
-            </select>
+          <div className="raport-selector-row">
+            <div className="raport-field" style={{ flex: '2 1 200px' }}>
+              <AppDropdown
+                id="ubudiyah-input-kamar"
+                label="Kamar"
+                value={selectedKamarId ? String(selectedKamarId) : ''}
+                placeholder="— Pilih Kamar —"
+                options={rooms.map(room => ({ value: String(room.target_id), label: room.nama_target }))}
+                onChange={value => { setSelectedKamarId(Number(value) || null); setLastSessionKey(''); setExpandedSantriId(null); }}
+              />
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="ubudiyah-input-bulan">Bulan</label>
-            <select id="ubudiyah-input-bulan" className="raport-select" value={bulan} onChange={e => { setBulan(Number(e.target.value)); setLastSessionKey(''); }}>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
-              ))}
-            </select>
+            <AppDropdown
+              id="ubudiyah-input-bulan"
+              label="Bulan"
+              value={String(bulan)}
+              options={BULAN_NAMA.slice(1).map((nama, index) => ({ value: String(index + 1), label: nama }))}
+              onChange={value => { setBulan(Number(value)); setLastSessionKey(''); }}
+            />
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="ubudiyah-input-tahun">Tahun</label>
-            <select id="ubudiyah-input-tahun" className="raport-select" value={tahun} onChange={e => { setTahun(Number(e.target.value)); setLastSessionKey(''); }}>
-              {Array.from({ length: 5 }, (_, i) => {
-                const y = initTahun - 2 + i;
-                return <option key={y} value={y}>{y}</option>;
+            <AppDropdown
+              id="ubudiyah-input-tahun"
+              label="Tahun"
+              value={String(tahun)}
+              options={Array.from({ length: 5 }, (_, i) => {
+                const year = initTahun - 2 + i;
+                return { value: String(year), label: String(year) };
               })}
-            </select>
+              onChange={value => { setTahun(Number(value)); setLastSessionKey(''); }}
+            />
           </div>
         </div>
 

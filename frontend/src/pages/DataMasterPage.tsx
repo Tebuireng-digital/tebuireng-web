@@ -5,10 +5,10 @@ import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
-interface Petugas { petugas_id: number; nama: string; username: string; jabatan: string; status_aktif: boolean; tanggung_jawab_absensi: string }
+interface Petugas { petugas_id: number; nama: string; username: string; no_hp?: string | null; jabatan: string; status_aktif: boolean; tanggung_jawab_absensi: string }
 interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string }> }
 interface Penugasan { penugasan_id: number; nama_petugas: string; jabatan: string; tipe_target: string; nama_target: string }
-interface Kamar { kamar_id: number; nama: string }
+interface Kamar { kamar_id: number; nama: string; kode_singkat?: string | null; status_aktif?: boolean }
 interface KamarMapping { kode_sumber: string; jumlah_review: number; kamar_id?: number; nama_kamar?: string }
 interface SantriMaster {
   santri_id: number;
@@ -194,6 +194,10 @@ export function DataMasterPage() {
   const [mappingChoices, setMappingChoices] = useState<Record<string, string>>({});
   const [namaKamarBaru, setNamaKamarBaru] = useState('');
   const [kodeKamarBaru, setKodeKamarBaru] = useState('');
+  const [showKamarModal, setShowKamarModal] = useState(false);
+  const [editingKamar, setEditingKamar] = useState<Partial<Kamar>>({ kamar_id: 0, nama: '', kode_singkat: '', status_aktif: true });
+  const [showPetugasModal, setShowPetugasModal] = useState(false);
+  const [editingPetugas, setEditingPetugas] = useState<Partial<Petugas> & { password?: string }>({ petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '' });
 
   // Santri Tab Filter & State
   const [santriSearch, setSantriSearch] = useState('');
@@ -708,6 +712,45 @@ export function DataMasterPage() {
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Kamar atau mapping gagal disimpan.'); }
   };
 
+  const saveKamar = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const payload = { nama: editingKamar.nama?.trim(), kode_singkat: editingKamar.kode_singkat?.trim() || null, status_aktif: editingKamar.status_aktif ?? true };
+      const response = editingKamar.kamar_id
+        ? await api.put(`/api/master/kamar/${editingKamar.kamar_id}`, payload)
+        : await api.post('/api/master/kamar', payload);
+      setMessage(response.data.message);
+      setShowKamarModal(false);
+      await fetchData();
+    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Data wisma/kamar gagal disimpan.'); }
+  };
+
+  const deactivateKamar = async (id: number) => {
+    if (!window.confirm('Nonaktifkan wisma/kamar ini? Histori penugasan tetap dipertahankan.')) return;
+    try { const response = await api.delete(`/api/master/kamar/${id}`); setMessage(response.data.message); await fetchData(); }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Wisma/kamar gagal dinonaktifkan.'); }
+  };
+
+  const savePetugas = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const payload = { ...editingPetugas, password: editingPetugas.password || undefined };
+      const response = editingPetugas.petugas_id
+        ? await api.put(`/api/master/petugas/${editingPetugas.petugas_id}`, payload)
+        : await api.post('/api/master/petugas', payload);
+      setMessage(response.data.message);
+      setShowPetugasModal(false);
+      setPasswordBaru('');
+      await fetchData();
+    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Data petugas gagal disimpan.'); }
+  };
+
+  const deactivatePetugas = async (id: number) => {
+    if (!window.confirm('Nonaktifkan akun petugas ini?')) return;
+    try { const response = await api.delete(`/api/master/petugas/${id}`); setMessage(response.data.message); await fetchData(); }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Petugas gagal dinonaktifkan.'); }
+  };
+
   if (loading) return <PageSkeleton />;
 
   return (
@@ -867,8 +910,8 @@ export function DataMasterPage() {
 
       {!isVerificationData && activeTab === 'wisma' && (
         <section className="master-section">
-          <div className="section-heading"><div><h2>Data wisma</h2><p>Struktur wisma belum dimodelkan terpisah. Daftar kamar yang tersedia ditampilkan sebagai data penempatan saat ini.</p></div><span className="schedule-label">{kamar.length.toLocaleString('id')} kamar</span></div>
-          <div className="table-scroll"><table className="master-table"><thead><tr><th>No.</th><th>Nama kamar</th></tr></thead><tbody>{kamar.map((item, index) => <tr key={item.kamar_id}><td>{index + 1}</td><td>{item.nama}</td></tr>)}</tbody></table>{kamar.length === 0 && <div className="empty-state">Belum ada data kamar untuk ditampilkan.</div>}</div>
+          <div className="section-heading"><div><h2>Data wisma</h2><p>Kelola nama, kode, dan status wisma/kamar yang digunakan dalam penempatan santri.</p></div><button className="primary-button" onClick={() => { setEditingKamar({ kamar_id: 0, nama: '', kode_singkat: '', status_aktif: true }); setShowKamarModal(true); }}>+ Tambah Wisma</button></div>
+          <div className="table-scroll"><table className="master-table"><thead><tr><th>No.</th><th>Nama wisma/kamar</th><th>Kode</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{kamar.map((item, index) => <tr key={item.kamar_id}><td>{index + 1}</td><td>{item.nama}</td><td>{item.kode_singkat || '—'}</td><td><span className={item.status_aktif === false ? 'warning-text' : 'schedule-label'}>{item.status_aktif === false ? 'Nonaktif' : 'Aktif'}</span></td><td style={{ display: 'flex', gap: 8 }}><button className="secondary-button" onClick={() => { setEditingKamar({ ...item, status_aktif: item.status_aktif !== false }); setShowKamarModal(true); }}>Edit</button>{item.status_aktif !== false && <button className="danger-button" onClick={() => void deactivateKamar(item.kamar_id)}>Nonaktifkan</button>}</td></tr>)}</tbody></table>{kamar.length === 0 && <div className="empty-state">Belum ada data kamar untuk ditampilkan.</div>}</div>
         </section>
       )}
 
@@ -1614,7 +1657,7 @@ export function DataMasterPage() {
 
       {/* AKUN PETUGAS TAB */}
       {activeTab === 'akun' && <section className="master-section">
-        <h2>Akun petugas</h2>
+        <div className="section-heading"><div><h2>Akun petugas</h2><p>Kelola akun, jabatan, status, dan akses login petugas.</p></div><button className="primary-button" onClick={() => { setEditingPetugas({ petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '' }); setShowPetugasModal(true); }}>+ Tambah Petugas</button></div>
         <div className="account-table-controls">
           <div className="account-search-control"><label htmlFor="account-search">Cari akun</label><input id="account-search" value={accountSearch} onChange={event => setAccountSearch(event.target.value)} placeholder="Nama, username, kelas..." /></div>
           <AppDropdown id="account-role" label="Jabatan" value={accountRole} onChange={setAccountRole} placeholder="Semua jabatan" options={[{ value: '', label: 'Semua jabatan' }, ...accountRoles.map(role => ({ value: role, label: role }))]} />
@@ -1622,7 +1665,7 @@ export function DataMasterPage() {
           <AppDropdown id="account-status" label="Status akun" value={accountStatus} onChange={setAccountStatus} placeholder="Semua status" options={[{ value: '', label: 'Semua status' }, { value: 'aktif', label: 'Aktif' }, { value: 'nonaktif', label: 'Nonaktif' }]} />
         </div>
         <p className="account-result-count">Menampilkan {visibleAccounts.length} dari {petugas.length} akun.</p>
-        <div className="table-scroll"><table className="master-table account-table"><thead><tr><th><button className="table-sort-button" onClick={() => toggleAccountSort('nama')}>Nama{accountSortIndicator('nama')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('username')}>Username{accountSortIndicator('username')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('jabatan')}>Jabatan{accountSortIndicator('jabatan')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('tanggung_jawab_absensi')}>Tanggung Jawab Absensi{accountSortIndicator('tanggung_jawab_absensi')}</button></th><th>Aksi</th></tr></thead><tbody>{visibleAccounts.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td>{item.tanggung_jawab_absensi || '-'}</td><td><button className="danger-button" onClick={() => void resetPassword(item.petugas_id)}>Reset password</button></td></tr>)}</tbody></table>{visibleAccounts.length === 0 && <div className="empty-state">Tidak ada akun yang sesuai dengan filter.</div>}</div>
+        <div className="table-scroll"><table className="master-table account-table"><thead><tr><th><button className="table-sort-button" onClick={() => toggleAccountSort('nama')}>Nama{accountSortIndicator('nama')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('username')}>Username{accountSortIndicator('username')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('jabatan')}>Jabatan{accountSortIndicator('jabatan')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('tanggung_jawab_absensi')}>Tanggung Jawab Absensi{accountSortIndicator('tanggung_jawab_absensi')}</button></th><th>Status</th><th>Aksi</th></tr></thead><tbody>{visibleAccounts.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td>{item.tanggung_jawab_absensi || '-'}</td><td><span className={item.status_aktif ? 'schedule-label' : 'warning-text'}>{item.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="secondary-button" onClick={() => { setEditingPetugas({ ...item, password: '' }); setShowPetugasModal(true); }}>Edit</button><button className="danger-button" onClick={() => void resetPassword(item.petugas_id)}>Reset password</button>{item.status_aktif && <button className="danger-button" onClick={() => void deactivatePetugas(item.petugas_id)}>Nonaktifkan</button>}</td></tr>)}</tbody></table>{visibleAccounts.length === 0 && <div className="empty-state">Tidak ada akun yang sesuai dengan filter.</div>}</div>
       </section>}
 
       {/* DATA ALUMNI TAB */}
@@ -1951,6 +1994,37 @@ export function DataMasterPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {showKamarModal && (
+            <div className="save-modal-backdrop" role="presentation">
+              <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog">
+                <h2>{editingKamar.kamar_id ? 'Edit Wisma/Kamar' : 'Tambah Wisma/Kamar'}</h2>
+                <form onSubmit={e => void saveKamar(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <div><label className="ui-text-label" htmlFor="kamar-nama">Nama Wisma/Kamar</label><input id="kamar-nama" className="raport-select" style={{ width: '100%' }} required value={editingKamar.nama || ''} onChange={e => setEditingKamar(p => ({ ...p, nama: e.target.value }))} /></div>
+                  <div><label className="ui-text-label" htmlFor="kamar-kode">Kode Singkat</label><input id="kamar-kode" className="raport-select" style={{ width: '100%' }} value={editingKamar.kode_singkat || ''} onChange={e => setEditingKamar(p => ({ ...p, kode_singkat: e.target.value }))} placeholder="Contoh: HK 201" /></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input id="kamar-aktif" type="checkbox" checked={editingKamar.status_aktif !== false} onChange={e => setEditingKamar(p => ({ ...p, status_aktif: e.target.checked }))} /><label htmlFor="kamar-aktif" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label></div>
+                  <div className="save-modal-actions" style={{ marginTop: '16px' }}><button type="button" className="secondary-button" onClick={() => setShowKamarModal(false)}>Batal</button><button type="submit" className="primary-button">Simpan</button></div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {showPetugasModal && (
+            <div className="save-modal-backdrop" role="presentation">
+              <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog">
+                <h2>{editingPetugas.petugas_id ? 'Edit Petugas' : 'Tambah Petugas'}</h2>
+                <form onSubmit={e => void savePetugas(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <div><label className="ui-text-label" htmlFor="petugas-nama">Nama</label><input id="petugas-nama" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.nama || ''} onChange={e => setEditingPetugas(p => ({ ...p, nama: e.target.value }))} /></div>
+                  <div><label className="ui-text-label" htmlFor="petugas-username">Username</label><input id="petugas-username" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.username || ''} onChange={e => setEditingPetugas(p => ({ ...p, username: e.target.value }))} /></div>
+                  <div><label className="ui-text-label" htmlFor="petugas-no-hp">No. HP</label><input id="petugas-no-hp" className="raport-select" style={{ width: '100%' }} value={editingPetugas.no_hp || ''} onChange={e => setEditingPetugas(p => ({ ...p, no_hp: e.target.value }))} /></div>
+                  <AppDropdown id="petugas-jabatan" label="Jabatan" value={editingPetugas.jabatan || ''} options={['Admin', 'Pengasuh', 'Ustadz', 'Pembina Kamar', 'Wali Kelas', 'Keamanan'].map(role => ({ value: role, label: role }))} onChange={value => setEditingPetugas(p => ({ ...p, jabatan: value }))} />
+                  <div><label className="ui-text-label" htmlFor="petugas-password">Password {editingPetugas.petugas_id ? '(opsional)' : ''}</label><input id="petugas-password" type="password" className="raport-select" style={{ width: '100%' }} required={!editingPetugas.petugas_id} minLength={8} value={editingPetugas.password || ''} onChange={e => setEditingPetugas(p => ({ ...p, password: e.target.value }))} placeholder={editingPetugas.petugas_id ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter'} /></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input id="petugas-aktif" type="checkbox" checked={editingPetugas.status_aktif !== false} onChange={e => setEditingPetugas(p => ({ ...p, status_aktif: e.target.checked }))} /><label htmlFor="petugas-aktif" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label></div>
+                  <div className="save-modal-actions" style={{ marginTop: '16px' }}><button type="button" className="secondary-button" onClick={() => setShowPetugasModal(false)}>Batal</button><button type="submit" className="primary-button">Simpan</button></div>
+                </form>
+              </div>
             </div>
           )}
 

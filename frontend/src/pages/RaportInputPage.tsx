@@ -366,45 +366,35 @@ export function RaportInputPage() {
                       ))}
                       {session.kepribadian_jenis.map(jenis => (
                         <td key={jenis} className="raport-td-select">
-                          <select
-                            className="raport-select-mini"
+                          <AppDropdown
+                            className="app-dropdown-table"
                             value={local?.kepribadian?.[jenis] ?? ''}
-                            onChange={e => updateKepribadian(santri.santri_id, jenis, e.target.value)}
-                          >
-                            <option value="">—</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                            <option value="E">E</option>
-                          </select>
+                            options={['A', 'B', 'C', 'D', 'E'].map(value => ({ value, label: value }))}
+                            placeholder="—"
+                            ariaLabel={`Nilai kepribadian ${jenis} untuk ${santri.nama}`}
+                            onChange={value => updateKepribadian(santri.santri_id, jenis, value)}
+                          />
                         </td>
                       ))}
                       <td className="raport-td-select">
-                        <select
-                          className="raport-select-mini"
+                        <AppDropdown
+                          className="app-dropdown-table"
                           value={local?.keputusan ?? ''}
-                          onChange={e => updateKeputusan(santri.santri_id, e.target.value)}
-                        >
-                          <option value="">—</option>
-                          <option value="Naik">Naik</option>
-                          <option value="Tidak Naik">Tidak Naik</option>
-                        </select>
+                          options={[{ value: 'Naik', label: 'Naik' }, { value: 'Tidak Naik', label: 'Tidak Naik' }]}
+                          placeholder="—"
+                          ariaLabel={`Keputusan untuk ${santri.nama}`}
+                          onChange={value => updateKeputusan(santri.santri_id, value)}
+                        />
                       </td>
                       <td className="raport-td-select">
-                        <select
-                          className="raport-select-mini raport-select-predikat"
+                        <AppDropdown
+                          className="app-dropdown-table"
                           value={local?.predikat_umum ?? ''}
-                          onChange={e => updatePredikatUmum(santri.santri_id, e.target.value)}
-                        >
-                          <option value="">—</option>
-                          <option value="Sangat Memuaskan">Sangat Memuaskan</option>
-                          <option value="Memuaskan">Memuaskan</option>
-                          <option value="Baik">Baik</option>
-                          <option value="Cukup">Cukup</option>
-                          <option value="Kurang">Kurang</option>
-                          <option value="Sangat Kurang">Sangat Kurang</option>
-                        </select>
+                          options={['Sangat Memuaskan', 'Memuaskan', 'Baik', 'Cukup', 'Kurang', 'Sangat Kurang'].map(value => ({ value, label: value }))}
+                          placeholder="—"
+                          ariaLabel={`Predikat umum untuk ${santri.nama}`}
+                          onChange={value => updatePredikatUmum(santri.santri_id, value)}
+                        />
                       </td>
                     </tr>
                   );

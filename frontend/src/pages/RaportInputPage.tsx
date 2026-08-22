@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { AppDropdown } from '../components/AppDropdown';
 import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -231,55 +232,49 @@ export function RaportInputPage() {
       <div className="raport-selectors">
         <div className="raport-selector-row">
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="raport-input-jenis">Jenis Pengajian</label>
-            <select
+            <AppDropdown
               id="raport-input-jenis"
-              className="raport-select"
+              label="Jenis Pengajian"
               value={selectedJenis}
-              onChange={e => { setSelectedJenis(e.target.value); setSelectedTargetId(null); setLastSessionKey(''); }}
-            >
-              <option value="">— Pilih jenis —</option>
-              {options.map(opt => (
-                <option key={opt.jenis} value={opt.jenis}>{opt.nama}</option>
-              ))}
-            </select>
+              placeholder="— Pilih jenis —"
+              options={options.map(option => ({ value: option.jenis, label: option.nama }))}
+              onChange={value => { setSelectedJenis(value); setSelectedTargetId(null); setLastSessionKey(''); }}
+            />
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="raport-input-kelompok">Kelompok</label>
-            <select
+            <AppDropdown
               id="raport-input-kelompok"
-              className="raport-select"
-              value={selectedTargetId ?? ''}
-              onChange={e => { setSelectedTargetId(Number(e.target.value) || null); setLastSessionKey(''); }}
+              label="Kelompok"
+              value={selectedTargetId ? String(selectedTargetId) : ''}
+              options={(currentOption?.targets ?? []).map(target => ({ value: String(target.target_id), label: `${target.kategori ? `${target.kategori} — ` : ''}${target.nama_target}` }))}
+              placeholder="— Pilih kelompok —"
               disabled={!selectedJenis}
-            >
-              <option value="">— Pilih kelompok —</option>
-              {currentOption?.targets.map(t => (
-                <option key={t.target_id} value={t.target_id}>
-                  {t.kategori ? `${t.kategori} — ` : ''}{t.nama_target}
-                </option>
-              ))}
-            </select>
+              onChange={value => { setSelectedTargetId(Number(value) || null); setLastSessionKey(''); }}
+            />
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="raport-input-bulan">Bulan</label>
-            <select id="raport-input-bulan" className="raport-select" value={bulan} onChange={e => { setBulan(Number(e.target.value)); setLastSessionKey(''); }}>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i + 1} value={i + 1}>{BULAN_NAMA[i + 1]}</option>
-              ))}
-            </select>
+            <AppDropdown
+              id="raport-input-bulan"
+              label="Bulan"
+              value={String(bulan)}
+              options={BULAN_NAMA.slice(1).map((nama, index) => ({ value: String(index + 1), label: nama }))}
+              onChange={value => { setBulan(Number(value)); setLastSessionKey(''); }}
+            />
           </div>
 
           <div className="raport-field">
-            <label className="ui-text-label" htmlFor="raport-input-tahun">Tahun</label>
-            <select id="raport-input-tahun" className="raport-select" value={tahun} onChange={e => { setTahun(Number(e.target.value)); setLastSessionKey(''); }}>
-              {Array.from({ length: 5 }, (_, i) => {
-                const y = initTahun - 2 + i;
-                return <option key={y} value={y}>{y}</option>;
+            <AppDropdown
+              id="raport-input-tahun"
+              label="Tahun"
+              value={String(tahun)}
+              options={Array.from({ length: 5 }, (_, i) => {
+                const year = initTahun - 2 + i;
+                return { value: String(year), label: String(year) };
               })}
-            </select>
+              onChange={value => { setTahun(Number(value)); setLastSessionKey(''); }}
+            />
           </div>
         </div>
 

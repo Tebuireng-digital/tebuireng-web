@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 import { usePageMeta } from '../hooks/usePageMeta';
@@ -11,16 +11,19 @@ export function LoginPage() {
   });
 
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(searchParams.get('reason') === 'session-expired' ? 'Sesi login sudah berakhir. Silakan masuk kembali.' : '');
+  const [showSessionNotice, setShowSessionNotice] = useState(searchParams.get('reason') === 'session-expired');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSessionNotice(false);
     setError('');
     setLoading(true);
 
@@ -31,6 +34,7 @@ export function LoginPage() {
       const response = await api.post('/api/login', { username, password });
       if (response.data && response.data.user) {
         login({ ...response.data.user, role: 'petugas' });
+        navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {
@@ -46,90 +50,18 @@ export function LoginPage() {
     }
   };
 
-  return (
-    <div className="login-page-container">
-      <div className="login-card">
-        <div className="login-hero">
-          <div className="login-brand"><span className="brand-mark"><img src="/new_icon.jpeg" alt="Logo Tebuireng" /></span><span>Pondok Pesantren Tebuireng</span></div>
-          <div className="login-illustration" aria-hidden="true">
-            <span className="mosque-dome"></span><span className="mosque-tower left"></span><span className="mosque-tower right"></span>
-          </div>
-          <p>Selamat datang</p>
-          <h1 className="login-title">SIMANTEB</h1>
-          <p className="login-hero-copy">Sistem Manajemen Tebuireng · Kelola kegiatan dan pendataan santri dalam satu aplikasi.</p>
-        </div>
-
-        <div className="login-form-panel">
-        <h2 className="login-subtitle">Masuk ke akun petugas</h2>
-
-        {error && (
-          <div role="alert" aria-live="assertive" style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fecaca' }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <div className="login-input-group">
-            <label htmlFor="login-username" className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>
-              Username petugas
-            </label>
-            <input
-              id="login-username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="login-input"
-              placeholder="Masukkan username"
-              required
-            />
-          </div>
-          <div className="login-input-group">
-            <label htmlFor="login-password" className="ui-text-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--tinta-pudar)' }}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="login-password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="login-input"
-                placeholder="••••••••"
-                style={{ paddingRight: '48px' }}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                aria-pressed={showPassword}
-                style={{
-                  position: 'absolute',
-                  right: '16px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--tinta-pudar)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '4px'
-                }}
-              >
-                {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                )}
-              </button>
-            </div>
-          </div>
-          <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Memproses...' : 'Masuk'}
-          </button>
-        </form>
-        <p className="login-footer">Pondok Pesantren Tebuireng · Jombang</p>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="portal-login-page petugas-login-page">
+    <button type="button" className="login-back-button" onClick={() => navigate('/pilih-login')} aria-label="Kembali ke pilihan login"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    {showSessionNotice && <div className="session-expired-toast" role="status"><span>Sesi login telah berakhir. Silakan masuk kembali.</span><button type="button" onClick={() => setShowSessionNotice(false)} aria-label="Tutup notifikasi sesi login">×</button></div>}
+    <section className="portal-login-card">
+    <div className="portal-login-brand"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB"/><strong>Login Petugas</strong><span>SIMANTEB</span></div>
+    {error && <div className="portal-alert" role="alert" aria-live="assertive">{error}</div>}
+    <form onSubmit={handleSubmit} className="portal-login-form">
+      <label htmlFor="login-username">Username Petugas</label>
+      <input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required placeholder="Masukkan username"/>
+      <label htmlFor="login-password">Password</label>
+      <div className="portal-password-input"><input id="login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required placeholder="Masukkan password"/><button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}><svg className="portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{showPassword ? <><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.2A10.7 10.7 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-3.1 4.3M6.2 6.2C3.1 8.3 1 12 1 12s4 8 11 8a10.8 10.8 0 0 0 4.1-.8"/></> : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}</svg></button></div>
+      <button className="portal-primary-button" disabled={loading}>{loading ? 'Memproses...' : 'Masuk Petugas'}</button>
+    </form>
+  </section><div className="portal-mosque-silhouette" aria-hidden="true"><svg viewBox="0 0 1440 190" preserveAspectRatio="xMidYMax meet"><path d="M0 190V135h90v-22h34v22h42v-55l20-20 20 20v55h46v-28h34v28h42v-42l20-20 20 20v42h54v-68h8v-18h8v18h8v68h53v-35h28v35h50v-57l18-18 18 18v57h48v-27h30v27h45v-80h7v-18h7v18h7v80h54v-35h29v35h46v-55l20-20 20 20v55h51v-88l8-16 8 16v88h55v-45h30v45h47v-69l20-21 20 21v69h58v-28h34v28h43v55h-1440Z"/><path d="M617 190v-74h32V94h12v22h8v-38h12v38h8V94h12v22h32v74h-116Zm13-55h18v-16h12v16h20v-16h12v16h18v37h-80v-37Z"/><path d="M686 82c-18 0-32-14-32-31s14-31 32-31 32 14 32 31-14 31-32 31Zm0-8c12 0 22-10 22-23s-10-23-22-23-22 10-22 23 10 23 22 23Z"/></svg></div></div>;
 }

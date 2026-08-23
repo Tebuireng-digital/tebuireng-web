@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use DOMDocument;
 
 class ImportSantriBaruCommand extends Command
@@ -135,6 +137,8 @@ class ImportSantriBaruCommand extends Command
                 $profil = [
                     'no_id_induk' => $noId ?: null,
                     'nik_siswa' => $nik ?: null,
+                    'password_hash' => Hash::make('masuk123'),
+                    'wajib_ganti_password' => true,
                     'nama' => $nama,
                     'jenis_kelamin' => trim($cells[7] ?? '') ?: null,
                     'tempat_lahir' => trim($cells[3] ?? '') ?: null,
@@ -167,6 +171,20 @@ class ImportSantriBaruCommand extends Command
                 } else {
                     $santriId = DB::table('santri')->insertGetId($profil + ['created_at' => now()]);
                     $createdCount++;
+                }
+
+                if (Schema::hasTable('wali_accounts') && $noId) {
+                    DB::table('wali_accounts')->updateOrInsert(
+                        ['santri_id' => $santriId],
+                        [
+                            'username' => $noId,
+                            'password_hash' => Hash::make('masuk123'),
+                            'wajib_ganti_password' => true,
+                            'status_aktif' => true,
+                            'updated_at' => now(),
+                            'created_at' => now(),
+                        ]
+                    );
                 }
 
                 DB::table('santri_keluarga')->updateOrInsert(['santri_id' => $santriId], [

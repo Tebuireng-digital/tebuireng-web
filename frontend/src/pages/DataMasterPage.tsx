@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { AppDropdown } from '../components/AppDropdown';
@@ -6,9 +6,10 @@ import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton
 import { usePageMeta } from '../hooks/usePageMeta';
 
 interface Petugas { petugas_id: number; nama: string; username: string; no_hp?: string | null; jabatan: string; status_aktif: boolean; tanggung_jawab_absensi: string }
-interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string }> }
-interface Penugasan { penugasan_id: number; nama_petugas: string; jabatan: string; tipe_target: string; nama_target: string }
+interface Opsi { jenis: string; nama: string; targets: Array<{ target_id: number; nama_target: string; unit_kode?: string; unit_nama?: string }> }
+interface Penugasan { penugasan_id: number; petugas_id: number; nama_petugas: string; jabatan: string; tipe_target: string; target_id: number; nama_target: string }
 interface Kamar { kamar_id: number; nama: string; kode_singkat?: string | null; status_aktif?: boolean }
+interface Ekstrakurikuler { ekstrakurikuler_id: number; kode: string; nama: string; pembimbing_id?: number | null; nama_pembimbing?: string | null; status_aktif: boolean }
 interface KamarMapping { kode_sumber: string; jumlah_review: number; kamar_id?: number; nama_kamar?: string }
 interface SantriMaster {
   santri_id: number;
@@ -127,6 +128,57 @@ type MasterTab = 'santri' | 'alumni' | 'data-orda' | 'ekstrakurikuler' | 'wisma'
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
 type PaginationItem = number | 'ellipsis';
 
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return hidden ? (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="M14.12 14.12a3 3 0 0 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+  ) : (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+  );
+}
+
+function PencilIcon() {
+  return <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>;
+}
+
+interface AssignmentOption { key: string; label: string }
+
+function AssignmentMultiDropdown({ id, label, value, options, disabled, onChange }: { id: string; label: string; value: string[]; options: AssignmentOption[]; disabled?: boolean; onChange: (value: string[]) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (disabled) setIsOpen(false);
+  }, [disabled]);
+
+  const selectedLabels = options.filter(option => value.includes(option.key)).map(option => option.label);
+  const toggleOption = (optionKey: string) => onChange(value.includes(optionKey) ? value.filter(key => key !== optionKey) : [...value, optionKey]);
+
+  return (
+    <div className="app-dropdown assignment-multi-dropdown" ref={dropdownRef}>
+      <label className="app-dropdown-label" htmlFor={id}>{label}</label>
+      <button id={id} type="button" className={`app-dropdown-trigger${isOpen ? ' is-open' : ''}`} aria-haspopup="listbox" aria-expanded={isOpen} disabled={disabled} onClick={() => setIsOpen(open => !open)}>
+        <span className={selectedLabels.length ? 'app-dropdown-value' : 'app-dropdown-placeholder'}>{selectedLabels.length ? `${selectedLabels.length} penugasan dipilih` : 'Pilih kelas/kamar'}</span>
+        <span className="app-dropdown-chevron" aria-hidden="true">⌄</span>
+      </button>
+      {isOpen && <div className="app-dropdown-menu assignment-multi-menu" role="listbox" aria-labelledby={id} aria-multiselectable="true">
+        {options.map(option => {
+          const selected = value.includes(option.key);
+          return <button key={option.key} type="button" role="option" aria-selected={selected} className={`app-dropdown-option assignment-multi-option${selected ? ' is-selected' : ''}`} onClick={() => toggleOption(option.key)}><span className={`assignment-option-check${selected ? ' is-selected' : ''}`} aria-hidden="true">{selected ? '✓' : ''}</span><span>{option.label}</span></button>;
+        })}
+        {options.length === 0 && <div className="app-dropdown-empty">Tidak ada target sesuai jabatan.</div>}
+      </div>}
+    </div>
+  );
+}
+
 const getPaginationItems = (current: number, total: number): PaginationItem[] => {
   if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
   if (current <= 4) return [1, 2, 3, 4, 5, 6, 'ellipsis', total];
@@ -137,6 +189,23 @@ const getPaginationItems = (current: number, total: number): PaginationItem[] =>
 const roleForJenis: Record<string, string> = {
   sekolah: 'Wali Kelas', kamar: 'Pembina Kamar', pbs: 'Ustadz', diniyah: 'Ustadz', pbm: 'Ustadz',
 };
+
+const assignmentTypesForRole: Record<string, string[]> = {
+  'Pembina Kamar': ['Kamar'],
+  'Wali Kelas': ['KelasFormal'],
+  Ustadz: ['KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
+  Admin: ['Kamar', 'KelasFormal', 'KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
+};
+
+const assignmentKindForType: Record<string, string> = {
+  Kamar: 'kamar',
+  KelasFormal: 'sekolah',
+  KelompokPBS: 'pbs',
+  KelompokMadin: 'diniyah',
+  KelompokPBM: 'pbm',
+};
+
+const assignmentKey = (tipeTarget: string, targetId: number) => `${tipeTarget}:${targetId}`;
 
 const UNIT_LIST = [
   { id: 1, kode: 'MTS', nama: 'MTs Salafiyah Syafi\'iyah' },
@@ -187,17 +256,41 @@ export function DataMasterPage() {
   const [jenis, setJenis] = useState('sekolah');
   const [petugasId, setPetugasId] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [passwordBaru, setPasswordBaru] = useState('');
   const [message, setMessage] = useState('');
+  const [successToast, setSuccessToast] = useState('');
+  const [errorToast, setErrorToast] = useState('');
   const [loading, setLoading] = useState(true);
   const [santriLoading, setSantriLoading] = useState(false);
   const [mappingChoices, setMappingChoices] = useState<Record<string, string>>({});
   const [namaKamarBaru, setNamaKamarBaru] = useState('');
   const [kodeKamarBaru, setKodeKamarBaru] = useState('');
   const [showKamarModal, setShowKamarModal] = useState(false);
+  const [kamarToDeactivate, setKamarToDeactivate] = useState<Kamar | null>(null);
+  const [ekstrakurikuler, setEkstrakurikuler] = useState<Ekstrakurikuler[]>([]);
+  const [showEkstrakurikulerModal, setShowEkstrakurikulerModal] = useState(false);
+  const [editingEkstrakurikuler, setEditingEkstrakurikuler] = useState<Partial<Ekstrakurikuler>>({ ekstrakurikuler_id: 0, kode: '', nama: '', pembimbing_id: null, status_aktif: true });
+  const [ekstrakurikulerToDeactivate, setEkstrakurikulerToDeactivate] = useState<Ekstrakurikuler | null>(null);
   const [editingKamar, setEditingKamar] = useState<Partial<Kamar>>({ kamar_id: 0, nama: '', kode_singkat: '', status_aktif: true });
   const [showPetugasModal, setShowPetugasModal] = useState(false);
-  const [editingPetugas, setEditingPetugas] = useState<Partial<Petugas> & { password?: string }>({ petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '' });
+  const [petugasToDelete, setPetugasToDelete] = useState<{ id: number; nama: string } | null>(null);
+  const [showPetugasPassword, setShowPetugasPassword] = useState(false);
+  const [showPetugasPasswordConfirmation, setShowPetugasPasswordConfirmation] = useState(false);
+  const [editingAssignments, setEditingAssignments] = useState<string[]>([]);
+  const [initialEditingPetugas, setInitialEditingPetugas] = useState<Partial<Petugas> & { password?: string }>({});
+  const [initialEditingAssignments, setInitialEditingAssignments] = useState<string[]>([]);
+  const [editingPetugas, setEditingPetugas] = useState<Partial<Petugas> & { password?: string; password_confirmation?: string }>({ petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '', password_confirmation: '' });
+
+  useEffect(() => {
+    if (!successToast) return undefined;
+    const timeoutId = window.setTimeout(() => setSuccessToast(''), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [successToast]);
+
+  useEffect(() => {
+    if (!errorToast) return undefined;
+    const timeoutId = window.setTimeout(() => setErrorToast(''), 4200);
+    return () => window.clearTimeout(timeoutId);
+  }, [errorToast]);
 
   // Santri Tab Filter & State
   const [santriSearch, setSantriSearch] = useState('');
@@ -219,10 +312,12 @@ export function DataMasterPage() {
   // Account Tab State
   const [accountSearch, setAccountSearch] = useState('');
   const [accountRole, setAccountRole] = useState('');
-  const [accountStatus, setAccountStatus] = useState('');
+  const [accountStatus, setAccountStatus] = useState('aktif');
   const [accountAssignment, setAccountAssignment] = useState('');
   const [accountSort, setAccountSort] = useState<AccountSortKey>('nama');
   const [accountSortDirection, setAccountSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [accountPage, setAccountPage] = useState(1);
+  const [wismaPage, setWismaPage] = useState(1);
 
   // Alumni Tab State
   const [alumniList, setAlumniList] = useState<AlumniRecord[]>([]);
@@ -237,6 +332,7 @@ export function DataMasterPage() {
   const [ordaMasterList, setOrdaMasterList] = useState<OrganisasiDaerahItem[]>([]);
   const [ordaSubTab, setOrdaSubTab] = useState<'master' | 'mapping'>('master');
   const [showOrdaModal, setShowOrdaModal] = useState(false);
+  const [ordaToDeactivate, setOrdaToDeactivate] = useState<OrganisasiDaerahItem | null>(null);
   const [editingOrda, setEditingOrda] = useState<Partial<OrganisasiDaerahItem>>({
     organisasi_daerah_id: 0,
     kode_singkat: '',
@@ -521,16 +617,45 @@ export function DataMasterPage() {
     }
   }, [activeTab]);
 
+  const fetchEkstrakurikuler = async () => {
+    try { const response = await api.get('/api/master/ekstrakurikuler'); setEkstrakurikuler(response.data); }
+    catch { setMessage('Data ekstrakurikuler gagal dimuat.'); }
+  };
+
+  useEffect(() => { if (activeTab === 'ekstrakurikuler') void fetchEkstrakurikuler(); }, [activeTab]);
+
+  const saveEkstrakurikuler = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const response = editingEkstrakurikuler.ekstrakurikuler_id
+        ? await api.put(`/api/master/ekstrakurikuler/${editingEkstrakurikuler.ekstrakurikuler_id}`, editingEkstrakurikuler)
+        : await api.post('/api/master/ekstrakurikuler', editingEkstrakurikuler);
+      setMessage(response.data.message); setShowEkstrakurikulerModal(false); await fetchEkstrakurikuler();
+    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Ekstrakurikuler gagal disimpan.'); }
+  };
+
+  const deactivateEkstrakurikuler = async (id: number) => {
+    try { const response = await api.delete(`/api/master/ekstrakurikuler/${id}`); setMessage(response.data.message); await fetchEkstrakurikuler(); }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Ekstrakurikuler gagal dinonaktifkan.'); }
+  };
+
   const saveOrda = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await api.post('/api/master/organisasi-daerah', editingOrda);
+      const res = editingOrda.organisasi_daerah_id
+        ? await api.put(`/api/master/organisasi-daerah/${editingOrda.organisasi_daerah_id}`, editingOrda)
+        : await api.post('/api/master/organisasi-daerah', editingOrda);
       setMessage(res.data.message);
       setShowOrdaModal(false);
       await fetchOrda();
     } catch (err: any) {
       setMessage(err.response?.data?.message || 'Gagal menyimpan organisasi daerah.');
     }
+  };
+
+  const deactivateOrda = async (id: number) => {
+    try { const response = await api.delete(`/api/master/organisasi-daerah/${id}`); setMessage(response.data.message); await fetchOrda(); }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Organisasi daerah gagal dinonaktifkan.'); }
   };
 
   const saveBulkOrda = async () => {
@@ -617,6 +742,13 @@ export function DataMasterPage() {
   };
 
   const selectedOption = opsi.find(item => item.jenis === jenis);
+  const editableAssignmentTypes = assignmentTypesForRole[editingPetugas.jabatan || ''] ?? [];
+  const editableAssignmentOptions = opsi
+    .filter(option => editableAssignmentTypes.some(tipeTarget => assignmentKindForType[tipeTarget] === option.jenis))
+    .flatMap(option => {
+      const tipeTarget = editableAssignmentTypes.find(type => assignmentKindForType[type] === option.jenis) || option.jenis;
+      return option.targets.map(target => ({ key: assignmentKey(tipeTarget, target.target_id), label: `${option.nama}: ${target.nama_target}${target.unit_kode ? ` (${target.unit_kode})` : ''}` }));
+    });
   const eligiblePetugas = useMemo(
     () => petugas.filter(item => item.status_aktif && item.jabatan === roleForJenis[jenis]),
     [petugas, jenis],
@@ -644,6 +776,18 @@ export function DataMasterPage() {
         return accountSortDirection === 'asc' ? comparison : -comparison;
       });
   }, [petugas, accountSearch, accountRole, accountStatus, accountAssignment, accountSort, accountSortDirection]);
+  const accountsPerPage = isMobileViewport ? 10 : 25;
+  const totalAccountPages = Math.ceil(visibleAccounts.length / accountsPerPage) || 1;
+  const paginatedAccounts = useMemo(() => {
+    const start = (accountPage - 1) * accountsPerPage;
+    return visibleAccounts.slice(start, start + accountsPerPage);
+  }, [visibleAccounts, accountPage, accountsPerPage]);
+  const wismaPerPage = isMobileViewport ? 10 : 25;
+  const totalWismaPages = Math.ceil(kamar.length / wismaPerPage) || 1;
+  const paginatedWisma = useMemo(() => {
+    const start = (wismaPage - 1) * wismaPerPage;
+    return kamar.slice(start, start + wismaPerPage);
+  }, [kamar, wismaPage, wismaPerPage]);
 
   const toggleAccountSort = (key: AccountSortKey) => {
     if (accountSort === key) {
@@ -663,6 +807,14 @@ export function DataMasterPage() {
     setTargetId(selectedOption?.targets[0] ? String(selectedOption.targets[0].target_id) : '');
   }, [jenis, petugas, opsi]);
 
+  useEffect(() => {
+    setAccountPage(1);
+  }, [accountSearch, accountRole, accountStatus, accountAssignment, accountSort, accountSortDirection, isMobileViewport]);
+
+  useEffect(() => {
+    setWismaPage(1);
+  }, [isMobileViewport]);
+
   const saveAssignment = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -679,16 +831,6 @@ export function DataMasterPage() {
     await api.delete(`/api/master/penugasan/${id}`);
     setMessage('Penugasan dihapus.');
     await fetchData();
-  };
-
-  const resetPassword = async (id: number) => {
-    if (!window.confirm('Reset password petugas ini?')) return;
-    try {
-      const response = await api.post(`/api/petugas/${id}/reset-password`);
-      setPasswordBaru(response.data.new_password);
-    } catch (error: any) {
-      setMessage(error.response?.data?.message ?? 'Password gagal direset.');
-    }
   };
 
   const saveMapping = async (mapping: KamarMapping) => {
@@ -726,30 +868,81 @@ export function DataMasterPage() {
   };
 
   const deactivateKamar = async (id: number) => {
-    if (!window.confirm('Nonaktifkan wisma/kamar ini? Histori penugasan tetap dipertahankan.')) return;
     try { const response = await api.delete(`/api/master/kamar/${id}`); setMessage(response.data.message); await fetchData(); }
-    catch (error: any) { setMessage(error.response?.data?.message ?? 'Wisma/kamar gagal dinonaktifkan.'); }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Wisma/kamar gagal dihapus.'); }
+  };
+
+  const openPetugasModal = (item?: Petugas) => {
+    const nextPetugas = item
+      ? { ...item, status_aktif: Boolean(item.status_aktif), password: '', password_confirmation: '' }
+      : { petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '', password_confirmation: '' };
+    const nextAssignments = item
+      ? penugasan.filter(assignment => assignment.petugas_id === item.petugas_id).map(assignment => assignmentKey(assignment.tipe_target, assignment.target_id))
+      : [];
+    setEditingPetugas(nextPetugas);
+    setInitialEditingPetugas({ ...nextPetugas, password: '' });
+    setEditingAssignments(nextAssignments);
+    setInitialEditingAssignments(nextAssignments);
+    setShowPetugasPassword(false);
+    setShowPetugasPasswordConfirmation(false);
+    setShowPetugasModal(true);
   };
 
   const savePetugas = async (event: React.FormEvent) => {
     event.preventDefault();
-    try {
-      const payload = { ...editingPetugas, password: editingPetugas.password || undefined };
-      const response = editingPetugas.petugas_id
-        ? await api.put(`/api/master/petugas/${editingPetugas.petugas_id}`, payload)
-        : await api.post('/api/master/petugas', payload);
-      setMessage(response.data.message);
+    if (editingPetugas.password && editingPetugas.password !== editingPetugas.password_confirmation) {
+      setMessage('');
+      setErrorToast('Konfirmasi password tidak sama.');
+      return;
+    }
+    const petugasId = editingPetugas.petugas_id;
+    const accountFieldsChanged = ['nama', 'username', 'no_hp', 'jabatan', 'status_aktif'].some(field => editingPetugas[field as keyof typeof editingPetugas] !== initialEditingPetugas[field as keyof typeof initialEditingPetugas]) || Boolean(editingPetugas.password);
+    const assignmentsChanged = [...editingAssignments].sort().join('|') !== [...initialEditingAssignments].sort().join('|');
+    if (petugasId && !accountFieldsChanged && !assignmentsChanged) {
       setShowPetugasModal(false);
-      setPasswordBaru('');
+      setSuccessToast('Tidak ada perubahan untuk disimpan.');
+      return;
+    }
+    try {
+      const { password_confirmation, ...petugasFields } = editingPetugas;
+      const payload = {
+        nama: petugasFields.nama,
+        username: petugasFields.username,
+        no_hp: petugasFields.no_hp,
+        jabatan: petugasFields.jabatan,
+        status_aktif: petugasFields.status_aktif,
+        password: editingPetugas.password || undefined,
+        ...(editingPetugas.password ? { password_confirmation } : {}),
+      };
+      const response = petugasId
+        ? await api.put(`/api/master/petugas/${petugasId}`, payload)
+        : await api.post('/api/master/petugas', payload);
+      if (petugasId && assignmentsChanged) {
+        const initialKeys = new Set(initialEditingAssignments);
+        const selectedKeys = new Set(editingAssignments);
+        const removedAssignments = penugasan.filter(item => item.petugas_id === petugasId && !selectedKeys.has(assignmentKey(item.tipe_target, item.target_id)));
+        const addedAssignments = editingAssignments.filter(key => !initialKeys.has(key)).map(key => {
+          const [tipeTarget, targetId] = key.split(':');
+          return { jenis: assignmentKindForType[tipeTarget], target_id: Number(targetId) };
+        });
+        await Promise.all([
+          ...removedAssignments.map(item => api.delete(`/api/master/penugasan/${item.penugasan_id}`)),
+          ...addedAssignments.map(item => api.post('/api/master/penugasan', { petugas_id: petugasId, ...item })),
+        ]);
+      }
+      setMessage('');
+      setSuccessToast(response.data.message);
+      setShowPetugasModal(false);
       await fetchData();
-    } catch (error: any) { setMessage(error.response?.data?.message ?? 'Data petugas gagal disimpan.'); }
+    } catch (error: any) { setMessage(''); setErrorToast(error.response?.data?.message ?? 'Data petugas gagal disimpan.'); }
   };
 
   const deactivatePetugas = async (id: number) => {
-    if (!window.confirm('Nonaktifkan akun petugas ini?')) return;
-    try { const response = await api.delete(`/api/master/petugas/${id}`); setMessage(response.data.message); await fetchData(); }
-    catch (error: any) { setMessage(error.response?.data?.message ?? 'Petugas gagal dinonaktifkan.'); }
+    try { const response = await api.delete(`/api/master/petugas/${id}`); setMessage(''); setSuccessToast(response.data.message); await fetchData(); }
+    catch (error: any) { setMessage(''); setErrorToast(error.response?.data?.message ?? 'Akun petugas gagal dinonaktifkan.'); }
   };
+
+  const requestDeletePetugas = (item: Petugas) => setPetugasToDelete({ id: item.petugas_id, nama: item.nama });
 
   if (loading) return <PageSkeleton />;
 
@@ -759,8 +952,9 @@ export function DataMasterPage() {
         <h1>{isVerificationData ? 'Verifikasi Data' : 'Data Master'}</h1>
         <p>{isVerificationData ? 'Selesaikan data yang belum tervalidasi sebelum dipakai untuk operasional absensi.' : 'Kelola data referensi santri, alumni, ORDA, ekstrakurikuler, dan wisma.'}</p>
       </header>
+      {successToast && <div className="success-toast" role="status" aria-live="polite">{successToast}</div>}
+      {errorToast && <div className="error-toast" role="alert" aria-live="assertive">{errorToast}</div>}
       {message && <div className="warning-box" style={{ marginBottom: 16 }}>{message}</div>}
-      {passwordBaru && <div className="password-result">Password baru: <strong>{passwordBaru}</strong><button onClick={() => { void navigator.clipboard.writeText(passwordBaru); setPasswordBaru(''); }}>Salin & tutup</button></div>}
 
       {/* DATA SANTRI TAB */}
       {!isVerificationData && activeTab === 'santri' && (
@@ -902,16 +1096,18 @@ export function DataMasterPage() {
 
       {!isVerificationData && activeTab === 'ekstrakurikuler' && (
         <section className="master-section">
-          <h2>Data ekstrakurikuler</h2>
-          <p>Tab ini disiapkan untuk master kegiatan ekstrakurikuler. Belum ada data yang dikelola pada tahap ini.</p>
-          <div className="empty-state">Data ekstrakurikuler masih dummy dan belum terhubung ke absensi atau rapor.</div>
+          <div className="section-heading"><div><h2>Data ekstrakurikuler</h2><p>Kelola kode, nama kegiatan, dan pembimbing ekstrakurikuler.</p></div><button className="primary-button" onClick={() => { setEditingEkstrakurikuler({ ekstrakurikuler_id: 0, kode: '', nama: '', pembimbing_id: null, status_aktif: true }); setShowEkstrakurikulerModal(true); }}>+ Tambah Ekstrakurikuler</button></div>
+          <div className="table-scroll"><table className="master-table account-like-table"><thead><tr><th>Kode</th><th>Nama ekstrakurikuler</th><th>Pembimbing</th><th>Status</th><th className="account-action-column">Aksi</th></tr></thead><tbody>{ekstrakurikuler.map(item => { const isActive = Boolean(item.status_aktif); return <tr key={item.ekstrakurikuler_id}><td><strong>{item.kode}</strong></td><td>{item.nama}</td><td>{item.nama_pembimbing || 'Belum ditentukan'}</td><td><span className={isActive ? 'schedule-label' : 'warning-text'}>{isActive ? 'Aktif' : 'Nonaktif'}</span></td><td className="account-action-cell"><div className="account-actions"><button type="button" className="secondary-button account-action-edit" aria-label={`Edit ekstrakurikuler ${item.nama}`} title="Edit ekstrakurikuler" onClick={() => { setEditingEkstrakurikuler({ ...item, status_aktif: isActive }); setShowEkstrakurikulerModal(true); }}><PencilIcon /></button>{isActive && <button type="button" className="danger-button account-action-delete" onClick={() => setEkstrakurikulerToDeactivate(item)}>Nonaktif</button>}</div></td></tr>; })}</tbody></table>{ekstrakurikuler.length === 0 && <div className="empty-state">Belum ada data ekstrakurikuler.</div>}</div>
+          {showEkstrakurikulerModal && <div className="save-modal-backdrop" role="presentation"><div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog" aria-modal="true"><h2>{editingEkstrakurikuler.ekstrakurikuler_id ? 'Edit Ekstrakurikuler' : 'Tambah Ekstrakurikuler'}</h2><form onSubmit={e => void saveEkstrakurikuler(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}><div><label className="ui-text-label" htmlFor="ekstra-kode">Kode Ekstrakurikuler</label><input id="ekstra-kode" className="raport-select" style={{ width: '100%' }} required value={editingEkstrakurikuler.kode || ''} onChange={e => setEditingEkstrakurikuler(p => ({ ...p, kode: e.target.value }))} placeholder="Contoh: PRAMUKA" /></div><div><label className="ui-text-label" htmlFor="ekstra-nama">Nama Ekstrakurikuler</label><input id="ekstra-nama" className="raport-select" style={{ width: '100%' }} required value={editingEkstrakurikuler.nama || ''} onChange={e => setEditingEkstrakurikuler(p => ({ ...p, nama: e.target.value }))} placeholder="Contoh: Pramuka" /></div><div><label className="ui-text-label" htmlFor="ekstra-pembimbing">Pembimbing Ekstrakurikuler</label><select id="ekstra-pembimbing" className="raport-select" style={{ width: '100%' }} value={editingEkstrakurikuler.pembimbing_id ?? ''} onChange={e => setEditingEkstrakurikuler(p => ({ ...p, pembimbing_id: e.target.value ? Number(e.target.value) : null }))}><option value="">Pilih pembimbing</option>{petugas.filter(item => Boolean(item.status_aktif)).map(item => <option key={item.petugas_id} value={item.petugas_id}>{item.nama} — {item.jabatan}</option>)}</select></div><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input id="ekstra-aktif" type="checkbox" checked={Boolean(editingEkstrakurikuler.status_aktif)} onChange={e => setEditingEkstrakurikuler(p => ({ ...p, status_aktif: e.target.checked }))} /><label htmlFor="ekstra-aktif" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label></div><div className="save-modal-actions" style={{ marginTop: '16px' }}><button type="button" className="secondary-button" onClick={() => setShowEkstrakurikulerModal(false)}>Batal</button><button type="submit" className="primary-button">Simpan</button></div></form></div></div>}
+          {ekstrakurikulerToDeactivate && <div className="delete-modal-backdrop" role="presentation"><section className="delete-modal" role="dialog" aria-modal="true"><div className="delete-modal-content"><span className="delete-modal-eyebrow">Konfirmasi tindakan</span><h2>Jadikan ekstrakurikuler nonaktif?</h2><p>Ekstrakurikuler <strong>{ekstrakurikulerToDeactivate.nama}</strong> tidak akan tersedia untuk penetapan baru.</p></div><div className="delete-modal-actions"><button type="button" className="secondary-button delete-modal-cancel" onClick={() => setEkstrakurikulerToDeactivate(null)}>Batal</button><button type="button" className="danger-button delete-modal-confirm" onClick={() => { const id = ekstrakurikulerToDeactivate.ekstrakurikuler_id; setEkstrakurikulerToDeactivate(null); void deactivateEkstrakurikuler(id); }}>Nonaktif</button></div></section></div>}
         </section>
       )}
 
       {!isVerificationData && activeTab === 'wisma' && (
         <section className="master-section">
           <div className="section-heading"><div><h2>Data wisma</h2><p>Kelola nama, kode, dan status wisma/kamar yang digunakan dalam penempatan santri.</p></div><button className="primary-button" onClick={() => { setEditingKamar({ kamar_id: 0, nama: '', kode_singkat: '', status_aktif: true }); setShowKamarModal(true); }}>+ Tambah Wisma</button></div>
-          <div className="table-scroll"><table className="master-table"><thead><tr><th>No.</th><th>Nama wisma/kamar</th><th>Kode</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{kamar.map((item, index) => <tr key={item.kamar_id}><td>{index + 1}</td><td>{item.nama}</td><td>{item.kode_singkat || '—'}</td><td><span className={item.status_aktif === false ? 'warning-text' : 'schedule-label'}>{item.status_aktif === false ? 'Nonaktif' : 'Aktif'}</span></td><td style={{ display: 'flex', gap: 8 }}><button className="secondary-button" onClick={() => { setEditingKamar({ ...item, status_aktif: item.status_aktif !== false }); setShowKamarModal(true); }}>Edit</button>{item.status_aktif !== false && <button className="danger-button" onClick={() => void deactivateKamar(item.kamar_id)}>Nonaktifkan</button>}</td></tr>)}</tbody></table>{kamar.length === 0 && <div className="empty-state">Belum ada data kamar untuk ditampilkan.</div>}</div>
+          <div className="table-scroll"><table className="master-table account-like-table"><thead><tr><th>No.</th><th>Nama wisma/kamar</th><th>Kode</th><th>Status</th><th className="account-action-column">Aksi</th></tr></thead><tbody>{paginatedWisma.map((item, index) => { const isActive = Boolean(item.status_aktif); return <tr key={item.kamar_id}><td>{(wismaPage - 1) * wismaPerPage + index + 1}</td><td>{item.nama}</td><td>{item.kode_singkat || '—'}</td><td><span className={isActive ? 'schedule-label' : 'warning-text'}>{isActive ? 'Aktif' : 'Nonaktif'}</span></td><td className="account-action-cell"><div className="account-actions"><button type="button" className="secondary-button account-action-edit" aria-label={`Edit wisma ${item.nama}`} title="Edit wisma" onClick={() => { setEditingKamar({ ...item, status_aktif: isActive }); setShowKamarModal(true); }}><PencilIcon /></button>{isActive && <button type="button" className="danger-button account-action-delete" onClick={() => setKamarToDeactivate(item)}>Nonaktif</button>}</div></td></tr>; })}</tbody></table>{kamar.length === 0 && <div className="empty-state">Belum ada data kamar untuk ditampilkan.</div>}</div>
+          {totalWismaPages > 1 && <div className="pagination-controls" aria-label="Paginasi data wisma"><button className="secondary-button" disabled={wismaPage === 1} onClick={() => setWismaPage(page => Math.max(1, page - 1))}>← Sebelumnya</button><span>Halaman {wismaPage} dari {totalWismaPages}</span><button className="secondary-button" disabled={wismaPage === totalWismaPages} onClick={() => setWismaPage(page => Math.min(totalWismaPages, page + 1))}>Berikutnya →</button></div>}
         </section>
       )}
 
@@ -1657,15 +1853,16 @@ export function DataMasterPage() {
 
       {/* AKUN PETUGAS TAB */}
       {activeTab === 'akun' && <section className="master-section">
-        <div className="section-heading"><div><h2>Akun petugas</h2><p>Kelola akun, jabatan, status, dan akses login petugas.</p></div><button className="primary-button" onClick={() => { setEditingPetugas({ petugas_id: 0, nama: '', username: '', no_hp: '', jabatan: 'Pembina Kamar', status_aktif: true, password: '' }); setShowPetugasModal(true); }}>+ Tambah Petugas</button></div>
+        <div className="section-heading"><div><h2>Akun petugas</h2><p>Kelola akun, jabatan, status, dan akses login petugas.</p></div><button className="primary-button" onClick={() => openPetugasModal()}>+ Tambah Petugas</button></div>
         <div className="account-table-controls">
           <div className="account-search-control"><label htmlFor="account-search">Cari akun</label><input id="account-search" value={accountSearch} onChange={event => setAccountSearch(event.target.value)} placeholder="Nama, username, kelas..." /></div>
           <AppDropdown id="account-role" label="Jabatan" value={accountRole} onChange={setAccountRole} placeholder="Semua jabatan" options={[{ value: '', label: 'Semua jabatan' }, ...accountRoles.map(role => ({ value: role, label: role }))]} />
           <AppDropdown id="account-assignment" label="Penugasan" value={accountAssignment} onChange={setAccountAssignment} placeholder="Semua" options={[{ value: '', label: 'Semua' }, { value: 'ditugaskan', label: 'Ada penugasan' }, { value: 'belum', label: 'Belum ditugaskan' }]} />
-          <AppDropdown id="account-status" label="Status akun" value={accountStatus} onChange={setAccountStatus} placeholder="Semua status" options={[{ value: '', label: 'Semua status' }, { value: 'aktif', label: 'Aktif' }, { value: 'nonaktif', label: 'Nonaktif' }]} />
+          <AppDropdown id="account-status" label="Status akun" value={accountStatus} onChange={setAccountStatus} placeholder="Aktif" options={[{ value: '', label: 'Semua status' }, { value: 'aktif', label: 'Aktif' }, { value: 'nonaktif', label: 'Nonaktif' }]} />
         </div>
-        <p className="account-result-count">Menampilkan {visibleAccounts.length} dari {petugas.length} akun.</p>
-        <div className="table-scroll"><table className="master-table account-table"><thead><tr><th><button className="table-sort-button" onClick={() => toggleAccountSort('nama')}>Nama{accountSortIndicator('nama')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('username')}>Username{accountSortIndicator('username')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('jabatan')}>Jabatan{accountSortIndicator('jabatan')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('tanggung_jawab_absensi')}>Tanggung Jawab Absensi{accountSortIndicator('tanggung_jawab_absensi')}</button></th><th>Status</th><th>Aksi</th></tr></thead><tbody>{visibleAccounts.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td>{item.tanggung_jawab_absensi || '-'}</td><td><span className={item.status_aktif ? 'schedule-label' : 'warning-text'}>{item.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="secondary-button" onClick={() => { setEditingPetugas({ ...item, password: '' }); setShowPetugasModal(true); }}>Edit</button><button className="danger-button" onClick={() => void resetPassword(item.petugas_id)}>Reset password</button>{item.status_aktif && <button className="danger-button" onClick={() => void deactivatePetugas(item.petugas_id)}>Nonaktifkan</button>}</td></tr>)}</tbody></table>{visibleAccounts.length === 0 && <div className="empty-state">Tidak ada akun yang sesuai dengan filter.</div>}</div>
+        <p className="account-result-count">Menampilkan {visibleAccounts.length === 0 ? 0 : (accountPage - 1) * accountsPerPage + 1}–{Math.min(accountPage * accountsPerPage, visibleAccounts.length)} dari {visibleAccounts.length} akun.</p>
+        <div className="table-scroll"><table className="master-table account-table"><thead><tr><th><button className="table-sort-button" onClick={() => toggleAccountSort('nama')}>Nama{accountSortIndicator('nama')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('username')}>Username{accountSortIndicator('username')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('jabatan')}>Jabatan{accountSortIndicator('jabatan')}</button></th><th><button className="table-sort-button" onClick={() => toggleAccountSort('tanggung_jawab_absensi')}>Tanggung Jawab Absensi{accountSortIndicator('tanggung_jawab_absensi')}</button></th><th>Status</th><th>Aksi</th></tr></thead><tbody>{paginatedAccounts.map(item => <tr key={item.petugas_id}><td>{item.nama}</td><td>{item.username}</td><td>{item.jabatan}</td><td>{item.tanggung_jawab_absensi || '-'}</td><td><span className={item.status_aktif ? 'schedule-label' : 'warning-text'}>{item.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td><td><div className="account-actions"><button type="button" className="secondary-button account-action-edit" aria-label={`Edit petugas ${item.nama}`} title="Edit petugas" onClick={() => openPetugasModal(item)}><PencilIcon /></button>{item.status_aktif ? <button className="danger-button account-action-delete" onClick={() => requestDeletePetugas(item)}>Nonaktif</button> : null}</div></td></tr>)}</tbody></table>{visibleAccounts.length === 0 && <div className="empty-state">Tidak ada akun yang sesuai dengan filter.</div>}</div>
+        {totalAccountPages > 1 && <div className="pagination-controls" aria-label="Pilih halaman akun petugas"><button className="secondary-button" disabled={accountPage <= 1} onClick={() => setAccountPage(page => Math.max(1, page - 1))}>← Sebelumnya</button><div className="pagination-pages">{getPaginationItems(accountPage, totalAccountPages).map((item, index) => item === 'ellipsis' ? <span className="pagination-ellipsis" key={`account-ellipsis-${index}`} aria-hidden="true">…</span> : <button type="button" className={`pagination-page${accountPage === item ? ' active' : ''}`} aria-label={`Halaman ${item}`} aria-current={accountPage === item ? 'page' : undefined} onClick={() => setAccountPage(item)} key={item}>{item}</button>)}</div><button className="secondary-button" disabled={accountPage >= totalAccountPages} onClick={() => setAccountPage(page => Math.min(totalAccountPages, page + 1))}>Berikutnya →</button></div>}
       </section>}
 
       {/* DATA ALUMNI TAB */}
@@ -1826,7 +2023,7 @@ export function DataMasterPage() {
                     <th>Cakupan Wilayah</th>
                     <th style={{ textAlign: 'center' }}>Total Santri</th>
                     <th style={{ textAlign: 'center' }}>Status</th>
-                    <th style={{ textAlign: 'center', width: '80px' }}>Aksi</th>
+                    <th className="account-action-column">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1839,20 +2036,14 @@ export function DataMasterPage() {
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{o.total_santri} santri</td>
                       <td style={{ textAlign: 'center' }}>
                         <span className={`status-pill ${o.status_aktif ? 'status-hadir' : 'status-alpha'}`}>
-                          {o.status_aktif ? 'Aktif' : 'Non-aktif'}
+                          {o.status_aktif ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          className="secondary-button"
-                          style={{ padding: '4px 8px', fontSize: '12px' }}
-                          onClick={() => {
-                            setEditingOrda(o);
-                            setShowOrdaModal(true);
-                          }}
-                        >
-                          Edit
-                        </button>
+                      <td className="account-action-cell">
+                        <div className="account-actions">
+                          <button type="button" className="secondary-button account-action-edit" aria-label={`Edit ORDA ${o.nama_organisasi}`} title="Edit ORDA" onClick={() => { setEditingOrda({ ...o, status_aktif: Boolean(o.status_aktif) }); setShowOrdaModal(true); }}><PencilIcon /></button>
+                          {Boolean(o.status_aktif) && <button type="button" className="danger-button account-action-delete" onClick={() => setOrdaToDeactivate(o)}>Nonaktif</button>}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2011,20 +2202,12 @@ export function DataMasterPage() {
             </div>
           )}
 
-          {showPetugasModal && (
-            <div className="save-modal-backdrop" role="presentation">
-              <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog">
-                <h2>{editingPetugas.petugas_id ? 'Edit Petugas' : 'Tambah Petugas'}</h2>
-                <form onSubmit={e => void savePetugas(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-                  <div><label className="ui-text-label" htmlFor="petugas-nama">Nama</label><input id="petugas-nama" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.nama || ''} onChange={e => setEditingPetugas(p => ({ ...p, nama: e.target.value }))} /></div>
-                  <div><label className="ui-text-label" htmlFor="petugas-username">Username</label><input id="petugas-username" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.username || ''} onChange={e => setEditingPetugas(p => ({ ...p, username: e.target.value }))} /></div>
-                  <div><label className="ui-text-label" htmlFor="petugas-no-hp">No. HP</label><input id="petugas-no-hp" className="raport-select" style={{ width: '100%' }} value={editingPetugas.no_hp || ''} onChange={e => setEditingPetugas(p => ({ ...p, no_hp: e.target.value }))} /></div>
-                  <AppDropdown id="petugas-jabatan" label="Jabatan" value={editingPetugas.jabatan || ''} options={['Admin', 'Pengasuh', 'Ustadz', 'Pembina Kamar', 'Wali Kelas', 'Keamanan'].map(role => ({ value: role, label: role }))} onChange={value => setEditingPetugas(p => ({ ...p, jabatan: value }))} />
-                  <div><label className="ui-text-label" htmlFor="petugas-password">Password {editingPetugas.petugas_id ? '(opsional)' : ''}</label><input id="petugas-password" type="password" className="raport-select" style={{ width: '100%' }} required={!editingPetugas.petugas_id} minLength={8} value={editingPetugas.password || ''} onChange={e => setEditingPetugas(p => ({ ...p, password: e.target.value }))} placeholder={editingPetugas.petugas_id ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter'} /></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input id="petugas-aktif" type="checkbox" checked={editingPetugas.status_aktif !== false} onChange={e => setEditingPetugas(p => ({ ...p, status_aktif: e.target.checked }))} /><label htmlFor="petugas-aktif" className="ui-text-label" style={{ marginBottom: 0 }}>Status Aktif</label></div>
-                  <div className="save-modal-actions" style={{ marginTop: '16px' }}><button type="button" className="secondary-button" onClick={() => setShowPetugasModal(false)}>Batal</button><button type="submit" className="primary-button">Simpan</button></div>
-                </form>
-              </div>
+          {kamarToDeactivate && (
+            <div className="delete-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setKamarToDeactivate(null); }}>
+              <section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-kamar-title">
+                <div className="delete-modal-content"><span className="delete-modal-eyebrow">Konfirmasi tindakan</span><h2 id="delete-kamar-title">Jadikan wisma nonaktif?</h2><p>Wisma/kamar <strong>{kamarToDeactivate.nama}</strong> tidak akan tersedia untuk penempatan baru. Histori penugasan tetap dipertahankan.</p></div>
+                <div className="delete-modal-actions"><button type="button" className="secondary-button delete-modal-cancel" onClick={() => setKamarToDeactivate(null)}>Batal</button><button type="button" className="danger-button delete-modal-confirm" onClick={() => { const id = kamarToDeactivate.kamar_id; setKamarToDeactivate(null); void deactivateKamar(id); }}>Nonaktif</button></div>
+              </section>
             </div>
           )}
 
@@ -2084,7 +2267,52 @@ export function DataMasterPage() {
               </div>
             </div>
           )}
+
+          {ordaToDeactivate && (
+            <div className="delete-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setOrdaToDeactivate(null); }}>
+              <section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-orda-title">
+                <div className="delete-modal-content"><span className="delete-modal-eyebrow">Konfirmasi tindakan</span><h2 id="delete-orda-title">Jadikan ORDA nonaktif?</h2><p>ORDA <strong>{ordaToDeactivate.nama_organisasi}</strong> tidak akan tersedia untuk pemetaan baru. Data santri yang sudah terhubung tetap dipertahankan.</p></div>
+                <div className="delete-modal-actions"><button type="button" className="secondary-button delete-modal-cancel" onClick={() => setOrdaToDeactivate(null)}>Batal</button><button type="button" className="danger-button delete-modal-confirm" onClick={() => { const id = ordaToDeactivate.organisasi_daerah_id; setOrdaToDeactivate(null); void deactivateOrda(id); }}>Nonaktif</button></div>
+              </section>
+            </div>
+          )}
         </section>
+      )}
+
+      {showPetugasModal && (
+        <div className="save-modal-backdrop" role="presentation">
+          <div className="save-modal" style={{ maxWidth: '500px', width: '90%', textAlign: 'left' }} role="dialog" aria-labelledby="petugas-modal-title">
+            <h2 id="petugas-modal-title">{editingPetugas.petugas_id ? 'Edit Petugas' : 'Tambah Petugas'}</h2>
+            <form onSubmit={e => void savePetugas(e)} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+              <div><label className="ui-text-label" htmlFor="petugas-nama">Nama</label><input id="petugas-nama" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.nama || ''} onChange={e => setEditingPetugas(p => ({ ...p, nama: e.target.value }))} /></div>
+              <div><label className="ui-text-label" htmlFor="petugas-username">Username</label><input id="petugas-username" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.username || ''} onChange={e => setEditingPetugas(p => ({ ...p, username: e.target.value }))} /></div>
+              <div><label className="ui-text-label" htmlFor="petugas-no-hp">No. HP</label><input id="petugas-no-hp" className="raport-select" style={{ width: '100%' }} value={editingPetugas.no_hp || ''} onChange={e => setEditingPetugas(p => ({ ...p, no_hp: e.target.value }))} /></div>
+              <AppDropdown id="petugas-jabatan" label="Jabatan" value={editingPetugas.jabatan || ''} options={['Admin', 'Pengasuh', 'Ustadz', 'Pembina Kamar', 'Wali Kelas', 'Keamanan'].map(role => ({ value: role, label: role }))} onChange={value => { setEditingPetugas(p => ({ ...p, jabatan: value })); setEditingAssignments(current => { const compatible = current.filter(key => (assignmentTypesForRole[value] ?? []).includes(key.split(':')[0])); return value === 'Admin' ? compatible : compatible.slice(0, 1); }); }} />
+              <div><label className="ui-text-label" htmlFor="petugas-password">Password {editingPetugas.petugas_id ? '(opsional)' : ''}</label><div className="password-field petugas-password-field"><input id="petugas-password" type={showPetugasPassword ? 'text' : 'password'} className="raport-select petugas-password-input" style={{ width: '100%' }} required={!editingPetugas.petugas_id} minLength={8} value={editingPetugas.password || ''} onChange={e => setEditingPetugas(p => ({ ...p, password: e.target.value, password_confirmation: e.target.value ? p.password_confirmation : '' }))} placeholder={editingPetugas.petugas_id ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter'} /><button type="button" className="password-toggle" onClick={() => setShowPetugasPassword(value => !value)} aria-label={showPetugasPassword ? 'Sembunyikan password' : 'Tampilkan password'} title={showPetugasPassword ? 'Sembunyikan password' : 'Tampilkan password'}><EyeIcon hidden={showPetugasPassword} /></button></div>{editingPetugas.petugas_id && <small className="field-hint">Isi password baru jika ingin mereset password akun ini.</small>}</div>
+              {editingPetugas.password && <div><label className="ui-text-label" htmlFor="petugas-password-confirmation">Konfirmasi Password</label><div className="password-field petugas-password-field"><input id="petugas-password-confirmation" type={showPetugasPasswordConfirmation ? 'text' : 'password'} className="raport-select petugas-password-input" style={{ width: '100%' }} required minLength={8} value={editingPetugas.password_confirmation || ''} onChange={e => setEditingPetugas(p => ({ ...p, password_confirmation: e.target.value }))} placeholder="Ulangi password baru" /><button type="button" className="password-toggle" onClick={() => setShowPetugasPasswordConfirmation(value => !value)} aria-label={showPetugasPasswordConfirmation ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'} title={showPetugasPasswordConfirmation ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'}><EyeIcon hidden={showPetugasPasswordConfirmation} /></button></div></div>}
+              {editingPetugas.jabatan === 'Admin' ? <AssignmentMultiDropdown id="petugas-tanggung-jawab" label="Tanggung Jawab Absensi" value={editingAssignments} options={editableAssignmentOptions} disabled={!editingPetugas.petugas_id || editableAssignmentOptions.length === 0} onChange={setEditingAssignments} /> : <AppDropdown id="petugas-tanggung-jawab" label="Tanggung Jawab Absensi" value={editingAssignments[0] || ''} options={editableAssignmentOptions.map(option => ({ value: option.key, label: option.label }))} placeholder="Pilih kelas/kamar" disabled={!editingPetugas.petugas_id || editableAssignmentOptions.length === 0} onChange={value => setEditingAssignments(value ? [value] : [])} />}
+              <small className="field-hint assignment-field-hint">{editingPetugas.jabatan === 'Admin' ? 'Admin dapat memiliki beberapa penugasan.' : 'Satu akun hanya dapat memiliki satu tanggung jawab absensi sesuai jabatannya.'}</small>
+              <div className="account-status-field"><label htmlFor="petugas-aktif" className="account-status-label"><input id="petugas-aktif" className="account-status-checkbox" type="checkbox" checked={editingPetugas.status_aktif === true} onChange={e => setEditingPetugas(p => ({ ...p, status_aktif: e.target.checked }))} /><span className="account-status-box" aria-hidden="true" /><span className="account-status-text">Status Aktif</span></label></div>
+              <div className="save-modal-actions" style={{ marginTop: '16px' }}><button type="button" className="secondary-button" onClick={() => setShowPetugasModal(false)}>Batal</button><button type="submit" className="primary-button">Simpan</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {petugasToDelete && (
+        <div className="delete-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPetugasToDelete(null); }}>
+          <section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-petugas-title" aria-describedby="delete-petugas-description">
+            <div className="delete-modal-content">
+              <span className="delete-modal-eyebrow">Konfirmasi tindakan</span>
+              <h2 id="delete-petugas-title">Jadikan akun nonaktif?</h2>
+              <p id="delete-petugas-description">Akun <strong>{petugasToDelete.nama}</strong> akan dinonaktifkan dan akses loginnya dicabut. Riwayat penugasan tetap dipertahankan.</p>
+            </div>
+            <div className="delete-modal-actions">
+              <button type="button" className="secondary-button delete-modal-cancel" onClick={() => setPetugasToDelete(null)}>Batal</button>
+              <button type="button" className="danger-button delete-modal-confirm" onClick={() => { const id = petugasToDelete.id; setPetugasToDelete(null); void deactivatePetugas(id); }}>Nonaktif</button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

@@ -115,6 +115,41 @@ class MasterPenugasanFeatureTest extends TestCase
         );
     }
 
+    public function test_admin_can_update_petugas_and_reset_password_via_edit_endpoint(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $this->putJson('/api/master/petugas/'.$this->waliPertama->petugas_id, [
+            'nama' => 'Wali Diperbarui',
+            'username' => 'wali-diperbarui',
+            'password' => 'password-baru-123',
+            'password_confirmation' => 'password-baru-123',
+            'no_hp' => '08123456789',
+            'jabatan' => 'Wali Kelas',
+            'status_aktif' => true,
+        ])->assertOk()
+            ->assertJsonPath('message', 'Data petugas berhasil diperbarui.');
+
+        $updated = DB::table('petugas')->where('petugas_id', $this->waliPertama->petugas_id)->first();
+        $this->assertSame('wali-diperbarui', $updated->username);
+        $this->assertTrue(Hash::check('password-baru-123', $updated->password_hash));
+        $this->assertTrue((bool) $updated->wajib_ganti_password);
+    }
+
+    public function test_admin_can_delete_petugas_through_delete_endpoint(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $this->deleteJson('/api/master/petugas/'.$this->waliPertama->petugas_id)
+            ->assertOk()
+            ->assertJsonPath('message', 'Petugas berhasil dinonaktifkan.');
+
+        $this->assertDatabaseHas('petugas', [
+            'petugas_id' => $this->waliPertama->petugas_id,
+            'status_aktif' => 0,
+        ]);
+    }
+
     private function petugas(string $jabatan, string $username): Petugas
     {
         return Petugas::create([

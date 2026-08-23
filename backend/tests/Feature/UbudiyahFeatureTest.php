@@ -88,6 +88,14 @@ class UbudiyahFeatureTest extends TestCase
             ]);
     }
 
+    public function test_ubudiyah_status_reports_ready_when_schema_exists()
+    {
+        $this->actingAs($this->admin)
+            ->getJson('/api/ubudiyah/status')
+            ->assertOk()
+            ->assertJson(['ready' => true, 'instrument_count' => 3]);
+    }
+
     public function test_bulk_upsert_and_show_raport_and_pdf()
     {
         $payload = [

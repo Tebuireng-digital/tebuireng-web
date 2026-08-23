@@ -103,7 +103,7 @@ export function UbudiyahMasterPage() {
                 <ContentSkeleton rows={5} />
             ) : isError ? (
                 <div className="error-box">
-                    Gagal memuat kriteria. Pastikan koneksi internet aktif.
+                    Gagal memuat kriteria. Periksa kesiapan modul Ubudiyah atau koneksi Anda.
                     <button type="button" className="secondary-button" onClick={() => void refetch()}>Coba lagi</button>
                 </div>
             ) : (

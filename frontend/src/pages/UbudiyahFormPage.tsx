@@ -103,7 +103,7 @@ export function UbudiyahFormPage() {
 
   // 2. Fetch Session Data
   const sessionEnabled = !!selectedKamarId;
-  const { data: session, isLoading: loadingSession, error: sessionError } = useQuery<SessionData>({
+  const { data: session, isLoading: loadingSession, error: sessionError, refetch: refetchSession } = useQuery<SessionData>({
     queryKey: ['ubudiyah-session', selectedKamarId, bulan, tahun],
     queryFn: async () => (await api.get('/api/ubudiyah/session', {
       params: { target_id: selectedKamarId, bulan, tahun },
@@ -304,7 +304,14 @@ export function UbudiyahFormPage() {
       {/* Loading states */}
       {loadingRooms && <ContentSkeleton rows={2} />}
       {loadingSession && sessionEnabled && <ContentSkeleton rows={5} />}
-      {sessionError && <div className="error-box">Gagal memuat data. Pastikan Anda memiliki penugasan aktif di Kamar ini.</div>}
+      {sessionError && (
+        <div className="error-box" role="alert">
+          {(sessionError as any)?.response?.status === 503
+            ? 'Modul Ubudiyah belum siap. Hubungi Admin untuk menyiapkan database.'
+            : 'Data kamar gagal dimuat. Periksa koneksi atau penugasan kamar Anda, lalu coba lagi.'}
+          <button type="button" className="secondary-button" onClick={() => void refetchSession()}>Coba lagi</button>
+        </div>
+      )}
 
       {/* Save Modal */}
       {saveResult && (
@@ -319,7 +326,7 @@ export function UbudiyahFormPage() {
                   <button className="secondary-button" disabled={downloadingBulk} onClick={() => void handleDownloadPdfBulk()}>
                     {downloadingBulk ? 'Mengunduh...' : 'Download PDF 1 Kamar'}
                   </button>
-                  <button className="secondary-button" onClick={() => navigate(`/raport/lihat?tab=ubudiyah&kamar=${selectedKamarId}&bulan=${bulan}&tahun=${tahun}`)}>
+                  <button className="secondary-button" onClick={() => navigate(`/ubudiyah/lihat?kamar=${selectedKamarId}&bulan=${bulan}&tahun=${tahun}`)}>
                     Lihat Hasil Laporan Kamar
                   </button>
                 </>

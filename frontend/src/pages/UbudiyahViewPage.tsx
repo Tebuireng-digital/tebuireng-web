@@ -85,7 +85,9 @@ export function UbudiyahViewPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Kamar selector state
-  const [selectedKamarId, setSelectedKamarId] = useState<number | null>(null);
+  const [selectedKamarId, setSelectedKamarId] = useState<number | null>(
+    searchParams.get('kamar') ? Number(searchParams.get('kamar')) : null
+  );
 
   // Period selector state
   const [bulan, setBulan] = useState(Number(searchParams.get('bulan')) || initBulan);
@@ -104,7 +106,7 @@ export function UbudiyahViewPage() {
   });
 
   // 1. Fetch Room Options (assigned to the logged-in staff)
-  const { data: rooms = [], isLoading: loadingRooms } = useQuery<RoomOption[]>({
+  const { data: rooms = [], isLoading: loadingRooms, isError: roomsError, refetch: refetchRooms } = useQuery<RoomOption[]>({
     queryKey: ['ubudiyah-view-rooms', user?.petugas_id],
     queryFn: async () => (await api.get('/api/ubudiyah/options')).data,
     enabled: !!user,
@@ -119,7 +121,7 @@ export function UbudiyahViewPage() {
 
   // 2. Fetch Room Roster list (when mode = 'kamar')
   const sessionEnabled = mode === 'kamar' && !!selectedKamarId;
-  const { data: session, isLoading: loadingSession } = useQuery<RoomSessionData>({
+  const { data: session, isLoading: loadingSession, isError: sessionError, refetch: refetchSession } = useQuery<RoomSessionData>({
     queryKey: ['ubudiyah-session-view', selectedKamarId, bulan, tahun],
     queryFn: async () => (await api.get('/api/ubudiyah/session', {
       params: { target_id: selectedKamarId, bulan, tahun },
@@ -288,6 +290,13 @@ export function UbudiyahViewPage() {
           </button>
         </div>
       </div>
+
+      {roomsError && (
+        <div className="error-box" role="alert">
+          Daftar kamar gagal dimuat. Periksa koneksi atau sesi login Anda, lalu coba lagi.
+          <button type="button" className="secondary-button" onClick={() => void refetchRooms()}>Coba lagi</button>
+        </div>
+      )}
 
       {/* Selectors Panel */}
       <div className="raport-selectors">
@@ -470,6 +479,17 @@ export function UbudiyahViewPage() {
       {/* Loading & Empty States */}
       {loadingRooms && mode === 'kamar' && <ContentSkeleton rows={2} />}
       {loadingSession && mode === 'kamar' && <ContentSkeleton rows={3} />}
+      {sessionError && mode === 'kamar' && (
+        <div className="error-box" role="alert">
+          {(sessionError as any)?.response?.status === 503
+            ? 'Modul Ubudiyah belum siap. Hubungi Admin untuk menyiapkan database.'
+            : 'Data laporan kamar gagal dimuat. Periksa koneksi atau akses kamar Anda, lalu coba lagi.'}
+          <button type="button" className="secondary-button" onClick={() => void refetchSession()}>Coba lagi</button>
+        </div>
+      )}
+      {!loadingSession && !sessionError && mode === 'kamar' && session && session.santri.length === 0 && (
+        <div className="empty-state" role="status">Belum ada santri aktif pada kamar dan periode ini.</div>
+      )}
       {loadingRaport && raportEnabled && <ContentSkeleton rows={6} />}
 
       {!selectedSantriId && mode === 'nama' && (

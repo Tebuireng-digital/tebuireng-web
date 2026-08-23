@@ -36,10 +36,19 @@ class Santri extends Authenticatable
         'nama_wali',
         'no_hp_wali',
         'status_aktif',
-        'password_hash'
+        'password_hash',
+        'wajib_ganti_password',
     ];
 
     protected $hidden = [
         'password_hash',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status_aktif' => 'boolean',
+            'wajib_ganti_password' => 'boolean',
+        ];
+    }
 }

@@ -318,6 +318,75 @@ class RaportPengajianController extends Controller
     /**
      * Lihat raport individual santri.
      */
+    public function portalSemester(Request $request)
+    {
+        $data = $request->validate([
+            'tahun_pelajaran' => ['required', 'string', 'max:20'],
+            'semester' => ['required', 'in:Gasal,Genap'],
+        ]);
+
+        $santri = $request->user('wali');
+        $semesterDb = $data['semester'] === 'Gasal' ? 'Ganjil' : 'Genap';
+        $profile = DB::table('santri')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
+            ->where('santri.santri_id', $santri->santri_id)
+            ->select('santri.*', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat')
+            ->first();
+
+        $raports = DB::table('raport_pengajian')
+            ->where('santri_id', $santri->santri_id)
+            ->where('tahun_pelajaran', $data['tahun_pelajaran'])
+            ->where('semester', $semesterDb)
+            ->orderBy('tahun')
+            ->orderBy('bulan')
+            ->get();
+
+        return response()->json([
+            'tahun_pelajaran' => $data['tahun_pelajaran'],
+            'semester' => $data['semester'],
+            'reports' => $raports->map(fn ($raport) => $this->buildRaportData($raport, $profile))->values(),
+        ]);
+    }
+
+    public function portalSemesterPdf(Request $request)
+    {
+        $data = $request->validate([
+            'tahun_pelajaran' => ['required', 'string', 'max:20'],
+            'semester' => ['required', 'in:Gasal,Genap'],
+        ]);
+
+        $santri = $request->user('wali');
+        $semesterDb = $data['semester'] === 'Gasal' ? 'Ganjil' : 'Genap';
+        $profile = DB::table('santri')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
+            ->where('santri.santri_id', $santri->santri_id)
+            ->select('santri.*', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat')
+            ->first();
+        $raports = DB::table('raport_pengajian')
+            ->where('santri_id', $santri->santri_id)
+            ->where('tahun_pelajaran', $data['tahun_pelajaran'])
+            ->where('semester', $semesterDb)
+            ->orderBy('tahun')
+            ->orderBy('bulan')
+            ->get();
+
+        if ($raports->isEmpty()) {
+            return response()->json(['message' => 'Rapor pengajian belum tersedia untuk periode ini.'], 404);
+        }
+
+        Carbon::setLocale('id');
+        $pdf = Pdf::loadView('pdf.raport_pengajian_bulk', [
+            'allPages' => $raports->map(fn ($raport) => $this->buildRaportData($raport, $profile))->values()->all(),
+            'predikatMap' => self::PREDIKAT_MAP,
+            'kepribadianMap' => self::KEPRIBADIAN_MAP,
+        ]);
+        $pdf->setPaper('A4', 'portrait');
+
+        return $pdf->download('Rapor_Pengajian_' . str_replace(' ', '_', $profile->nama) . '_' . $data['tahun_pelajaran'] . '_' . $data['semester'] . '.pdf');
+    }
+
     public function show(Request $request, $santriId)
     {
         $data = $request->validate([

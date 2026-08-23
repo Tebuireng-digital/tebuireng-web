@@ -16,6 +16,9 @@ class OrganisasiDaerahController extends Controller
             ->leftJoin('santri', 'organisasi_daerah.organisasi_daerah_id', '=', 'santri.organisasi_daerah_id')
             ->select(
                 'organisasi_daerah.*',
+                DB::raw("COALESCE(NULLIF(organisasi_daerah.kode_singkat, ''), organisasi_daerah.kode) as kode_singkat"),
+                DB::raw("COALESCE(NULLIF(organisasi_daerah.nama_organisasi, ''), organisasi_daerah.nama) as nama_organisasi"),
+                DB::raw("COALESCE(NULLIF(organisasi_daerah.deskripsi_wilayah, ''), organisasi_daerah.keterangan) as deskripsi_wilayah"),
                 DB::raw('COUNT(santri.santri_id) as total_santri')
             )
             ->groupBy('organisasi_daerah.organisasi_daerah_id')
@@ -56,6 +59,9 @@ class OrganisasiDaerahController extends Controller
             DB::table('organisasi_daerah')
                 ->where('organisasi_daerah_id', $data['organisasi_daerah_id'])
                 ->update([
+                    'kode' => $kode,
+                    'nama' => $nama,
+                    'keterangan' => $deskripsi,
                     'kode_singkat' => $kode,
                     'nama_organisasi' => $nama,
                     'deskripsi_wilayah' => $deskripsi,
@@ -73,6 +79,9 @@ class OrganisasiDaerahController extends Controller
             }
 
             $id = DB::table('organisasi_daerah')->insertGetId([
+                'kode' => $kode,
+                'nama' => $nama,
+                'keterangan' => $deskripsi,
                 'kode_singkat' => $kode,
                 'nama_organisasi' => $nama,
                 'deskripsi_wilayah' => $deskripsi,
@@ -86,6 +95,31 @@ class OrganisasiDaerahController extends Controller
                 'organisasi_daerah_id' => $id,
             ], 201);
         }
+    }
+
+    public function update(Request $request, int $id)
+    {
+        if (!DB::table('organisasi_daerah')->where('organisasi_daerah_id', $id)->exists()) {
+            return response()->json(['message' => 'Organisasi daerah tidak ditemukan.'], 404);
+        }
+
+        $request->merge(['organisasi_daerah_id' => $id]);
+        return $this->store($request);
+    }
+
+    public function destroy(int $id)
+    {
+        $exists = DB::table('organisasi_daerah')->where('organisasi_daerah_id', $id)->exists();
+        if (!$exists) {
+            return response()->json(['message' => 'Organisasi daerah tidak ditemukan.'], 404);
+        }
+
+        DB::table('organisasi_daerah')->where('organisasi_daerah_id', $id)->update([
+            'status_aktif' => false,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Organisasi daerah berhasil dinonaktifkan.']);
     }
 
     /**

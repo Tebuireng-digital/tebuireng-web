@@ -46,6 +46,10 @@ return [
             'driver' => 'session',
             'provider' => 'santri',
         ],
+        'wali' => [
+            'driver' => 'session',
+            'provider' => 'wali',
+        ],
     ],
 
     /*
@@ -73,6 +77,10 @@ return [
         'santri' => [
             'driver' => 'eloquent',
             'model' => App\Models\Santri::class,
+        ],
+        'wali' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\WaliAccount::class,
         ],
 
         // 'users' => [

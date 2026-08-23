@@ -250,6 +250,8 @@ export function RaportInputPage() {
               options={(currentOption?.targets ?? []).map(target => ({ value: String(target.target_id), label: `${target.kategori ? `${target.kategori} — ` : ''}${target.nama_target}` }))}
               placeholder="— Pilih kelompok —"
               disabled={!selectedJenis}
+              searchable
+              searchPlaceholder="Cari nama kelompok..."
               onChange={value => { setSelectedTargetId(Number(value) || null); setLastSessionKey(''); }}
             />
           </div>

@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
+            'santri.password.changed' => \App\Http\Middleware\EnsureSantriPasswordChanged::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

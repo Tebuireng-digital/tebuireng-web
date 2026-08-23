@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Support\KamarName;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class MasterController extends Controller
 {
@@ -64,6 +66,95 @@ class MasterController extends Controller
         return response()->json(DB::table('kamar')->orderBy('nama')->get());
     }
 
+    public function storePetugas(Request $request)
+    {
+        $data = $request->validate([
+            'nama' => 'required|string|max:150',
+            'username' => 'required|string|max:100|unique:petugas,username',
+            'password' => 'required|string|min:8|max:100',
+            'no_hp' => 'nullable|string|max:20',
+            'jabatan' => 'required|in:Pengasuh,Ustadz,Pembina Kamar,Wali Kelas,Keamanan,Admin',
+            'status_aktif' => 'sometimes|boolean',
+        ]);
+
+        $id = DB::table('petugas')->insertGetId([
+            'nama' => trim($data['nama']),
+            'username' => trim($data['username']),
+            'password_hash' => Hash::make($data['password']),
+            'no_hp' => $data['no_hp'] ?? null,
+            'jabatan' => $data['jabatan'],
+            'status_aktif' => $data['status_aktif'] ?? true,
+            'wajib_ganti_password' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Petugas berhasil ditambahkan.',
+            'petugas' => DB::table('petugas')->where('petugas_id', $id)->first(),
+        ], 201);
+    }
+
+    public function updatePetugas(Request $request, int $id)
+    {
+        $petugas = DB::table('petugas')->where('petugas_id', $id)->first();
+        if (!$petugas) {
+            return response()->json(['message' => 'Petugas tidak ditemukan.'], 404);
+        }
+
+        $data = $request->validate([
+            'nama' => 'required|string|max:150',
+            'username' => 'required|string|max:100|unique:petugas,username,'.$id.',petugas_id',
+            'password' => 'nullable|string|min:8|max:100|confirmed',
+            'password_confirmation' => 'nullable|string|min:8|max:100',
+            'no_hp' => 'nullable|string|max:20',
+            'jabatan' => 'required|in:Pengasuh,Ustadz,Pembina Kamar,Wali Kelas,Keamanan,Admin',
+            'status_aktif' => 'required|boolean',
+        ]);
+
+        if ($petugas->petugas_id === $request->user()->petugas_id && !$data['status_aktif']) {
+            return response()->json(['message' => 'Akun yang sedang digunakan tidak dapat dihapus.'], 422);
+        }
+
+        $payload = [
+            'nama' => trim($data['nama']),
+            'username' => trim($data['username']),
+            'no_hp' => $data['no_hp'] ?? null,
+            'jabatan' => $data['jabatan'],
+            'status_aktif' => $data['status_aktif'],
+            'updated_at' => now(),
+        ];
+        if (!empty($data['password'])) {
+            $payload['password_hash'] = Hash::make($data['password']);
+            $payload['wajib_ganti_password'] = true;
+        }
+
+        DB::table('petugas')->where('petugas_id', $id)->update($payload);
+
+        return response()->json([
+            'message' => 'Data petugas berhasil diperbarui.',
+            'petugas' => DB::table('petugas')->where('petugas_id', $id)->first(),
+        ]);
+    }
+
+    public function destroyPetugas(Request $request, int $id)
+    {
+        $petugas = DB::table('petugas')->where('petugas_id', $id)->first();
+        if (!$petugas) {
+            return response()->json(['message' => 'Petugas tidak ditemukan.'], 404);
+        }
+        if ($petugas->petugas_id === $request->user()->petugas_id) {
+            return response()->json(['message' => 'Akun yang sedang digunakan tidak dapat dinonaktifkan.'], 422);
+        }
+
+        DB::table('petugas')->where('petugas_id', $id)->update([
+            'status_aktif' => false,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Petugas berhasil dinonaktifkan.']);
+    }
+
     /** Membuat kamar resmi dan, bila diberi, langsung mengikat kode dari workbook sumber. */
     public function storeKamar(Request $request)
     {
@@ -117,6 +208,47 @@ class MasterController extends Controller
             'kamar' => $result['kamar'],
             'santri_diperbarui' => $result['santri_diperbarui'],
         ], 201);
+    }
+
+    public function updateKamar(Request $request, int $id)
+    {
+        $kamar = DB::table('kamar')->where('kamar_id', $id)->first();
+        if (!$kamar) {
+            return response()->json(['message' => 'Wisma/kamar tidak ditemukan.'], 404);
+        }
+
+        $data = $request->validate([
+            'nama' => 'required|string|max:100|unique:kamar,nama,'.$id.',kamar_id',
+            'kode_singkat' => 'nullable|string|max:20',
+            'status_aktif' => 'required|boolean',
+        ]);
+
+        DB::table('kamar')->where('kamar_id', $id)->update([
+            'nama' => trim($data['nama']),
+            'kode_singkat' => $data['kode_singkat'] ? strtoupper(trim($data['kode_singkat'])) : null,
+            'status_aktif' => $data['status_aktif'],
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Data wisma/kamar berhasil diperbarui.',
+            'kamar' => DB::table('kamar')->where('kamar_id', $id)->first(),
+        ]);
+    }
+
+    public function destroyKamar(Request $request, int $id)
+    {
+        $kamar = DB::table('kamar')->where('kamar_id', $id)->first();
+        if (!$kamar) {
+            return response()->json(['message' => 'Wisma/kamar tidak ditemukan.'], 404);
+        }
+
+        DB::table('kamar')->where('kamar_id', $id)->update([
+            'status_aktif' => false,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Wisma/kamar berhasil dinonaktifkan.']);
     }
 
     public function getSantri()
@@ -269,11 +401,25 @@ class MasterController extends Controller
                 $created = false;
             } else {
                 $santriId = DB::table('santri')->insertGetId($payload + [
+                    'password_hash' => Hash::make('masuk123'),
+                    'wajib_ganti_password' => true,
                     'status_aktif' => 1,
                     'status_verifikasi' => $payload['status_verifikasi'] ?? 'perlu_verifikasi',
                     'created_at' => now(),
                 ]);
                 $created = true;
+            }
+
+            if ($created && Schema::hasTable('wali_accounts') && !empty($data['no_id_induk'])) {
+                DB::table('wali_accounts')->insert([
+                    'santri_id' => $santriId,
+                    'username' => $data['no_id_induk'],
+                    'password_hash' => Hash::make('masuk123'),
+                    'wajib_ganti_password' => true,
+                    'status_aktif' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
 
             $keluargaFields = ['no_kk', 'nama_ayah', 'nik_ayah', 'pendidikan_ayah', 'pekerjaan_ayah', 'nama_ibu', 'nik_ibu', 'pendidikan_ibu', 'pekerjaan_ibu', 'rata_rata_penghasilan'];

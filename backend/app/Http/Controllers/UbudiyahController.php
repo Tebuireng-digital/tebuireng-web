@@ -10,6 +10,7 @@ use App\Support\KamarName;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class UbudiyahController extends Controller
@@ -23,6 +24,17 @@ class UbudiyahController extends Controller
         [50, 59, 'D', 'Kurang'],
         [0, 49, 'E', 'Sangat Kurang'],
     ];
+
+    public function status()
+    {
+        $tables = ['master_instrumen_ubudiyah', 'raport_ubudiyah', 'nilai_ubudiyah'];
+        $ready = collect($tables)->every(fn (string $table) => Schema::hasTable($table));
+
+        return response()->json([
+            'ready' => $ready,
+            'instrument_count' => $ready ? MasterInstrumenUbudiyah::where('status_aktif', 1)->count() : 0,
+        ], $ready ? 200 : 503);
+    }
 
     /**
      * Get room options assigned to the petugas (or all for Admin).

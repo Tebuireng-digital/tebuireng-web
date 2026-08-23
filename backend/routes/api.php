@@ -6,6 +6,23 @@ use App\Http\Controllers\AuthController;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
+Route::prefix('santri-portal')->middleware('web')->group(function () {
+    Route::post('/login', [\App\Http\Controllers\SantriPortalController::class, 'login'])->middleware('throttle:login');
+
+    Route::middleware('auth:wali')->group(function () {
+        Route::post('/logout', [\App\Http\Controllers\SantriPortalController::class, 'logout']);
+        Route::get('/me', [\App\Http\Controllers\SantriPortalController::class, 'me']);
+        Route::post('/ganti-password', [\App\Http\Controllers\SantriPortalController::class, 'changePassword']);
+
+        Route::get('/kehadiran', [\App\Http\Controllers\SantriPortalController::class, 'kehadiran']);
+        Route::get('/pelanggaran', [\App\Http\Controllers\SantriPortalController::class, 'pelanggaran']);
+        Route::get('/perizinan', [\App\Http\Controllers\SantriPortalController::class, 'perizinan']);
+        Route::get('/prestasi', [\App\Http\Controllers\SantriPortalController::class, 'prestasi']);
+        Route::get('/rapor-pengajian', [\App\Http\Controllers\RaportPengajianController::class, 'portalSemester']);
+        Route::get('/rapor-pengajian/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'portalSemesterPdf']);
+    });
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/ganti-password', [AuthController::class, 'changePassword']);
@@ -49,8 +66,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // Admin & Master
     Route::post('/petugas/{id}/reset-password', [\App\Http\Controllers\PetugasController::class, 'resetPassword'])->middleware('role:Admin');
     Route::get('/master/petugas', [\App\Http\Controllers\MasterController::class, 'getPetugas'])->middleware('role:Admin');
+    Route::post('/master/petugas', [\App\Http\Controllers\MasterController::class, 'storePetugas'])->middleware('role:Admin');
+    Route::put('/master/petugas/{id}', [\App\Http\Controllers\MasterController::class, 'updatePetugas'])->middleware('role:Admin');
+    Route::delete('/master/petugas/{id}', [\App\Http\Controllers\MasterController::class, 'destroyPetugas'])->middleware('role:Admin');
     Route::get('/master/kamar', [\App\Http\Controllers\MasterController::class, 'getKamar'])->middleware('role:Admin');
     Route::post('/master/kamar', [\App\Http\Controllers\MasterController::class, 'storeKamar'])->middleware('role:Admin');
+    Route::put('/master/kamar/{id}', [\App\Http\Controllers\MasterController::class, 'updateKamar'])->middleware('role:Admin');
+    Route::delete('/master/kamar/{id}', [\App\Http\Controllers\MasterController::class, 'destroyKamar'])->middleware('role:Admin');
     Route::get('/master/santri/count', [\App\Http\Controllers\MasterController::class, 'countSantri'])->middleware('role:Admin');
     Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
     Route::get('/master/santri/options', [\App\Http\Controllers\MasterController::class, 'santriOptions'])->middleware('role:Admin');
@@ -68,6 +90,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
     Route::get('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'index'])->middleware('role:Admin');
     Route::post('/master/organisasi-daerah', [\App\Http\Controllers\OrganisasiDaerahController::class, 'store'])->middleware('role:Admin');
+    Route::put('/master/organisasi-daerah/{id}', [\App\Http\Controllers\OrganisasiDaerahController::class, 'update'])->middleware('role:Admin');
+    Route::delete('/master/organisasi-daerah/{id}', [\App\Http\Controllers\OrganisasiDaerahController::class, 'destroy'])->middleware('role:Admin');
+    Route::get('/master/ekstrakurikuler', [\App\Http\Controllers\EkstrakurikulerController::class, 'index'])->middleware('role:Admin');
+    Route::post('/master/ekstrakurikuler', [\App\Http\Controllers\EkstrakurikulerController::class, 'store'])->middleware('role:Admin');
+    Route::put('/master/ekstrakurikuler/{id}', [\App\Http\Controllers\EkstrakurikulerController::class, 'update'])->middleware('role:Admin');
+    Route::delete('/master/ekstrakurikuler/{id}', [\App\Http\Controllers\EkstrakurikulerController::class, 'destroy'])->middleware('role:Admin');
     Route::post('/master/santri/bulk-orda', [\App\Http\Controllers\OrganisasiDaerahController::class, 'bulkUpdateSantri'])->middleware('role:Admin');
     Route::get('/laporan/organisasi-daerah', [\App\Http\Controllers\LaporanController::class, 'organisasiDaerah'])->middleware('role:Admin,Pengasuh');
 
@@ -81,6 +109,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/raport-pengajian/{santriId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdf']);
 
     // Ubudiyah Yaumiyah
+    Route::get('/ubudiyah/status', [\App\Http\Controllers\UbudiyahController::class, 'status']);
     Route::get('/ubudiyah/options', [\App\Http\Controllers\UbudiyahController::class, 'options']);
     Route::get('/ubudiyah/session', [\App\Http\Controllers\UbudiyahController::class, 'session']);
     Route::post('/ubudiyah/bulk', [\App\Http\Controllers\UbudiyahController::class, 'bulkUpsert'])->middleware('role:Admin,Pembina Kamar');

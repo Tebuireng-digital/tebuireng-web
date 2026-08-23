@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { LoginPage } from './pages/LoginPage';
 import { useAuth } from './AuthContext';
-import { Spinner } from './components/LoadingSkeleton';
+import { PageSkeleton, Spinner } from './components/LoadingSkeleton';
+import { SantriPortalPage } from './pages/SantriPortalPage';
+import { useLocation as useRouterLocation } from 'react-router-dom';
+import { RoleLoginSelectionPage } from './pages/RoleLoginSelectionPage';
 
 const BulkInputPage = lazy(() => import('./pages/BulkInputPage').then(module => ({ default: module.BulkInputPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
@@ -72,6 +75,13 @@ function Layout() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const currentJenis = searchParams.get('jenis');
+  const { data: ubudiyahStatus, isError: ubudiyahStatusError } = useQuery<{ ready: boolean; instrument_count: number }>({
+    queryKey: ['ubudiyah-status'],
+    queryFn: async () => (await api.get('/api/ubudiyah/status')).data,
+    enabled: Boolean(user),
+    retry: false,
+  });
+  const ubudiyahReady = !ubudiyahStatusError && ubudiyahStatus?.ready !== false;
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 768px)').matches);
@@ -519,6 +529,8 @@ function Layout() {
                 <span aria-hidden="true">{isUbudiyahMenuOpen ? '⌃' : '⌄'}</span>
               </button>
               <div id="ubudiyah-subnav" className={`sidebar-subnav ${isUbudiyahMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isUbudiyahMenuOpen}>
+                {!ubudiyahReady && <p className="sidebar-subnav-notice" role="status">Modul belum siap</p>}
+                {ubudiyahReady && <>
                   {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
                     <Link
                       to="/ubudiyah/input"
@@ -547,6 +559,7 @@ function Layout() {
                       Master Kriteria
                     </Link>
                   )}
+                </>}
               </div>
             </div>
           )}
@@ -582,7 +595,7 @@ function Layout() {
               <div id="master-subnav" className={`sidebar-subnav ${isMasterMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isMasterMenuOpen}>
                 <Link to="/data-master/santri" className={`sidebar-subnav-link ${location.pathname === '/data-master/santri' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/santri' ? 'page' : undefined} onClick={closeMenu}>Data santri</Link>
                 <Link to="/data-master/alumni" className={`sidebar-subnav-link ${location.pathname === '/data-master/alumni' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/alumni' ? 'page' : undefined} onClick={closeMenu}>Data alumni</Link>
-                <Link to="/data-master/data-orda" className={`sidebar-subnav-link ${location.pathname === '/data-master/data-orda' ? 'active' : ''}`} onClick={closeMenu}>Data ORDA</Link>
+                <Link to="/data-master/organisasi-daerah" className={`sidebar-subnav-link ${location.pathname === '/data-master/organisasi-daerah' ? 'active' : ''}`} onClick={closeMenu}>Data ORDA</Link>
                 <Link to="/data-master/ekstrakurikuler" className={`sidebar-subnav-link ${location.pathname === '/data-master/ekstrakurikuler' ? 'active' : ''}`} onClick={closeMenu}>Data ekstrakurikuler</Link>
                 <Link to="/data-master/wisma" className={`sidebar-subnav-link ${location.pathname === '/data-master/wisma' ? 'active' : ''}`} onClick={closeMenu}>Data wisma</Link>
                 <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
@@ -607,7 +620,7 @@ function Layout() {
       </div>
 
       <main className="dashboard-content">
-        <Suspense fallback={<div className="route-loading" role="status"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<PageSkeleton rows={6} />}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<DashboardPage />} />
@@ -721,4 +734,10 @@ function Layout() {
   );
 }
 
-export default Layout;
+function AppRouter() {
+  const location = useRouterLocation();
+  if (location.pathname === '/' || location.pathname === '/pilih-login') return <RoleLoginSelectionPage />;
+  return location.pathname.startsWith('/portal-santri') ? <SantriPortalPage /> : <Layout />;
+}
+
+export default AppRouter;

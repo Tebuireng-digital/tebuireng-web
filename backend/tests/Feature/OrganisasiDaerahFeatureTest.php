@@ -79,6 +79,41 @@ class OrganisasiDaerahFeatureTest extends TestCase
         $this->assertDatabaseHas('organisasi_daerah', ['kode_singkat' => 'OPIM']);
     }
 
+    public function test_admin_can_update_organisasi_daerah()
+    {
+        $response = $this->actingAs($this->admin)->putJson("/api/master/organisasi-daerah/{$this->ordaId}", [
+            'kode_singkat' => 'HISPA-2',
+            'nama_organisasi' => 'Himpunan Santri Pasundan Baru',
+            'deskripsi_wilayah' => 'Jawa Barat',
+            'status_aktif' => true,
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('organisasi_daerah', [
+            'organisasi_daerah_id' => $this->ordaId,
+            'kode_singkat' => 'HISPA-2',
+            'nama_organisasi' => 'Himpunan Santri Pasundan Baru',
+        ]);
+    }
+
+    public function test_admin_can_deactivate_organisasi_daerah_without_deleting_history()
+    {
+        DB::table('santri')->where('santri_id', $this->santriId1)->update(['organisasi_daerah_id' => $this->ordaId]);
+
+        $response = $this->actingAs($this->admin)->deleteJson("/api/master/organisasi-daerah/{$this->ordaId}");
+
+        $response->assertStatus(200)
+            ->assertJson(['message' => 'Organisasi daerah berhasil dinonaktifkan.']);
+        $this->assertDatabaseHas('organisasi_daerah', [
+            'organisasi_daerah_id' => $this->ordaId,
+            'status_aktif' => 0,
+        ]);
+        $this->assertDatabaseHas('santri', [
+            'santri_id' => $this->santriId1,
+            'organisasi_daerah_id' => $this->ordaId,
+        ]);
+    }
+
     public function test_admin_can_bulk_map_santri_to_orda()
     {
         $payload = [

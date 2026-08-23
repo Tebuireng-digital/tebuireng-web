@@ -317,7 +317,7 @@ function Layout() {
     <div className="premium-layout">
       {/* Mobile Header */}
       <header className="mobile-header">
-        <div className="mobile-brand"><span className="brand-mark"><img src="/new_icon.jpeg" alt="Logo SIMANTEB" /></span><div><h2 className="mobile-header-title">SIMANTEB</h2><small>Sistem Manajemen Tebuireng</small></div></div>
+        <div className="mobile-brand"><span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span><div><h2 className="mobile-header-title">SIMANTEB</h2><small>Sistem Manajemen Tebuireng</small></div></div>
         <button ref={mobileMenuButtonRef} className="mobile-menu-btn" aria-label="Buka menu navigasi" aria-expanded={isMobileMenuOpen} aria-controls="primary-navigation" onClick={openMenu}>
           <NavIcon name="menu" />
         </button>
@@ -333,7 +333,7 @@ function Layout() {
         inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <div className="sidebar-brand"><span className="brand-mark"><img src="/new_icon.jpeg" alt="Logo SIMANTEB" /></span><div><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div></div>
+          <div className="sidebar-brand"><span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span><div><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div></div>
           <button className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>

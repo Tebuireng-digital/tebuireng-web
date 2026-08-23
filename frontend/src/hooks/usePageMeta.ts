@@ -6,7 +6,7 @@ interface PageMetaOptions {
   ogImage?: string;
 }
 
-export function usePageMeta({ title, description, ogImage = '/new_icon.jpeg' }: PageMetaOptions) {
+export function usePageMeta({ title, description, ogImage = '/simanteb-logo-transparent.png' }: PageMetaOptions) {
   useEffect(() => {
     if (!title) return;
 

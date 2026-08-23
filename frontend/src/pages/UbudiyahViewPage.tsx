@@ -529,7 +529,7 @@ export function UbudiyahViewPage() {
           }}>
             {/* Kop Surat */}
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: '3px double #000', paddingBottom: '12px', marginBottom: '20px' }}>
-              <img src="/new_icon.jpeg" alt="Logo Tebuireng" style={{ height: '70px', width: '70px', marginRight: '20px' }} />
+              <img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" style={{ height: '70px', width: '70px', marginRight: '20px' }} />
               <div style={{ textAlign: 'center', flex: 1 }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', letterSpacing: '1px' }}>MAJELIS ILMI PONDOK PUTRA</h3>
                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: '4px 0', letterSpacing: '2px' }}>PESANTREN TEBUIRENG JOMBANG</h2>

@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'app-icon.svg', 'apple-touch-icon.png', 'icons.svg'],
+      includeAssets: ['simanteb-logo-transparent.png', 'icons.svg'],
       manifest: {
         name: 'Sistem Pendataan Pesantren Putra',
         short_name: 'Absensi Putra',
@@ -16,7 +16,7 @@ export default defineConfig({
         background_color: '#EEF1EC',
         display: 'standalone',
         icons: [
-          { src: 'app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'simanteb-logo-transparent.png', sizes: '1036x1024', type: 'image/png', purpose: 'any' },
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }

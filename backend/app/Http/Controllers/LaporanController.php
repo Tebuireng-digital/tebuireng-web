@@ -13,12 +13,17 @@ class LaporanController extends Controller
     public function kehadiran(Request $request)
     {
         $santriId = $request->query('santri_id');
+        $jenisKegiatan = $request->query('jenis_kegiatan');
         $periode = $request->query('periode'); // misal: YYYY-MM
         
         $query = DB::table('v_rekap_absensi_harian');
         
         if ($santriId) {
             $query->where('santri_id', $santriId);
+        }
+
+        if ($jenisKegiatan) {
+            $query->where('jenis_kegiatan', $jenisKegiatan);
         }
         
         if ($request->filled('dari')) {
@@ -41,13 +46,55 @@ class LaporanController extends Controller
         if ($request->query('format') === 'pdf') {
             $pdf = Pdf::loadView('exports.laporan', [
                 'data' => $data, 
-                'judul' => 'Laporan Kehadiran',
+                'judul' => 'Laporan Kehadiran' . ($jenisKegiatan ? ' (' . $jenisKegiatan . ')' : ''),
                 'dari' => $request->query('dari'),
                 'sampai' => $request->query('sampai'),
                 'bulan' => null,
                 'tahun' => null
             ]);
             return $pdf->download('laporan-kehadiran.pdf');
+        }
+
+        return response()->json($data);
+    }
+
+    public function prestasi(Request $request)
+    {
+        $query = DB::table('prestasi')
+            ->join('santri', 'prestasi.santri_id', '=', 'santri.santri_id')
+            ->select(
+                'prestasi.tanggal',
+                'santri.nama as nama_santri',
+                'santri.nis',
+                'prestasi.nama_prestasi',
+                'prestasi.peringkat',
+                'prestasi.tingkat',
+                'prestasi.keterangan'
+            );
+
+        if ($request->filled('dari')) {
+            $query->whereDate('prestasi.tanggal', '>=', $request->query('dari'));
+        }
+        if ($request->filled('sampai')) {
+            $query->whereDate('prestasi.tanggal', '<=', $request->query('sampai'));
+        }
+            
+        $data = $query->orderBy('prestasi.tanggal', 'desc')->get();
+
+        if ($request->query('format') === 'xlsx') {
+            return Excel::download(new LaporanExport($data), 'laporan-prestasi.xlsx');
+        }
+        
+        if ($request->query('format') === 'pdf') {
+            $pdf = Pdf::loadView('exports.laporan', [
+                'data' => $data, 
+                'judul' => 'Laporan Prestasi Santri',
+                'dari' => $request->query('dari'),
+                'sampai' => $request->query('sampai'),
+                'bulan' => null,
+                'tahun' => null
+            ]);
+            return $pdf->download('laporan-prestasi.pdf');
         }
 
         return response()->json($data);
@@ -136,57 +183,125 @@ class LaporanController extends Controller
 
     public function bulanan(Request $request)
     {
+        $dari = $request->query('dari');
+        $sampai = $request->query('sampai');
         $bulan = (int) $request->query('bulan', now()->month);
         $tahun = (int) $request->query('tahun', now()->year);
 
-        $request->merge(['bulan' => $bulan, 'tahun' => $tahun]);
-        $request->validate([
-            'bulan' => ['integer', 'between:1,12'],
-            'tahun' => ['integer', 'between:2020,2100'],
-            'kamar_id' => ['nullable', 'integer', 'exists:kamar,kamar_id'],
-        ]);
+        // 1. Kehadiran Rangkuman per Jenis Kegiatan
+        $qAbsensi = DB::table('absensi')
+            ->join('jenis_kegiatan', 'absensi.jenis_kegiatan_id', '=', 'jenis_kegiatan.jenis_kegiatan_id');
 
-        $query = DB::table('absensi')
-            ->join('santri', 'absensi.santri_id', '=', 'santri.santri_id')
-            ->join('jenis_kegiatan', 'absensi.jenis_kegiatan_id', '=', 'jenis_kegiatan.jenis_kegiatan_id')
-            ->whereMonth('absensi.tanggal', $bulan)
-            ->whereYear('absensi.tanggal', $tahun);
-
-        if ($request->filled('kamar_id')) {
-            $query->where('santri.kamar_id', $request->integer('kamar_id'));
+        if ($dari && $sampai) {
+            $qAbsensi->whereDate('absensi.tanggal', '>=', $dari)->whereDate('absensi.tanggal', '<=', $sampai);
+        } else {
+            $qAbsensi->whereMonth('absensi.tanggal', $bulan)->whereYear('absensi.tanggal', $tahun);
         }
 
-        $data = $query
+        $kehadiranBreakdown = $qAbsensi
             ->select(
                 'jenis_kegiatan.kode as jenis_kegiatan',
                 'jenis_kegiatan.nama as nama_kegiatan',
-                DB::raw("SUM(CASE WHEN absensi.status = 'Hadir' THEN 1 ELSE 0 END) as total_hadir"),
-                DB::raw("SUM(CASE WHEN absensi.status = 'Izin' THEN 1 ELSE 0 END) as total_izin"),
-                DB::raw("SUM(CASE WHEN absensi.status = 'Sakit' THEN 1 ELSE 0 END) as total_sakit"),
-                DB::raw("SUM(CASE WHEN absensi.status = 'Alpha' THEN 1 ELSE 0 END) as total_alpha"),
-                DB::raw("SUM(CASE WHEN absensi.status = 'Terlambat' THEN 1 ELSE 0 END) as total_terlambat")
+                DB::raw("CAST(SUM(CASE WHEN absensi.status = 'Hadir' THEN 1 ELSE 0 END) AS SIGNED) as total_hadir"),
+                DB::raw("CAST(SUM(CASE WHEN absensi.status = 'Izin' THEN 1 ELSE 0 END) AS SIGNED) as total_izin"),
+                DB::raw("CAST(SUM(CASE WHEN absensi.status = 'Sakit' THEN 1 ELSE 0 END) AS SIGNED) as total_sakit"),
+                DB::raw("CAST(SUM(CASE WHEN absensi.status = 'Alpha' THEN 1 ELSE 0 END) AS SIGNED) as total_alpha"),
+                DB::raw("CAST(SUM(CASE WHEN absensi.status = 'Terlambat' THEN 1 ELSE 0 END) AS SIGNED) as total_terlambat")
             )
             ->groupBy('jenis_kegiatan.kode', 'jenis_kegiatan.nama')
-            ->orderBy('jenis_kegiatan.kode')
             ->get();
-        
-        if ($request->query('format') === 'xlsx') {
-            return Excel::download(new LaporanExport($data), 'laporan-bulanan.xlsx');
-        }
-        
-        if ($request->query('format') === 'pdf') {
-            $pdf = Pdf::loadView('exports.laporan', [
-                'data' => $data, 
-                'judul' => 'Laporan Bulanan',
-                'dari' => null,
-                'sampai' => null,
-                'bulan' => $bulan,
-                'tahun' => $tahun
-            ]);
-            return $pdf->download('laporan-bulanan.pdf');
+
+        if ($request->query('format') === 'xlsx' || $request->query('format') === 'pdf') {
+            // 2. Perizinan Rangkuman
+            $qIzin = DB::table('perizinan');
+            if ($dari && $sampai) {
+                $qIzin->whereDate('tanggal_mulai', '>=', $dari)->whereDate('tanggal_mulai', '<=', $sampai);
+            } else {
+                $qIzin->whereMonth('tanggal_mulai', $bulan)->whereYear('tanggal_mulai', $tahun);
+            }
+            $totalIzin = $qIzin->count();
+
+            // 3. Pelanggaran Rangkuman
+            $qPelanggaran = DB::table('pelanggaran');
+            if ($dari && $sampai) {
+                $qPelanggaran->whereDate('tanggal', '>=', $dari)->whereDate('tanggal', '<=', $sampai);
+            } else {
+                $qPelanggaran->whereMonth('tanggal', $bulan)->whereYear('tanggal', $tahun);
+            }
+            $totalPelanggaran = $qPelanggaran->count();
+            $totalPoin = $qPelanggaran->sum('poin');
+
+            // 4. Prestasi Rangkuman
+            $qPrestasi = DB::table('prestasi');
+            if ($dari && $sampai) {
+                $qPrestasi->whereDate('tanggal', '>=', $dari)->whereDate('tanggal', '<=', $sampai);
+            } else {
+                $qPrestasi->whereMonth('tanggal', $bulan)->whereYear('tanggal', $tahun);
+            }
+            $totalPrestasi = $qPrestasi->count();
+
+            // Construct complete Rangkuman Gabungan dataset for PDF/XLSX export
+            $summary = [];
+
+            if ($kehadiranBreakdown->count() > 0) {
+                foreach ($kehadiranBreakdown as $row) {
+                    $summary[] = [
+                        'modul' => '4. KEHADIRAN',
+                        'kategori_kegiatan' => $row->nama_kegiatan ?? $row->jenis_kegiatan,
+                        'ringkasan_statistik' => "Hadir: {$row->total_hadir} | Izin: {$row->total_izin} | Sakit: {$row->total_sakit} | Alpha: {$row->total_alpha} | Terlambat: {$row->total_terlambat}",
+                        'total_kasus_catatan' => ($row->total_hadir + $row->total_izin + $row->total_sakit + $row->total_alpha + $row->total_terlambat) . ' Record'
+                    ];
+                }
+            } else {
+                $summary[] = [
+                    'modul' => '4. KEHADIRAN',
+                    'kategori_kegiatan' => 'Semua Kegiatan Absensi',
+                    'ringkasan_statistik' => 'Belum ada data absensi',
+                    'total_kasus_catatan' => '0 Record'
+                ];
+            }
+
+            $summary[] = [
+                'modul' => '2. PERIZINAN',
+                'kategori_kegiatan' => 'Izin Keluar / Pulang Santri',
+                'ringkasan_statistik' => 'Total pengajuan perizinan santri yang tercatat',
+                'total_kasus_catatan' => $totalIzin . ' Pengajuan'
+            ];
+
+            $summary[] = [
+                'modul' => '3. PELANGGARAN',
+                'kategori_kegiatan' => 'Pelanggaran & Disiplin',
+                'ringkasan_statistik' => "Total kasus pelanggaran (Akumulasi poin: {$totalPoin} Poin)",
+                'total_kasus_catatan' => $totalPelanggaran . ' Kasus'
+            ];
+
+            $summary[] = [
+                'modul' => '5. PRESTASI',
+                'kategori_kegiatan' => 'Prestasi & Kejuaraan',
+                'ringkasan_statistik' => 'Total prestasi dan kejuaraan santri yang diraih',
+                'total_kasus_catatan' => $totalPrestasi . ' Prestasi'
+            ];
+
+            $summaryData = collect($summary);
+
+            if ($request->query('format') === 'xlsx') {
+                return Excel::download(new LaporanExport($summaryData, 'Laporan Rangkuman Gabungan'), 'laporan-rangkuman-gabungan.xlsx');
+            }
+            
+            if ($request->query('format') === 'pdf') {
+                $pdf = Pdf::loadView('exports.laporan', [
+                    'data' => $summaryData, 
+                    'judul' => 'Laporan Rangkuman Gabungan (Kehadiran, Izin, Pelanggaran, & Prestasi)',
+                    'dari' => $dari,
+                    'sampai' => $sampai,
+                    'bulan' => $bulan,
+                    'tahun' => $tahun
+                ]);
+                return $pdf->download('laporan-rangkuman-gabungan.pdf');
+            }
         }
 
-        return response()->json($data);
+        return response()->json($kehadiranBreakdown);
     }
 
     public function organisasiDaerah(Request $request)

@@ -17,38 +17,49 @@ class DatabaseSeeder extends Seeder
         $this->call(UbudiyahSeeder::class);
         $this->call(UnitPendidikanSeeder::class);
 
-        DB::table('jenis_kegiatan')->insert([
+        foreach ([
             ['kode' => 'KAMAR', 'nama' => 'Kegiatan Kamar'],
             ['kode' => 'SEKOLAH', 'nama' => 'Kelas Formal'],
             ['kode' => 'PBS', 'nama' => 'Kelompok Al-Qur\'an Subuh'],
             ['kode' => 'PBM', 'nama' => 'Takhasus Maghrib'],
             ['kode' => 'DINIYAH', 'nama' => 'Kelas Madin'],
-        ]);
+        ] as $jk) {
+            DB::table('jenis_kegiatan')->updateOrInsert(['kode' => $jk['kode']], $jk);
+        }
 
         $kegiatanIds = DB::table('jenis_kegiatan')->pluck('jenis_kegiatan_id', 'kode');
-        DB::table('jadwal_kegiatan')->insert([
+        foreach ([
             ['jenis_kegiatan_id' => $kegiatanIds['SEKOLAH'], 'nama_jadwal' => 'Absensi Kelas Formal', 'jam_mulai' => '07:00:00', 'jam_selesai' => '07:30:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar Malam', 'jam_mulai' => '20:00:00', 'jam_selesai' => '20:30:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['PBS'], 'nama_jadwal' => 'Belajar Al-Qur\'an Subuh', 'jam_mulai' => '05:00:00', 'jam_selesai' => '06:00:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['DINIYAH'], 'nama_jadwal' => 'Absensi Kelas Madin', 'jam_mulai' => '15:30:00', 'jam_selesai' => '16:00:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['PBM'], 'nama_jadwal' => 'Belajar Takhasus Maghrib', 'jam_mulai' => '18:30:00', 'jam_selesai' => '19:30:00'],
-        ]);
+        ] as $jadwal) {
+            DB::table('jadwal_kegiatan')->updateOrInsert(
+                ['jenis_kegiatan_id' => $jadwal['jenis_kegiatan_id'], 'nama_jadwal' => $jadwal['nama_jadwal']],
+                $jadwal
+            );
+        }
 
-        DB::table('jenis_izin')->insert([
+        foreach ([
             ['nama' => 'Izin Pulang'],
             ['nama' => 'Izin Sakit'],
             ['nama' => 'Izin Keluar Komplek'],
-        ]);
+        ] as $izin) {
+            DB::table('jenis_izin')->updateOrInsert(['nama' => $izin['nama']], $izin);
+        }
 
-        DB::table('aturan_sanksi')->insert([
+        foreach ([
             ['kategori' => 'Ringan', 'poin_min' => 1, 'poin_maks' => 19, 'tindakan_sanksi' => 'Teguran lisan & pembinaan', 'urutan' => 1],
             ['kategori' => 'Ringan', 'poin_min' => 20, 'poin_maks' => 29, 'tindakan_sanksi' => 'Teguran tertulis (Surat Peringatan 1) / Botak', 'urutan' => 2],
             ['kategori' => 'Sedang', 'poin_min' => 30, 'poin_maks' => 49, 'tindakan_sanksi' => 'Pemanggilan Orang Tua / Surat Peringatan 2', 'urutan' => 3],
             ['kategori' => 'Sedang', 'poin_min' => 50, 'poin_maks' => 79, 'tindakan_sanksi' => 'Surat Peringatan 3 & Skorsing', 'urutan' => 4],
             ['kategori' => 'Berat', 'poin_min' => 80, 'poin_maks' => 100, 'tindakan_sanksi' => 'Dikembalikan ke Orang Tua (Dikeluarkan)', 'urutan' => 5],
-        ]);
+        ] as $sanksi) {
+            DB::table('aturan_sanksi')->updateOrInsert(['urutan' => $sanksi['urutan']], $sanksi);
+        }
 
-        DB::table('pengaturan_sistem')->insert([
+        foreach ([
             ['setting_key' => 'WA_API_URL', 'setting_value' => 'http://localhost:3000/send', 'keterangan' => 'URL Endpoint Gateway WA'],
             ['setting_key' => 'WA_API_KEY', 'setting_value' => 'secret-key-123', 'keterangan' => 'Key autentikasi gateway'],
             ['setting_key' => 'CRON_OVERDUE_MENIT', 'setting_value' => '60', 'keterangan' => 'Batas terlambat sebelum dianggap overdue (menit)'],
@@ -58,6 +69,8 @@ class DatabaseSeeder extends Seeder
             ['setting_key' => 'toleransi_menit_terlambat_input', 'setting_value' => '30', 'keterangan' => 'Toleransi menit sebelum input absensi dianggap terlambat'],
             ['setting_key' => 'durasi_edit_absensi_menit', 'setting_value' => '60', 'keterangan' => 'Batas waktu (menit) non-admin bisa edit absensi'],
             ['setting_key' => 'ambang_notifikasi_poin', 'setting_value' => '20', 'keterangan' => 'Ambang poin untuk mengirim notifikasi ke pengasuh'],
-        ]);
+        ] as $setting) {
+            DB::table('pengaturan_sistem')->updateOrInsert(['setting_key' => $setting['setting_key']], $setting);
+        }
     }
 }

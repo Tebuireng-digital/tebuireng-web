@@ -604,6 +604,17 @@ function Layout() {
             </div>
           )}
 
+          {user.jabatan === 'Pembina Kamar' && (
+            <Link
+              to="/data-master/santri"
+              className={`sidebar-nav-link ${location.pathname.startsWith('/data-master') ? 'active' : ''}`}
+              aria-current={location.pathname.startsWith('/data-master') ? 'page' : undefined}
+              onClick={closeMenu}
+            >
+              <NavIcon name="database"/><span>Data Santri</span>
+            </Link>
+          )}
+
           {['Admin', 'Pengasuh'].includes(user.jabatan) && (
             <Link to="/laporan/detail" className={`sidebar-nav-link ${location.pathname === '/laporan/detail' ? 'active' : ''}`} aria-current={location.pathname === '/laporan/detail' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Laporan Detail</span></Link>
           )}
@@ -670,14 +681,14 @@ function Layout() {
             } />
 
             <Route path="/data-master" element={
-              user.jabatan === 'Admin'
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
                 ? <Navigate to="/data-master/santri" replace />
                 : <Navigate to="/dashboard" />
             } />
             <Route path="/verifikasi-data" element={user.jabatan === 'Admin' ? <Navigate to="/verifikasi-data/santri" replace /> : <Navigate to="/dashboard" />} />
             <Route path="/verifikasi-data/:tab" element={user.jabatan === 'Admin' ? <DataMasterPage /> : <Navigate to="/dashboard" />} />
             <Route path="/data-master/:tab" element={
-              user.jabatan === 'Admin'
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
                 ? <DataMasterPage />
                 : <Navigate to="/dashboard" />
             } />

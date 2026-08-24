@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
+use Illuminate\Support\Facades\Storage;
+
 class SantriPortalController extends Controller
 {
     public function login(Request $request)
@@ -145,7 +147,7 @@ class SantriPortalController extends Controller
                 $join->on('santri.santri_id', '=', 'pendidikan.santri_id');
             })
             ->where('santri.santri_id', $wali->santri_id)
-            ->select('santri.no_id_induk', 'santri.nis', 'santri.nik_siswa', 'santri.nama', 'santri.jenis_kelamin', 'santri.tempat_lahir', 'santri.tanggal_lahir', 'santri.no_hp_santri', 'santri.alamat_jalan', 'santri.provinsi', 'santri.kabupaten_kota', 'santri.kecamatan', 'santri.desa_kelurahan', 'santri.kode_pos', 'santri.nama_wali', 'santri.no_hp_wali', 'unit_pendidikan.kode as unit_kode', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat', 'kelompok_madin.nama_kelas_madin as nama_madin', 'kelompok_pbs.nama_kelompok as nama_al_quran_subuh', 'kelompok_pbm.nama_kelompok as nama_takhasus', 'santri_keluarga.no_kk', 'santri_keluarga.nama_ayah', 'santri_keluarga.nik_ayah', 'santri_keluarga.pendidikan_ayah', 'santri_keluarga.pekerjaan_ayah', 'santri_keluarga.nama_ibu', 'santri_keluarga.nik_ibu', 'santri_keluarga.pendidikan_ibu', 'santri_keluarga.pekerjaan_ibu', 'santri_keluarga.rata_rata_penghasilan', 'pendidikan.tahun_ajaran', 'pendidikan.pend_sumber', 'pendidikan.kelas_sumber', 'pendidikan.jurusan', 'pendidikan.kelas_paralel', 'pendidikan.ranking', 'pendidikan.status_siswa_sumber as status_siswa_pendidikan', 'pendidikan.asal_sekolah', 'pendidikan.jenis_sekolah', 'pendidikan.status_sekolah', 'pendidikan.lokasi_sekolah', 'pendidikan.no_un', 'pendidikan.kip', 'pendidikan.saldo_spp')
+            ->select('santri.no_id_induk', 'santri.nis', 'santri.nik_siswa', 'santri.nama', 'santri.jenis_kelamin', 'santri.tempat_lahir', 'santri.tanggal_lahir', 'santri.no_hp_santri', 'santri.foto_path', 'santri.alamat_jalan', 'santri.provinsi', 'santri.kabupaten_kota', 'santri.kecamatan', 'santri.desa_kelurahan', 'santri.kode_pos', 'santri.nama_wali', 'santri.no_hp_wali', 'unit_pendidikan.kode as unit_kode', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat', 'kelompok_madin.nama_kelas_madin as nama_madin', 'kelompok_pbs.nama_kelompok as nama_al_quran_subuh', 'kelompok_pbm.nama_kelompok as nama_takhasus', 'santri_keluarga.no_kk', 'santri_keluarga.nama_ayah', 'santri_keluarga.nik_ayah', 'santri_keluarga.pendidikan_ayah', 'santri_keluarga.pekerjaan_ayah', 'santri_keluarga.nama_ibu', 'santri_keluarga.nik_ibu', 'santri_keluarga.pendidikan_ibu', 'santri_keluarga.pekerjaan_ibu', 'santri_keluarga.rata_rata_penghasilan', 'pendidikan.tahun_ajaran', 'pendidikan.pend_sumber', 'pendidikan.kelas_sumber', 'pendidikan.jurusan', 'pendidikan.kelas_paralel', 'pendidikan.ranking', 'pendidikan.status_siswa_sumber as status_siswa_pendidikan', 'pendidikan.asal_sekolah', 'pendidikan.jenis_sekolah', 'pendidikan.status_sekolah', 'pendidikan.lokasi_sekolah', 'pendidikan.no_un', 'pendidikan.kip', 'pendidikan.saldo_spp')
             ->first();
 
         return [
@@ -155,6 +157,7 @@ class SantriPortalController extends Controller
             'nis' => $profile?->nis,
             'nik_siswa' => $profile?->nik_siswa,
             'nama' => $profile?->nama ?? $wali->username,
+            'foto_url' => $profile?->foto_path ? Storage::url($profile->foto_path) : null,
             'jenis_kelamin' => $profile?->jenis_kelamin,
             'tempat_lahir' => $profile?->tempat_lahir,
             'tanggal_lahir' => $profile?->tanggal_lahir,

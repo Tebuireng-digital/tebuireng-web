@@ -166,7 +166,7 @@
                 @endif
             </td>
             <td class="header-cell">
-                <p class="h-sub">MAJELIS ILMI PONDOK PUTRA</p>
+                <p class="h-sub">PONDOK PUTRA</p>
                 <p class="h-main">PESANTREN TEBUIRENG JOMBANG</p>
                 <p class="h-addr">Jl. Irian Jaya 10 Tebuireng Cukir Diwek Jombang 61471</p>
             </td>

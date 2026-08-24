@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
@@ -48,6 +49,8 @@ interface SantriMaster {
   nama_organisasi_daerah?: string | null;
   kegiatan_partisipasi?: Record<string, { status: 'terdaftar' | 'tidak_ikut' | 'perlu_verifikasi'; alasan?: string | null }>;
   catatan_import?: string | null;
+  foto_path?: string | null;
+  foto_url?: string | null;
 }
 interface VerificationSantri {
   santri_id: number;
@@ -308,6 +311,29 @@ export function DataMasterPage() {
     nama_wali: '',
     no_hp_wali: '',
   });
+  const [fotoUploading, setFotoUploading] = useState(false);
+  const [fotoError, setFotoError] = useState('');
+
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingSantri.santri_id) return;
+    const formData = new FormData();
+    formData.append('foto', file);
+    setFotoUploading(true);
+    setFotoError('');
+    try {
+      const res = await api.post(`/api/santri/${editingSantri.santri_id}/foto`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setEditingSantri(s => ({ ...s, foto_url: res.data.foto_url, foto_path: res.data.foto_path }));
+      setSuccessToast(res.data.message || 'Foto santri berhasil diunggah.');
+      await fetchData();
+    } catch (err: any) {
+      setFotoError(err.response?.data?.message || 'Gagal mengunggah foto santri.');
+    } finally {
+      setFotoUploading(false);
+    }
+  };
 
   // Account Tab State
   const [accountSearch, setAccountSearch] = useState('');
@@ -376,10 +402,13 @@ export function DataMasterPage() {
   const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState<boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
 
+  const { user } = useAuth();
   const isVerificationData = location.pathname.startsWith('/verifikasi-data');
-  const allowedTabs = isVerificationData
-    ? ['santri', 'orda', 'kamar', 'review']
-    : ['santri', 'alumni', 'data-orda', 'ekstrakurikuler', 'wisma', 'penugasan', 'kamar', 'review', 'akun', 'organisasi-daerah'];
+  const allowedTabs = user?.jabatan !== 'Admin'
+    ? ['santri']
+    : isVerificationData
+      ? ['santri', 'orda', 'kamar', 'review']
+      : ['santri', 'alumni', 'data-orda', 'ekstrakurikuler', 'wisma', 'penugasan', 'kamar', 'review', 'akun', 'organisasi-daerah'];
   const activeTab: MasterTab = allowedTabs.includes(tab ?? '') ? (tab as MasterTab) : 'santri';
 
   const tabTitles: Record<MasterTab, string> = {
@@ -964,15 +993,17 @@ export function DataMasterPage() {
               <h2>Master Data Santri</h2>
               <p>Kelola seluruh data santri ({santriList.length.toLocaleString('id')} total santri terdaftar).</p>
             </div>
-            <button
-              className="primary-button"
-              onClick={() => {
-                setEditingSantri({ santri_id: 0, nis: '', nama: '', unit_id: 1, kamar_id: null, nama_wali: '', no_hp_wali: '' });
-                setShowSantriModal(true);
-              }}
-            >
-              + Tambah Santri
-            </button>
+            {user?.jabatan === 'Admin' && (
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setEditingSantri({ santri_id: 0, nis: '', nama: '', unit_id: 1, kamar_id: null, nama_wali: '', no_hp_wali: '' });
+                  setShowSantriModal(true);
+                }}
+              >
+                + Tambah Santri
+              </button>
+            )}
           </div>
 
           <div className="account-table-controls">
@@ -1026,7 +1057,18 @@ export function DataMasterPage() {
                   <tr key={s.santri_id}>
                     <td>{(santriPage - 1) * itemsPerPage + idx + 1}</td>
                     <td>{s.no_id_induk || <small style={{ color: '#888' }}>Belum diverifikasi</small>}</td>
-                    <td><strong>{s.nama}</strong></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {s.foto_url ? (
+                          <img src={s.foto_url} alt={s.nama} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #cbd5e1' }} />
+                        ) : (
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e2e8f0', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                            {s.nama ? s.nama.charAt(0).toUpperCase() : '?'}
+                          </div>
+                        )}
+                        <strong>{s.nama}</strong>
+                      </div>
+                    </td>
                     <td><span className="schedule-label">{s.kode_unit || '—'}</span></td>
                     <td>{s.nama_kamar || <small style={{ color: '#aaa' }}>Belum diatur</small>}</td>
                     <td>{s.nama_wali || '—'}</td>
@@ -1237,6 +1279,30 @@ export function DataMasterPage() {
             </header>
             <form id="santri-form" onSubmit={saveSantri} className="santri-modal-form">
               <div className="santri-modal-body">
+              {editingSantri.santri_id ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 8 }}>
+                  {editingSantri.foto_url ? (
+                    <img src={editingSantri.foto_url} alt={editingSantri.nama || 'Foto santri'} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #0f6e56', flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#cbd5e1', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700, flexShrink: 0 }}>
+                      {editingSantri.nama ? editingSantri.nama.charAt(0).toUpperCase() : '?'}
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block', color: '#1e293b' }}>Foto Profil Santri</label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFotoUpload}
+                      disabled={fotoUploading}
+                      style={{ fontSize: 12 }}
+                    />
+                    {fotoUploading && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Mengunggah foto...</p>}
+                    {fotoError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{fotoError}</p>}
+                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Format JPG, PNG, WEBP (Maks 5 MB)</p>
+                  </div>
+                </div>
+              ) : null}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Nama Lengkap *</label>
                 <input

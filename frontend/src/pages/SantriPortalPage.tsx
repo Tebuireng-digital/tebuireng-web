@@ -133,7 +133,93 @@ function PortalDashboardPage({ user, logout, mobileOpen, setMobileOpen, navigate
     ['Takhasus', portalAssignmentLabel(user, 'PBM', user.nama_takhasus)],
   ];
 
-  return <div className="portal-layout portal-dashboard-layout"><header className="portal-topbar"><button className="portal-menu-button" aria-label="Buka menu" onClick={() => setMobileOpen(true)}><PortalIcon type="more"/></button><div className="portal-top-brand"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB"/><span>Portal Wali Santri</span></div><div className="portal-top-user"><span>{user.nama_wali || 'Wali Santri'}</span><button onClick={() => void logout()} aria-label="Keluar"><PortalIcon type="logout"/></button></div></header><aside className={`portal-sidebar ${mobileOpen ? 'is-open' : ''}`}><div className="portal-sidebar-heading"><div><p className="eyebrow">SIMANTEB</p><strong>Portal Wali Santri</strong></div><button className="portal-close-button" onClick={() => setMobileOpen(false)} aria-label="Tutup menu">×</button></div><nav aria-label="Navigasi portal wali santri"><button className="is-active" onClick={() => navigate('beranda')}><PortalIcon type="home"/><span>Beranda</span></button><button onClick={() => navigate('profil')}><PortalIcon type="id-card"/><span>Data Anak</span></button><button onClick={() => navigate('kehadiran')}><PortalIcon type="calendar"/><span>Kehadiran</span></button><button onClick={() => navigate('pelanggaran')}><PortalIcon type="warning"/><span>Pelanggaran</span></button><button onClick={() => navigate('perizinan')}><PortalIcon type="permit"/><span>Perizinan</span></button><button onClick={() => navigate('rapor')}><PortalIcon type="report"/><span>Rapor Pengajian</span></button><button onClick={() => navigate('prestasi')}><PortalIcon type="award"/><span>Prestasi</span></button><button onClick={() => navigate('password')}><PortalIcon type="lock"/><span>Ganti Password</span></button></nav><button className="portal-sidebar-logout" onClick={() => void logout()}><PortalIcon type="logout"/><span>Keluar</span></button></aside>{mobileOpen && <button className="portal-overlay" aria-label="Tutup menu" onClick={() => setMobileOpen(false)}/>}<main className="portal-main"><div className="portal-content"><section className="portal-dashboard-home" aria-labelledby="portal-dashboard-title"><header className="portal-dashboard-welcome"><h1 id="portal-dashboard-title">Selamat datang, <strong>Bapak/Ibu</strong></h1></header><section className="portal-child-banner" aria-labelledby="portal-child-name"><div><p className="eyebrow">Data anak</p><h2 id="portal-child-name">{user.nama}</h2><span className="portal-class-pill">{user.nama_kelas || user.tingkat ? `Kelas ${user.nama_kelas || user.tingkat}` : 'Kelas'}</span><div className="portal-assignment-list">{assignments.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div></div><PortalIcon type="profile"/></section><section className="portal-dashboard-section" aria-labelledby="portal-features-title"><div className="portal-dashboard-section-heading"><h2 id="portal-features-title">Fitur</h2></div><div className="portal-feature-grid"><button onClick={() => navigate('profil')}><PortalIcon type="id-card"/><strong>Data Anak</strong></button><button onClick={() => navigate('kehadiran')}><PortalIcon type="calendar"/><strong>Kehadiran</strong></button><button onClick={() => navigate('pelanggaran')}><PortalIcon type="warning"/><strong>Pelanggaran</strong></button><button onClick={() => navigate('perizinan')}><PortalIcon type="permit"/><strong>Perizinan</strong></button><button onClick={() => navigate('rapor')}><PortalIcon type="report"/><strong>Rapor</strong></button><button onClick={() => navigate('prestasi')}><PortalIcon type="award"/><strong>Prestasi</strong></button></div></section><PortalDashboardDetails attendance={attendance} violations={violations} permits={permits}/></section></div><PortalMobileNav activeSection="beranda" navigate={navigate} onMenu={() => setMobileOpen(true)}/></main></div>;
+  return (
+    <div className="portal-layout portal-dashboard-layout">
+      <header className="portal-topbar">
+        <button className="portal-menu-button" aria-label="Buka menu" onClick={() => setMobileOpen(true)}>
+          <PortalIcon type="more"/>
+        </button>
+        <div className="portal-top-brand">
+          <img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB"/>
+          <span>Portal Wali Santri</span>
+        </div>
+        <div className="portal-top-user">
+          <span>{user.nama_wali || 'Wali Santri'}</span>
+          <button onClick={() => void logout()} aria-label="Keluar">
+            <PortalIcon type="logout"/>
+          </button>
+        </div>
+      </header>
+
+      <aside className={`portal-sidebar ${mobileOpen ? 'is-open' : ''}`}>
+        <div className="portal-sidebar-heading">
+          <div>
+            <p className="eyebrow">SIMANTEB</p>
+            <strong>Portal Wali Santri</strong>
+          </div>
+          <button className="portal-close-button" onClick={() => setMobileOpen(false)} aria-label="Tutup menu">×</button>
+        </div>
+        <nav aria-label="Navigasi portal wali santri">
+          <button className="is-active" onClick={() => navigate('beranda')}><PortalIcon type="home"/><span>Beranda</span></button>
+          <button onClick={() => navigate('profil')}><PortalIcon type="id-card"/><span>Data Anak</span></button>
+          <button onClick={() => navigate('kehadiran')}><PortalIcon type="calendar"/><span>Kehadiran</span></button>
+          <button onClick={() => navigate('pelanggaran')}><PortalIcon type="warning"/><span>Pelanggaran</span></button>
+          <button onClick={() => navigate('perizinan')}><PortalIcon type="permit"/><span>Perizinan</span></button>
+          <button onClick={() => navigate('rapor')}><PortalIcon type="report"/><span>Rapor Pengajian</span></button>
+          <button onClick={() => navigate('prestasi')}><PortalIcon type="award"/><span>Prestasi</span></button>
+          <button onClick={() => navigate('password')}><PortalIcon type="lock"/><span>Ganti Password</span></button>
+        </nav>
+        <button className="portal-sidebar-logout" onClick={() => void logout()}><PortalIcon type="logout"/><span>Keluar</span></button>
+      </aside>
+
+      {mobileOpen && <button className="portal-overlay" aria-label="Tutup menu" onClick={() => setMobileOpen(false)}/>}
+
+      <main className="portal-main">
+        <div className="portal-content">
+          <section className="portal-dashboard-home" aria-labelledby="portal-dashboard-title">
+            <header className="portal-dashboard-welcome">
+              <h1 id="portal-dashboard-title">Selamat datang, <strong>Bapak/Ibu</strong></h1>
+            </header>
+            <section className="portal-child-banner" aria-labelledby="portal-child-name">
+              <div>
+                <p className="eyebrow">Data anak</p>
+                <h2 id="portal-child-name">{user.nama}</h2>
+                <span className="portal-class-pill">{user.nama_kelas || user.tingkat ? `Kelas ${user.nama_kelas || user.tingkat}` : 'Kelas'}</span>
+                <div className="portal-assignment-list">
+                  {assignments.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+                </div>
+              </div>
+              {user.foto_url ? (
+                <img
+                  src={user.foto_url}
+                  alt={user.nama}
+                  className="portal-child-photo"
+                  style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.8)', flexShrink: 0 }}
+                />
+              ) : (
+                <PortalIcon type="profile"/>
+              )}
+            </section>
+            <section className="portal-dashboard-section" aria-labelledby="portal-features-title">
+              <div className="portal-dashboard-section-heading">
+                <h2 id="portal-features-title">Fitur</h2>
+              </div>
+              <div className="portal-feature-grid">
+                <button onClick={() => navigate('profil')}><PortalIcon type="id-card"/><strong>Data Anak</strong></button>
+                <button onClick={() => navigate('kehadiran')}><PortalIcon type="calendar"/><strong>Kehadiran</strong></button>
+                <button onClick={() => navigate('pelanggaran')}><PortalIcon type="warning"/><strong>Pelanggaran</strong></button>
+                <button onClick={() => navigate('perizinan')}><PortalIcon type="permit"/><strong>Perizinan</strong></button>
+                <button onClick={() => navigate('rapor')}><PortalIcon type="report"/><strong>Rapor</strong></button>
+                <button onClick={() => navigate('prestasi')}><PortalIcon type="award"/><strong>Prestasi</strong></button>
+              </div>
+            </section>
+            <PortalDashboardDetails attendance={attendance} violations={violations} permits={permits}/>
+          </section>
+        </div>
+        <PortalMobileNav activeSection="beranda" navigate={navigate} onMenu={() => setMobileOpen(true)}/>
+      </main>
+    </div>
+  );
 }
 
 function PortalSectionShell({ user, logout, mobileOpen, setMobileOpen, navigate, menu, children }: { user: SantriUser; logout: () => Promise<void>; mobileOpen: boolean; setMobileOpen: (open: boolean) => void; navigate: (next: PortalSection) => void; menu: Array<[PortalSection, string, Parameters<typeof PortalIcon>[0]['type']]>; children: React.ReactNode }) {
@@ -166,7 +252,7 @@ function Profile({ user }: { user: SantriUser }) {
   const educationDetails: Array<[string, string | null | undefined]> = [['Tahun ajaran', user.tahun_ajaran], ['Pendidikan', user.pend_sumber], ['Kelas sumber', user.kelas_sumber], ['Jurusan', user.jurusan], ['Kelas paralel', user.kelas_paralel], ['Asal sekolah', user.asal_sekolah], ['Jenis sekolah', user.jenis_sekolah], ['Status sekolah', user.status_sekolah], ['Ranking', user.ranking]];
   const familyDetails: Array<[string, string | null | undefined]> = [['Nama wali', user.nama_wali], ['Nomor HP wali', user.no_hp_wali], ['Nama ayah', user.nama_ayah], ['Pendidikan ayah', user.pendidikan_ayah], ['Pekerjaan ayah', user.pekerjaan_ayah], ['Nama ibu', user.nama_ibu], ['Pendidikan ibu', user.pendidikan_ibu], ['Pekerjaan ibu', user.pekerjaan_ibu]];
   const addressDetails: Array<[string, string | null | undefined]> = [['Alamat jalan', user.alamat_jalan], ['Desa/Kelurahan', user.desa_kelurahan], ['Kecamatan', user.kecamatan], ['Kabupaten/Kota', user.kabupaten_kota], ['Provinsi', user.provinsi], ['Kode pos', user.kode_pos]];
-  return <section className="portal-profile-page" aria-labelledby="portal-profile-title"><header className="portal-page-heading"><p className="eyebrow">Profil santri</p><h1 id="portal-profile-title">Data Anak</h1><p>Informasi anak, pendidikan, penempatan, dan keluarga.</p></header><div className="portal-profile-sections"><ProfileSection title="Identitas" details={identityDetails}/><ProfileSection title="Penempatan" details={assignmentDetails}/><ProfileSection title="Pendidikan" details={educationDetails}/><ProfileSection title="Keluarga" details={familyDetails}/><ProfileSection title="Domisili" details={addressDetails}/></div></section>;
+  return <section className="portal-profile-page" aria-labelledby="portal-profile-title"><header className="portal-page-heading" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>{user.foto_url ? <img src={user.foto_url} alt={user.nama} style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #0f6e56', flexShrink: 0 }} /> : null}<div><p className="eyebrow">Profil santri</p><h1 id="portal-profile-title">Data Anak</h1><p>Informasi anak, pendidikan, penempatan, dan keluarga.</p></div></header><div className="portal-profile-sections"><ProfileSection title="Identitas" details={identityDetails}/><ProfileSection title="Penempatan" details={assignmentDetails}/><ProfileSection title="Pendidikan" details={educationDetails}/><ProfileSection title="Keluarga" details={familyDetails}/><ProfileSection title="Domisili" details={addressDetails}/></div></section>;
 }
 
 function ProfileSection({ title, details }: { title: string; details: Array<[string, string | null | undefined]> }) {

@@ -123,7 +123,7 @@
                 @endif
             </td>
             <td class="header-cell">
-                <h2>PENDIDIKAN PONDOK PESANTREN</h2>
+                <h2>MAJELIS AMNI</h2>
                 <h1>TEBUIRENG</h1>
                 <p>Sekretariat: Jl. Irian Jaya No. 10 Tebuireng, Diwek, Jombang, Jawa Timur 61471</p>
             </td>

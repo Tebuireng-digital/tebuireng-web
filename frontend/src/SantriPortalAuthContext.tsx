@@ -5,6 +5,7 @@ export interface SantriUser {
   santri_id: number;
   no_id_induk: string;
   nama: string;
+  foto_url?: string | null;
   nis?: string | null;
   nik_siswa?: string | null;
   jenis_kelamin?: string | null;

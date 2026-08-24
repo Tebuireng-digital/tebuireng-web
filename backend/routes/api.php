@@ -54,14 +54,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/perizinan/{id}/pdf', [\App\Http\Controllers\PerizinanController::class, 'downloadPdf'])->middleware('role:Keamanan,Pengasuh,Admin');
 
     // Laporan
-    Route::get('/laporan/kehadiran', [\App\Http\Controllers\LaporanController::class, 'kehadiran'])->middleware('role:Pengasuh');
-    Route::get('/laporan/pelanggaran', [\App\Http\Controllers\LaporanController::class, 'pelanggaran'])->middleware('role:Pengasuh');
-    Route::get('/laporan/perizinan', [\App\Http\Controllers\LaporanController::class, 'perizinan'])->middleware('role:Pengasuh');
-    Route::get('/laporan/bulanan', [\App\Http\Controllers\LaporanController::class, 'bulanan'])->middleware('role:Pengasuh');
+    Route::get('/laporan/kehadiran', [\App\Http\Controllers\LaporanController::class, 'kehadiran'])->middleware('role:Admin,Pengasuh');
+    Route::get('/laporan/pelanggaran', [\App\Http\Controllers\LaporanController::class, 'pelanggaran'])->middleware('role:Admin,Pengasuh');
+    Route::get('/laporan/perizinan', [\App\Http\Controllers\LaporanController::class, 'perizinan'])->middleware('role:Admin,Pengasuh');
+    Route::get('/laporan/prestasi', [\App\Http\Controllers\LaporanController::class, 'prestasi'])->middleware('role:Admin,Pengasuh');
+    Route::get('/laporan/bulanan', [\App\Http\Controllers\LaporanController::class, 'bulanan'])->middleware('role:Admin,Pengasuh');
 
-    // Pelanggaran
+    // Santri
     Route::get('/santri/{id}/perizinan', [\App\Http\Controllers\PerizinanController::class, 'getSantriPerizinan']);
     Route::get('/santri', [\App\Http\Controllers\SantriController::class, 'index']);
+    Route::post('/santri/{id}/foto', [\App\Http\Controllers\SantriController::class, 'uploadFoto'])->middleware('role:Admin,Pembina Kamar');
 
     // Admin & Master
     Route::post('/petugas/{id}/reset-password', [\App\Http\Controllers\PetugasController::class, 'resetPassword'])->middleware('role:Admin');
@@ -74,11 +76,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/master/kamar/{id}', [\App\Http\Controllers\MasterController::class, 'updateKamar'])->middleware('role:Admin');
     Route::delete('/master/kamar/{id}', [\App\Http\Controllers\MasterController::class, 'destroyKamar'])->middleware('role:Admin');
     Route::get('/master/santri/count', [\App\Http\Controllers\MasterController::class, 'countSantri'])->middleware('role:Admin');
-    Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin');
-    Route::get('/master/santri/options', [\App\Http\Controllers\MasterController::class, 'santriOptions'])->middleware('role:Admin');
+    Route::get('/master/santri', [\App\Http\Controllers\MasterController::class, 'getSantri'])->middleware('role:Admin,Pembina Kamar');
+    Route::get('/master/santri/options', [\App\Http\Controllers\MasterController::class, 'santriOptions'])->middleware('role:Admin,Pembina Kamar');
     Route::get('/master/santri/verifikasi', [\App\Http\Controllers\MasterController::class, 'verificationQueue'])->middleware('role:Admin');
     Route::get('/master/santri/verifikasi-orda', [\App\Http\Controllers\MasterController::class, 'ordaVerificationQueue'])->middleware('role:Admin');
-    Route::post('/master/santri', [\App\Http\Controllers\MasterController::class, 'storeSantri'])->middleware('role:Admin');
+    Route::post('/master/santri', [\App\Http\Controllers\MasterController::class, 'storeSantri'])->middleware('role:Admin,Pembina Kamar');
     Route::get('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'getPenugasan'])->middleware('role:Admin');
     Route::post('/master/penugasan', [\App\Http\Controllers\MasterController::class, 'storePenugasan'])->middleware('role:Admin');
     Route::delete('/master/penugasan/{id}', [\App\Http\Controllers\MasterController::class, 'deletePenugasan'])->middleware('role:Admin');

@@ -98,7 +98,35 @@
     </style>
 </head>
 <body>
-    {{-- COVER PAGE --}}
+@if(!empty($isExcel))
+    {{-- FORMAT EXCEL TANPA LOGO & TANPA COVER PAGE --}}
+    <table>
+        <thead>
+            <tr>
+                @if(count($data) > 0)
+                    @foreach((array)$data[0] as $key => $value)
+                        <th style="background-color: #0F6E56; color: #FFFFFF; font-weight: bold;">{{ strtoupper(str_replace('_', ' ', $key)) }}</th>
+                    @endforeach
+                @endif
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($data as $row)
+                <tr>
+                    @foreach((array)$row as $value)
+                        <td>{{ $value }}</td>
+                    @endforeach
+                </tr>
+            @endforeach
+            @if(count($data) === 0)
+                <tr>
+                    <td colspan="10" style="text-align: center; color: #666; font-style: italic;">Tidak ada data untuk periode ini.</td>
+                </tr>
+            @endif
+        </tbody>
+    </table>
+@else
+    {{-- FORMAT PDF DENGAN COVER PAGE & LOGO --}}
     <div class="cover-page">
         @if(file_exists(public_path('LOGO_TEBUIRENG_.jpg')))
             <img src="{{ public_path('LOGO_TEBUIRENG_.jpg') }}" class="cover-logo" alt="Logo">
@@ -129,7 +157,6 @@
         </div>
     </div>
     
-    {{-- REPORT CONTENT PAGE --}}
     <div class="report-section">
         <div class="report-title">
             {{ $judul ?? 'Laporan' }}
@@ -160,5 +187,6 @@
             </tbody>
         </table>
     </div>
+@endif
 </body>
 </html>

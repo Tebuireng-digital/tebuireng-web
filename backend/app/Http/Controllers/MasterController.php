@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Support\KamarName;
+use App\Support\SantriAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 class MasterController extends Controller
 {
@@ -253,7 +255,7 @@ class MasterController extends Controller
 
     public function getSantri()
     {
-        $santri = DB::table('santri')
+        $query = DB::table('santri')
             ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
             ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
             ->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')
@@ -263,8 +265,14 @@ class MasterController extends Controller
                     ->where('sod.status', '=', 'aktif')
                     ->whereNull('sod.tanggal_selesai');
             })
-            ->leftJoin('organisasi_daerah as od', 'sod.organisasi_daerah_id', '=', 'od.organisasi_daerah_id')
-            ->select(
+            ->leftJoin('organisasi_daerah as od', 'sod.organisasi_daerah_id', '=', 'od.organisasi_daerah_id');
+
+        $petugas = auth()->user();
+        if ($petugas && $petugas->jabatan !== 'Admin') {
+            SantriAccess::scopeAssigned($query, $petugas, 'santri');
+        }
+
+        $santri = $query->select(
                 'santri.santri_id',
                 'santri.no_id_induk',
                 'santri.nis',
@@ -297,6 +305,7 @@ class MasterController extends Controller
                 'santri.no_hp_wali',
                 'santri.status_aktif',
                 'santri.status_verifikasi',
+                'santri.foto_path',
                 'od.organisasi_daerah_id as sod_organisasi_daerah_id',
                 'od.kode as kode_organisasi_daerah',
                 'od.nama as nama_organisasi_daerah',
@@ -311,6 +320,7 @@ class MasterController extends Controller
             ->get(['p.santri_id', 'j.kode', 'p.status', 'p.alasan'])
             ->groupBy('santri_id');
         foreach ($santri as $row) {
+            $row->foto_url = $row->foto_path ? Storage::url($row->foto_path) : null;
             $row->kegiatan_partisipasi = ($partisipasi[$row->santri_id] ?? collect())
                 ->mapWithKeys(fn ($item) => [strtolower($item->kode) => ['status' => $item->status, 'alasan' => $item->alasan]])
                 ->all();
@@ -326,6 +336,13 @@ class MasterController extends Controller
 
     public function storeSantri(Request $request)
     {
+        $petugas = auth()->user();
+        if ($petugas && $petugas->jabatan !== 'Admin' && $request->input('santri_id')) {
+            if (!SantriAccess::canAccess($petugas, (int) $request->input('santri_id'))) {
+                return response()->json(['message' => 'Anda tidak memiliki akses untuk memperbarui data santri ini.'], 403);
+            }
+        }
+
         $data = $request->validate([
             'santri_id' => 'nullable|integer',
             'no_id_induk' => 'nullable|string|max:30|unique:santri,no_id_induk,'.($request->input('santri_id') ?: 'NULL').',santri_id',

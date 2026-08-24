@@ -126,5 +126,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Alumni
     Route::get('/master/alumni', [\App\Http\Controllers\AlumniController::class, 'index'])->middleware('role:Admin');
     Route::get('/master/alumni/stats', [\App\Http\Controllers\AlumniController::class, 'stats'])->middleware('role:Admin');
+
+    // WhatsApp Bot Management (Khusus Admin)
+    Route::get('/master/wa-bot/status', [\App\Http\Controllers\WaBotController::class, 'getStatus'])->middleware('role:Admin');
+    Route::get('/master/wa-bot/qr', [\App\Http\Controllers\WaBotController::class, 'getQrData'])->middleware('role:Admin');
+    Route::post('/master/wa-bot/disconnect', [\App\Http\Controllers\WaBotController::class, 'disconnect'])->middleware('role:Admin');
     });
 });
+

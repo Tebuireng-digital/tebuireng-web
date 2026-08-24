@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -127,7 +127,7 @@ interface ImportReviewItem {
   kamar_kandidat?: string | null;
 }
 
-type MasterTab = 'santri' | 'alumni' | 'data-orda' | 'ekstrakurikuler' | 'wisma' | 'verifikasi' | 'orda' | 'kamar' | 'review' | 'penugasan' | 'akun' | 'organisasi-daerah';
+type MasterTab = 'santri' | 'alumni' | 'data-orda' | 'ekstrakurikuler' | 'wisma' | 'verifikasi' | 'orda' | 'kamar' | 'review' | 'penugasan' | 'akun' | 'organisasi-daerah' | 'wa-bot';
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
 type PaginationItem = number | 'ellipsis';
 
@@ -239,6 +239,30 @@ function TableSkeleton({ columns, rows = 6 }: { columns: number; rows?: number }
 export function DataMasterPage() {
   const { tab } = useParams<{ tab?: string }>();
   const location = useLocation();
+  const { user } = useAuth();
+  const isVerificationData = location.pathname.startsWith('/verifikasi-data');
+  const allowedTabs = user?.jabatan !== 'Admin'
+    ? ['santri']
+    : isVerificationData
+      ? ['santri', 'orda', 'kamar', 'review']
+      : ['santri', 'alumni', 'data-orda', 'ekstrakurikuler', 'wisma', 'penugasan', 'kamar', 'review', 'akun', 'organisasi-daerah', 'wa-bot'];
+  const activeTab: MasterTab = allowedTabs.includes(tab ?? '') ? (tab as MasterTab) : 'santri';
+
+  const tabTitles: Record<MasterTab, string> = {
+    santri: 'Data Santri',
+    verifikasi: 'Pemetaan Absensi Santri',
+    orda: 'Verifikasi ORDA',
+    penugasan: 'Penugasan Absensi',
+    kamar: 'Kamar & Pemetaan',
+    review: 'Review Kemiripan Data',
+    akun: 'Akun Petugas',
+    alumni: 'Data Alumni',
+    'organisasi-daerah': 'Organisasi Daerah',
+    'data-orda': 'Data ORDA',
+    ekstrakurikuler: 'Data Ekstrakurikuler',
+    wisma: 'Data Wisma',
+    'wa-bot': 'Pengaturan Bot WhatsApp',
+  };
   const [petugas, setPetugas] = useState<Petugas[]>([]);
   const [opsi, setOpsi] = useState<Opsi[]>([]);
   const [penugasan, setPenugasan] = useState<Penugasan[]>([]);
@@ -313,25 +337,34 @@ export function DataMasterPage() {
   });
   const [fotoUploading, setFotoUploading] = useState(false);
   const [fotoError, setFotoError] = useState('');
+  const [selectedFotoFile, setSelectedFotoFile] = useState<File | null>(null);
+  const [previewFotoUrl, setPreviewFotoUrl] = useState<string | null>(null);
 
   const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !editingSantri.santri_id) return;
-    const formData = new FormData();
-    formData.append('foto', file);
-    setFotoUploading(true);
-    setFotoError('');
-    try {
-      const res = await api.post(`/api/santri/${editingSantri.santri_id}/foto`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setEditingSantri(s => ({ ...s, foto_url: res.data.foto_url, foto_path: res.data.foto_path }));
-      setSuccessToast(res.data.message || 'Foto santri berhasil diunggah.');
-      await fetchData();
-    } catch (err: any) {
-      setFotoError(err.response?.data?.message || 'Gagal mengunggah foto santri.');
-    } finally {
-      setFotoUploading(false);
+    if (!file) return;
+
+    if (editingSantri.santri_id) {
+      const formData = new FormData();
+      formData.append('foto', file);
+      setFotoUploading(true);
+      setFotoError('');
+      try {
+        const res = await api.post(`/api/santri/${editingSantri.santri_id}/foto`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setEditingSantri(s => ({ ...s, foto_url: res.data.foto_url, foto_path: res.data.foto_path }));
+        setPreviewFotoUrl(res.data.foto_url);
+        setSuccessToast(res.data.message || 'Foto santri berhasil diunggah.');
+        await fetchData();
+      } catch (err: any) {
+        setFotoError(err.response?.data?.message || 'Gagal mengunggah foto santri.');
+      } finally {
+        setFotoUploading(false);
+      }
+    } else {
+      setSelectedFotoFile(file);
+      setPreviewFotoUrl(URL.createObjectURL(file));
     }
   };
 
@@ -402,29 +435,55 @@ export function DataMasterPage() {
   const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState<boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
 
-  const { user } = useAuth();
-  const isVerificationData = location.pathname.startsWith('/verifikasi-data');
-  const allowedTabs = user?.jabatan !== 'Admin'
-    ? ['santri']
-    : isVerificationData
-      ? ['santri', 'orda', 'kamar', 'review']
-      : ['santri', 'alumni', 'data-orda', 'ekstrakurikuler', 'wisma', 'penugasan', 'kamar', 'review', 'akun', 'organisasi-daerah'];
-  const activeTab: MasterTab = allowedTabs.includes(tab ?? '') ? (tab as MasterTab) : 'santri';
+  // WA Bot State
+  const [waStatus, setWaStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'offline'>('disconnected');
+  const [waQrImage, setWaQrImage] = useState<string | null>(null);
+  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [waLoading, setWaLoading] = useState(false);
+  const [waDisconnecting, setWaDisconnecting] = useState(false);
 
-  const tabTitles: Record<MasterTab, string> = {
-    santri: 'Data Santri',
-    verifikasi: 'Pemetaan Absensi Santri',
-    orda: 'Verifikasi ORDA',
-    penugasan: 'Penugasan Absensi',
-    kamar: 'Kamar & Pemetaan',
-    review: 'Review Kemiripan Data',
-    akun: 'Akun Petugas',
-    alumni: 'Data Alumni',
-    'organisasi-daerah': 'Organisasi Daerah',
-    'data-orda': 'Data ORDA',
-    ekstrakurikuler: 'Data Ekstrakurikuler',
-    wisma: 'Data Wisma',
+  const fetchWaBotData = useCallback(async () => {
+    setWaLoading(true);
+    try {
+      const response = await api.get('/api/master/wa-bot/qr');
+      setWaStatus(response.data.wa_connection || 'disconnected');
+      setWaQrImage(response.data.qr_image || null);
+      setWaPhone(response.data.phone_number || null);
+    } catch {
+      try {
+        const statusRes = await api.get('/api/master/wa-bot/status');
+        setWaStatus(statusRes.data.wa_connection || 'disconnected');
+      } catch {
+        setWaStatus('offline');
+        setWaQrImage(null);
+        setWaPhone(null);
+      }
+    } finally {
+      setWaLoading(false);
+    }
+  }, []);
+
+  const handleDisconnectWa = async () => {
+    if (!window.confirm('Apakah Anda yakin ingin memutuskan penautan WhatsApp Bot saat ini? Bot akan berhenti mengirim pesan hingga Anda melakukan scan QR Code baru.')) return;
+    setWaDisconnecting(true);
+    try {
+      const response = await api.post('/api/master/wa-bot/disconnect');
+      setSuccessToast(response.data.message || 'Sesi WhatsApp diputuskan.');
+      await fetchWaBotData();
+    } catch (err: any) {
+      setErrorToast(err.response?.data?.message || 'Gagal memutuskan sesi WhatsApp.');
+    } finally {
+      setWaDisconnecting(false);
+    }
   };
+
+  useEffect(() => {
+    if (activeTab === 'wa-bot') {
+      fetchWaBotData();
+      const interval = setInterval(fetchWaBotData, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, fetchWaBotData]);
 
   usePageMeta({
     title: `${tabTitles[activeTab]} - ${isVerificationData ? 'Verifikasi Data' : 'Data Master'}`,
@@ -651,7 +710,17 @@ export function DataMasterPage() {
     catch { setMessage('Data ekstrakurikuler gagal dimuat.'); }
   };
 
-  useEffect(() => { if (activeTab === 'ekstrakurikuler') void fetchEkstrakurikuler(); }, [activeTab]);
+  useEffect(() => {
+    if (activeTab === 'ekstrakurikuler') void fetchEkstrakurikuler();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'wa-bot') {
+      fetchWaBotData();
+      const interval = setInterval(fetchWaBotData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, fetchWaBotData]);
 
   const saveEkstrakurikuler = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -752,19 +821,43 @@ export function DataMasterPage() {
   const saveSantri = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSantri.nama?.trim()) {
-      setMessage('Nama santri wajib diisi.');
+      setErrorToast('Nama santri wajib diisi.');
       return;
     }
     setSantriLoading(true);
     try {
       const response = await api.post('/api/master/santri', editingSantri);
-      setMessage(response.data.message);
+      const isNew = !editingSantri.santri_id;
+      const newSantriId = response.data.santri_id;
+      const savedName = editingSantri.nama.trim();
+
+      if (isNew && newSantriId && selectedFotoFile) {
+        try {
+          const formData = new FormData();
+          formData.append('foto', selectedFotoFile);
+          await api.post(`/api/santri/${newSantriId}/foto`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (fErr: any) {
+          console.warn('Foto upload error during creation:', fErr);
+        }
+      }
+
+      setSuccessToast(response.data.message || 'Data santri berhasil disimpan.');
       setShowSantriModal(false);
+      setSelectedFotoFile(null);
+      setPreviewFotoUrl(null);
       await fetchData();
       await fetchVerification();
       await fetchOrdaVerification();
+      if (isNew) {
+        setSantriSearch(savedName);
+        setSantriUnitFilter('');
+        setSantriKamarFilter('');
+        setSantriPage(1);
+      }
     } catch (error: any) {
-      setMessage(error.response?.data?.message ?? 'Gagal menyimpan data santri.');
+      setErrorToast(error.response?.data?.message ?? 'Gagal menyimpan data santri.');
     } finally {
       setSantriLoading(false);
     }
@@ -973,6 +1066,19 @@ export function DataMasterPage() {
 
   const requestDeletePetugas = (item: Petugas) => setPetugasToDelete({ id: item.petugas_id, nama: item.nama });
 
+  const openSantriModal = (s?: SantriMaster) => {
+    if (s) {
+      setEditingSantri({ ...s });
+      setPreviewFotoUrl(s.foto_url || null);
+    } else {
+      setEditingSantri({ santri_id: 0, nis: '', nama: '', unit_id: 1, kamar_id: null, nama_wali: '', no_hp_wali: '' });
+      setPreviewFotoUrl(null);
+    }
+    setSelectedFotoFile(null);
+    setFotoError('');
+    setShowSantriModal(true);
+  };
+
   if (loading) return <PageSkeleton />;
 
   return (
@@ -996,10 +1102,7 @@ export function DataMasterPage() {
             {user?.jabatan === 'Admin' && (
               <button
                 className="primary-button"
-                onClick={() => {
-                  setEditingSantri({ santri_id: 0, nis: '', nama: '', unit_id: 1, kamar_id: null, nama_wali: '', no_hp_wali: '' });
-                  setShowSantriModal(true);
-                }}
+                onClick={() => openSantriModal()}
               >
                 + Tambah Santri
               </button>
@@ -1077,10 +1180,7 @@ export function DataMasterPage() {
                       <button
                         className="secondary-button"
                         style={{ padding: '6px 12px', fontSize: 12 }}
-                        onClick={() => {
-                          setEditingSantri({ ...s });
-                          setShowSantriModal(true);
-                        }}
+                        onClick={() => openSantriModal(s)}
                       >
                         Edit
                       </button>
@@ -1279,10 +1379,9 @@ export function DataMasterPage() {
             </header>
             <form id="santri-form" onSubmit={saveSantri} className="santri-modal-form">
               <div className="santri-modal-body">
-              {editingSantri.santri_id ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 8 }}>
-                  {editingSantri.foto_url ? (
-                    <img src={editingSantri.foto_url} alt={editingSantri.nama || 'Foto santri'} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #0f6e56', flexShrink: 0 }} />
+                  {previewFotoUrl || editingSantri.foto_url ? (
+                    <img src={previewFotoUrl || editingSantri.foto_url || ''} alt={editingSantri.nama || 'Foto santri'} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #0f6e56', flexShrink: 0 }} />
                   ) : (
                     <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#cbd5e1', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700, flexShrink: 0 }}>
                       {editingSantri.nama ? editingSantri.nama.charAt(0).toUpperCase() : '?'}
@@ -1297,12 +1396,12 @@ export function DataMasterPage() {
                       disabled={fotoUploading}
                       style={{ fontSize: 12 }}
                     />
+                    {selectedFotoFile && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>📷 Foto dipilih: {selectedFotoFile.name} (Akan diunggah saat disimpan)</p>}
                     {fotoUploading && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Mengunggah foto...</p>}
                     {fotoError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{fotoError}</p>}
                     <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Format JPG, PNG, WEBP (Maks 5 MB)</p>
                   </div>
                 </div>
-              ) : null}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block' }}>Nama Lengkap *</label>
                 <input
@@ -2342,6 +2441,112 @@ export function DataMasterPage() {
               </section>
             </div>
           )}
+        </section>
+      )}
+
+      {/* WA BOT SETTINGS TAB */}
+      {!isVerificationData && activeTab === 'wa-bot' && (
+        <section className="master-section">
+          <div className="section-heading">
+            <div>
+              <h2>Pengaturan Bot WhatsApp Notifikasi</h2>
+              <p>Tautkan akun WhatsApp resmi pesantren untuk mengirimkan notifikasi perizinan dan pelanggaran ke wali santri secara otomatis.</p>
+            </div>
+            <button
+              className="secondary-button"
+              onClick={fetchWaBotData}
+              disabled={waLoading}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              🔄 Refresh Status
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '20px' }}>
+            {/* Status Card */}
+            <div style={{ background: '#ffffff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '12px' }}>Status Koneksi Service</h3>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                <span style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  backgroundColor: waStatus === 'connected' ? '#22c55e' : waStatus === 'connecting' ? '#eab308' : '#ef4444',
+                  boxShadow: `0 0 8px ${waStatus === 'connected' ? '#22c55e' : waStatus === 'connecting' ? '#eab308' : '#ef4444'}`
+                }} />
+                <strong style={{ fontSize: '15px', color: waStatus === 'connected' ? '#166534' : waStatus === 'connecting' ? '#854d0e' : '#991b1b' }}>
+                  {waStatus === 'connected' ? '✅ Terhubung (Aktif)' : waStatus === 'connecting' ? '⏳ Menghubungkan...' : waStatus === 'offline' ? '🔴 Service Offline' : '❌ Belum Terhubung'}
+                </strong>
+              </div>
+
+              {waStatus === 'connected' && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
+                  <p style={{ color: '#166534', margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+                    Sesi WhatsApp Bot telah aktif dan siap mengirimkan notifikasi perizinan serta pelanggaran ke nomor WhatsApp wali santri.
+                  </p>
+                  {waPhone && (
+                    <p style={{ color: '#14532d', marginTop: '8px', marginBottom: 0, fontSize: '13px', fontWeight: 600 }}>
+                      Nomor Bot: +{waPhone}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {waStatus !== 'connected' && waStatus !== 'offline' && (
+                <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>
+                  Buka aplikasi WhatsApp di HP Pengurus &gt; <strong>Perangkat Tertaut</strong> &gt; <strong>Tautkan Perangkat</strong>, lalu arahkan kamera ke QR Code di sebelah kanan.
+                </p>
+              )}
+
+              {waStatus === 'offline' && (
+                <p style={{ fontSize: '13px', color: '#dc2626', lineHeight: '1.5' }}>
+                  Service microservice WA Gateway tidak merespons. Pastikan container <code>wa-gateway</code> sedang berjalan di VPS/Server.
+                </p>
+              )}
+
+              {waStatus === 'connected' && (
+                <div style={{ marginTop: '20px' }}>
+                  <button
+                    className="danger-button"
+                    onClick={handleDisconnectWa}
+                    disabled={waDisconnecting}
+                    style={{ width: '100%', padding: '10px 16px', fontSize: '14px' }}
+                  >
+                    {waDisconnecting ? 'Memutuskan Sesi...' : '⚠️ Putuskan Sesi WA / Hubungkan Ulang'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* QR Code / Action Card */}
+            <div style={{ background: '#ffffff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '16px' }}>Penautan QR Code</h3>
+
+              {waStatus === 'connected' ? (
+                <div style={{ padding: '40px 20px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>📱</div>
+                  <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>WhatsApp Bot Sudah Terhubung</h4>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>QR Code tidak diperlukan lagi selama sesi masih aktif.</p>
+                </div>
+              ) : waQrImage ? (
+                <div>
+                  <div style={{ display: 'inline-block', background: '#ffffff', padding: '12px', borderRadius: '12px', border: '2px solid #22c55e', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                    <img src={waQrImage} alt="QR Code WhatsApp" style={{ width: '240px', height: '240px', display: 'block' }} />
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginTop: '12px', marginBottom: 0 }}>
+                    🔄 Halaman me-refresh QR Code otomatis setiap beberapa detik.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ padding: '40px 20px', background: '#f8fafc', borderRadius: '8px' }}>
+                  <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
+                    {waStatus === 'connecting' ? '⏳ Sedang memuat QR Code baru...' : 'Tidak ada QR Code yang tersedia.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       )}
 

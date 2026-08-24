@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'wa_gateway' => [
+        'url' => env('WA_GATEWAY_URL', 'http://wa-gateway:3000'),
+        'key' => env('WA_API_KEY', 'secret_key_bot_tebuireng'),
+        'enabled' => env('WA_NOTIFICATIONS_ENABLED', true),
+    ],
+
 ];

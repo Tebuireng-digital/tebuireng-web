@@ -224,6 +224,8 @@ class PelanggaranController extends Controller
             throw $exception;
         }
 
+        event(new \App\Events\PelanggaranDicatat($pelanggaranId));
+
         return response()->json([
             'message' => 'Pelanggaran berhasil disimpan',
             'pelanggaran_id' => $pelanggaranId,

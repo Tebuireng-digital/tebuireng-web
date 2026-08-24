@@ -24,6 +24,8 @@ x-backend-environment: &backend-environment
   QUEUE_CONNECTION: sync
   LOG_CHANNEL: stderr
   LOG_LEVEL: warning
+  WA_GATEWAY_URL: http://wa-gateway:3000
+  WA_API_KEY: ${WA_API_KEY:-secret_key_bot_tebuireng}
 
 services:
   mysql:
@@ -79,6 +81,20 @@ services:
     depends_on:
       - backend-web
 
+  wa-gateway:
+    image: ${WA_GATEWAY_IMAGE:-tebuireng-wa-gateway:production}
+    build:
+      context: ./wa-gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WA_GATEWAY_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      WA_API_KEY: ${WA_API_KEY:-secret_key_bot_tebuireng}
+    volumes:
+      - wa_session_data:/app/sessions
+
   migrate:
     profiles: ["tools"]
     image: ${BACKEND_IMAGE:-tebuireng-backend:production}
@@ -93,3 +109,4 @@ volumes:
     external: true
     name: tebuireng_mysql_data
   backend_storage:
+  wa_session_data:

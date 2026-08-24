@@ -328,6 +328,16 @@ export function DashboardPage() {
                 <span className="dashboard-shortcut-arrow"><DashboardIcon name="arrow" /></span>
               </Link>
             )}
+            {user?.jabatan === 'Admin' && (
+              <Link to="/data-master/wa-bot" className="dashboard-shortcut account" style={{ borderColor: '#22c55e' }}>
+                <span className="dashboard-shortcut-icon" style={{ color: '#16a34a' }}>💬</span>
+                <span className="dashboard-shortcut-copy">
+                  <span className="dashboard-shortcut-title">Pengaturan Bot WA</span>
+                  <span className="dashboard-shortcut-description">Pindai QR Code & kelola WhatsApp Bot</span>
+                </span>
+                <span className="dashboard-shortcut-arrow"><DashboardIcon name="arrow" /></span>
+              </Link>
+            )}
           </div>
         </section>
       )}

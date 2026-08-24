@@ -56,7 +56,6 @@ class SantriFotoFeatureTest extends TestCase
             'target_id' => $kamarId,
             'tanggal_mulai' => now()->subDay()->toDateString(),
             'created_at' => now(),
-            'updated_at' => now(),
         ]);
 
         $otherPembina = Petugas::create([
@@ -75,7 +74,6 @@ class SantriFotoFeatureTest extends TestCase
             'target_id' => $otherKamarId,
             'tanggal_mulai' => now()->subDay()->toDateString(),
             'created_at' => now(),
-            'updated_at' => now(),
         ]);
 
         // 1. Unassigned Pembina forbidden

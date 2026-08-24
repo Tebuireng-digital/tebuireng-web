@@ -71,6 +71,20 @@ services:
         condition: service_healthy
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 
+  wa-gateway:
+    image: tebuireng-local-wa-gateway:dev
+    build:
+      context: ./wa-gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      WA_API_KEY: secret_key_bot_tebuireng
+    volumes:
+      - ./wa-gateway/sessions:/app/sessions
+
   test:
     profiles: ["tools"]
     image: tebuireng-local-backend:dev

@@ -600,11 +600,12 @@ function Layout() {
                 <Link to="/data-master/wisma" className={`sidebar-subnav-link ${location.pathname === '/data-master/wisma' ? 'active' : ''}`} onClick={closeMenu}>Data wisma</Link>
                 <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
                 <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
+                <Link to="/data-master/wa-bot" className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`} onClick={closeMenu}>Pengaturan Bot WA</Link>
               </div>
             </div>
           )}
 
-          {user.jabatan === 'Pembina Kamar' && (
+          {['Pembina Kamar', 'Keamanan', 'Pengasuh', 'Ustadz', 'Wali Kelas'].includes(user.jabatan) && (
             <Link
               to="/data-master/santri"
               className={`sidebar-nav-link ${location.pathname.startsWith('/data-master') ? 'active' : ''}`}

@@ -38,5 +38,15 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\PerizinanDisetujui::class,
             \App\Listeners\UpsertAbsensiIzin::class
         );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PerizinanDisetujui::class,
+            \App\Listeners\SendPerizinanWaNotification::class
+        );
+
+        \Illuminate\Support\Facades\Event::listen(
+            \App\Events\PelanggaranDicatat::class,
+            \App\Listeners\SendPelanggaranWaNotification::class
+        );
     }
 }

@@ -120,9 +120,11 @@ class PerizinanController extends Controller
             $update['dicatat_keamanan_oleh'] = $petugas->petugas_id;
         }
 
+        $isKembali = false;
         if (isset($data['waktu_masuk_aktual']) && !$perizinan->waktu_masuk_aktual) {
             $update['waktu_masuk_aktual'] = \Carbon\Carbon::parse($data['waktu_masuk_aktual'])->toDateTimeString();
             $update['status'] = 'Selesai';
+            $isKembali = true;
             // Cek keterlambatan, tapi prd blm detil, cukup status = Selesai
             if (!$perizinan->dicatat_keamanan_oleh) {
                 $update['dicatat_keamanan_oleh'] = $petugas->petugas_id;
@@ -131,10 +133,62 @@ class PerizinanController extends Controller
 
         if (!empty($update)) {
             DB::table('perizinan')->where('perizinan_id', $id)->update($update);
+            if ($isKembali) {
+                $this->sendIzinBalikWaNotification($id);
+            }
             return response()->json(['message' => 'Data gerbang berhasil disimpan']);
         }
 
         return response()->json(['message' => 'Tidak ada perubahan data gerbang'], 400);
+    }
+
+    protected function sendIzinBalikWaNotification(int $perizinanId): void
+    {
+        $perizinan = DB::table('perizinan')
+            ->join('santri', 'perizinan.santri_id', '=', 'santri.santri_id')
+            ->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')
+            ->join('jenis_izin', 'perizinan.jenis_izin_id', '=', 'jenis_izin.jenis_izin_id')
+            ->where('perizinan.perizinan_id', $perizinanId)
+            ->select(
+                'perizinan.*',
+                'santri.nama as nama_santri',
+                'santri.nis',
+                'santri.nama_wali',
+                'santri.no_hp_wali',
+                'kamar.nama as nama_kamar',
+                'jenis_izin.nama as nama_jenis_izin'
+            )
+            ->first();
+
+        if (!$perizinan || empty($perizinan->no_hp_wali) || !$perizinan->waktu_masuk_aktual) {
+            return;
+        }
+
+        \Carbon\Carbon::setLocale('id');
+        $waktuMasuk = \Carbon\Carbon::parse($perizinan->waktu_masuk_aktual)->locale('id')->isoFormat('D MMMM YYYY, HH:mm') . ' WIB';
+        $namaWali = $perizinan->nama_wali ? "Bapak/Ibu {$perizinan->nama_wali}" : "Bapak/Ibu Wali Santri";
+
+        $message = "ASSALAMU'ALAIKUM WR. WB.\n\n"
+            . "Yth. {$namaWali} dari:\n"
+            . "📌 Nama: {$perizinan->nama_santri} (NIS: {$perizinan->nis})\n"
+            . "🏠 Kamar: " . ($perizinan->nama_kamar ?? '-') . "\n\n"
+            . "Memberitahukan bahwa santri telah *KEMBALI / BALIK* ke Pondok Pesantren Tebuireng:\n"
+            . "📋 Jenis Izin: {$perizinan->nama_jenis_izin}\n"
+            . "⏰ Waktu Kembali: {$waktuMasuk}\n\n"
+            . "Terima kasih atas kerja samanya dalam memantau kedisiplinan santri.\n\n"
+            . "--\nPondok Pesantren Tebuireng";
+
+        try {
+            app(\App\Services\WhatsAppService::class)->sendMessage(
+                $perizinan->no_hp_wali,
+                $message,
+                (int) $perizinan->santri_id,
+                'perizinan_kembali',
+                (int) $perizinan->perizinan_id
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Gagal mengirim WA Izin Balik: " . $e->getMessage());
+        }
     }
 
     public function koreksiGerbang(Request $request, $id)

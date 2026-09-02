@@ -49,13 +49,13 @@ class SendPerizinanWaNotification implements ShouldQueue
 
         $message = "ASSALAMU'ALAIKUM WR. WB.\n\n"
             . "Yth. {$namaWali} dari:\n"
-            . "📌 Nama: {$perizinan->nama_santri} (NIS: {$perizinan->nis})\n"
-            . "🏠 Kamar: " . ($perizinan->nama_kamar ?? '-') . "\n\n"
+            . "Nama: {$perizinan->nama_santri} (NIS: {$perizinan->nis})\n"
+            . "Kamar: " . ($perizinan->nama_kamar ?? '-') . "\n\n"
             . "Memberitahukan bahwa perizinan santri telah *DISETUJUI* dengan rincian:\n"
-            . "📋 Jenis Izin: {$perizinan->nama_jenis_izin}\n"
-            . "📝 Keperluan: {$perizinan->keperluan}\n"
-            . "🗓 Waktu Mulai: {$tglMulai}\n"
-            . "⏰ Rencana Kembali: {$tglKembali}\n\n"
+            . "Jenis Izin: {$perizinan->nama_jenis_izin}\n"
+            . "Keperluan: {$perizinan->keperluan}\n"
+            . "Waktu Mulai: {$tglMulai}\n"
+            . "Rencana Kembali: {$tglKembali}\n\n"
             . "Mohon untuk dapat memantau kepulangan/kembali santri sesuai jadwal yang telah ditentukan. Terima kasih.\n\n"
             . "--\nPondok Pesantren Tebuireng";
 

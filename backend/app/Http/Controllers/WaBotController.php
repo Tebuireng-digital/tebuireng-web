@@ -14,13 +14,13 @@ class WaBotController extends Controller
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.wa_gateway.url', 'http://wa-gateway:3000'), '/');
-        $this->apiKey = config('services.wa_gateway.api_key', 'secret_key_bot_tebuireng');
+        $this->apiKey = config('services.wa_gateway.key', config('services.wa_gateway.api_key', 'secret_key_bot_tebuireng'));
     }
 
     private function fetchFromGateway(string $path, string $method = 'GET')
     {
         $urls = array_unique([
-            rtrim(config('services.wa_gateway.url', 'http://wa-gateway:3000'), '/'),
+            $this->baseUrl,
             'http://127.0.0.1:3000',
             'http://localhost:3000',
             'http://wa-gateway:3000',

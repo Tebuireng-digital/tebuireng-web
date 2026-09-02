@@ -54,14 +54,14 @@ class SendPelanggaranWaNotification implements ShouldQueue
 
         $message = "ASSALAMU'ALAIKUM WR. WB.\n\n"
             . "Yth. {$namaWali} dari:\n"
-            . "📌 Nama: {$pelanggaran->nama_santri} (NIS: {$pelanggaran->nis})\n"
-            . "🏠 Kamar: " . ($pelanggaran->nama_kamar ?? '-') . "\n\n"
+            . "Nama: {$pelanggaran->nama_santri} (NIS: {$pelanggaran->nis})\n"
+            . "Kamar: " . ($pelanggaran->nama_kamar ?? '-') . "\n\n"
             . "Pemberitahuan catatan pelanggaran santri:\n"
-            . "⚠️ Pelanggaran: {$pelanggaran->uraian_pelanggaran}\n"
-            . "📊 Kategori: {$pelanggaran->kategori} ({$pelanggaran->poin} Poin)\n"
-            . "📈 Total Akumulasi Poin: {$totalPoin} Poin\n"
-            . "📅 Tanggal Kejadian: {$tglKejadian}\n"
-            . "📝 Keterangan: {$ket}\n\n"
+            . "Pelanggaran: {$pelanggaran->uraian_pelanggaran}\n"
+            . "Kategori: {$pelanggaran->kategori} ({$pelanggaran->poin} Poin)\n"
+            . "Total Akumulasi Poin: {$totalPoin} Poin\n"
+            . "Tanggal Kejadian: {$tglKejadian}\n"
+            . "Keterangan: {$ket}\n\n"
             . "Mohon Bapak/Ibu dapat memberikan bimbingan dan nasihat kepada santri. Terima kasih.\n\n"
             . "--\nPondok Pesantren Tebuireng";
 

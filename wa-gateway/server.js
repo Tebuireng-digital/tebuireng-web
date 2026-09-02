@@ -180,7 +180,7 @@ app.get('/qr', (req, res) => {
     <html>
       <head><title>Akses Dibatasi</title></head>
       <body style="font-family: sans-serif; text-align: center; padding-top: 50px; background: #f8fafc; color: #1e293b;">
-        <h2 style="color: #ef4444;">🔒 Akses Dibatasi</h2>
+        <h2 style="color: #ef4444;">Akses Dibatasi</h2>
         <p>Penautan dan Pengaturan Bot WhatsApp hanya dapat dilakukan oleh <strong>Admin SIMANTEB</strong> melalui Dashboard Data Master.</p>
       </body>
     </html>

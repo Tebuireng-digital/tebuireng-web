@@ -170,11 +170,11 @@ class PerizinanController extends Controller
 
         $message = "ASSALAMU'ALAIKUM WR. WB.\n\n"
             . "Yth. {$namaWali} dari:\n"
-            . "📌 Nama: {$perizinan->nama_santri} (NIS: {$perizinan->nis})\n"
-            . "🏠 Kamar: " . ($perizinan->nama_kamar ?? '-') . "\n\n"
+            . "Nama: {$perizinan->nama_santri} (NIS: {$perizinan->nis})\n"
+            . "Kamar: " . ($perizinan->nama_kamar ?? '-') . "\n\n"
             . "Memberitahukan bahwa santri telah *KEMBALI / BALIK* ke Pondok Pesantren Tebuireng:\n"
-            . "📋 Jenis Izin: {$perizinan->nama_jenis_izin}\n"
-            . "⏰ Waktu Kembali: {$waktuMasuk}\n\n"
+            . "Jenis Izin: {$perizinan->nama_jenis_izin}\n"
+            . "Waktu Kembali: {$waktuMasuk}\n\n"
             . "Terima kasih atas kerja samanya dalam memantau kedisiplinan santri.\n\n"
             . "--\nPondok Pesantren Tebuireng";
 

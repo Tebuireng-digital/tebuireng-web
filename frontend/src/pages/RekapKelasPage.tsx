@@ -128,7 +128,7 @@ function RekapDropdown({ label, id, value, options, onChange, searchPlaceholder 
                 onClick={() => chooseOption(option)}
               >
                 <span className="rekap-dropdown-option-copy"><strong>{option.label}</strong>{option.meta && <small>{option.meta}</small>}</span>
-                {option.value === value && <span className="rekap-dropdown-option-check" aria-hidden="true">✓</span>}
+                {option.value === value && <span className="rekap-dropdown-option-check" aria-hidden="true" />}
               </button>
             )) : <span className="rekap-dropdown-empty">Pilihan tidak ditemukan.</span>}
           </div>

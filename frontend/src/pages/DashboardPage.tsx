@@ -62,7 +62,7 @@ const pbsCategories = (targets: TargetAbsensi[]) => [...new Set(targets.map(pbsD
     return left.localeCompare(right, 'id');
   });
 
-type DashboardIconName = 'users' | 'alumni' | 'warning' | 'gate' | 'assignment' | 'account' | 'arrow';
+type DashboardIconName = 'users' | 'alumni' | 'warning' | 'gate' | 'assignment' | 'account' | 'message' | 'arrow';
 
 function DashboardIcon({ name }: { name: DashboardIconName }) {
   const paths: Record<DashboardIconName, ReactNode> = {
@@ -72,6 +72,7 @@ function DashboardIcon({ name }: { name: DashboardIconName }) {
     gate: <><path d="M4 20V8l8-4 8 4v12M8 20V10h8v10M8 14h8" /></>,
     assignment: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 14h7M8.5 18h4" /></>,
     account: <><circle cx="12" cy="8" r="3" /><path d="M5 21a7 7 0 0 1 14 0M18 4h3v3" /></>,
+    message: <><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v5A2.5 2.5 0 0 1 16.5 15H11l-4 4v-4H7.5A2.5 2.5 0 0 1 5 12.5Z" /><path d="M8.5 8.5h7M8.5 11.5H14" /></>,
     arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   };
 
@@ -330,7 +331,7 @@ export function DashboardPage() {
             )}
             {user?.jabatan === 'Admin' && (
               <Link to="/data-master/wa-bot" className="dashboard-shortcut account" style={{ borderColor: '#22c55e' }}>
-                <span className="dashboard-shortcut-icon" style={{ color: '#16a34a' }}>💬</span>
+                <span className="dashboard-shortcut-icon" style={{ color: '#16a34a' }}><DashboardIcon name="message" /></span>
                 <span className="dashboard-shortcut-copy">
                   <span className="dashboard-shortcut-title">Pengaturan Bot WA</span>
                   <span className="dashboard-shortcut-description">Pindai QR Code & kelola WhatsApp Bot</span>

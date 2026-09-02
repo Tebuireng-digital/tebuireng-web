@@ -256,7 +256,7 @@ export function PrestasiListPage() {
                 onClick={() => setIsModalOpen(false)}
                 style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--tinta-muda)' }}
               >
-                ✕
+                Tutup
               </button>
             </div>
 

@@ -526,8 +526,9 @@ body {
 .assignment-field-hint { margin-top: -8px; }
 .assignment-multi-menu { max-height: 220px; }
 .assignment-multi-option { align-items: flex-start; justify-content: flex-start; min-height: 38px; gap: 9px; }
-.assignment-option-check { display: inline-grid; width: 18px; height: 18px; flex: 0 0 18px; place-items: center; margin-top: 1px; border: 1.5px solid #a9bbb1; border-radius: 4px; color: #fff; background: #fff; font-size: 12px; font-weight: 800; line-height: 1; }
+.assignment-option-check { position: relative; display: inline-grid; width: 18px; height: 18px; flex: 0 0 18px; place-items: center; margin-top: 1px; border: 1.5px solid #a9bbb1; border-radius: 4px; background: #fff; transition: background .15s ease, border-color .15s ease; }
 .assignment-option-check.is-selected { border-color: var(--aksen); background: var(--aksen); }
+.assignment-option-check.is-selected::after { content: ''; width: 7px; height: 7px; border-radius: 999px; background: #fff; }
 
 .attendance-header { gap: 16px; }
 .attendance-actions { display: flex; align-items: center; gap: 10px; }
@@ -641,7 +642,7 @@ body {
 .rekap-dropdown-option-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .rekap-dropdown-option-copy strong { color: var(--tinta); font-size: 13px; }
 .rekap-dropdown-option-copy small { color: var(--tinta-pudar); font-size: 11px; }
-.rekap-dropdown-option-check { color: var(--aksen); font-size: 16px; font-weight: 800; }
+.rekap-dropdown-option-check { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; border-radius: 999px; background: var(--aksen); box-shadow: 0 0 0 4px rgba(15, 110, 86, .12); }
 .rekap-dropdown-empty { display: block; padding: 20px 12px; color: var(--tinta-pudar); font-size: 12px; text-align: center; }
 .rekap-dropdown-hint { display: block; padding: 8px 12px; color: #82948a; border-top: 1px solid #edf3ef; font-size: 10px; }
 @keyframes rekap-dropdown-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
@@ -692,7 +693,7 @@ body {
 .app-dropdown-option { display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; color: var(--tinta); background: transparent; border: 0; border-radius: 8px; text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
 .app-dropdown-option:hover, .app-dropdown-option.is-selected { background: #eaf6ef; }
 .app-dropdown-option:disabled { color: var(--tinta-pudar); cursor: not-allowed; }
-.app-dropdown-check { color: var(--aksen); font-weight: 800; }
+.app-dropdown-check { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; border-radius: 999px; background: var(--aksen); box-shadow: 0 0 0 4px rgba(15, 110, 86, .12); }
 .app-dropdown-table { min-width: 92px; }
 .app-dropdown-table .app-dropdown-trigger { min-height: 32px; padding: 5px 7px; border-radius: 6px; font-size: 12px; }
 .app-dropdown-table .app-dropdown-chevron { font-size: 15px; }
@@ -775,9 +776,9 @@ body {
 .account-status-label { display: inline-flex; align-items: center; column-gap: 12px; margin: 0; color: var(--tinta); font-size: 13px; font-weight: 700; line-height: 24px; cursor: pointer; }
 .save-modal .account-status-label { display: inline-flex; align-items: center; column-gap: 12px; margin: 0; color: var(--tinta); font-size: 13px; line-height: 24px; }
 .account-status-checkbox { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.account-status-box { display: inline-grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border: 2px solid #a9bbb1; border-radius: 5px; background: #fff; color: #fff; font-size: 14px; line-height: 1; transition: background .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.account-status-box { position: relative; display: inline-grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border: 2px solid #a9bbb1; border-radius: 5px; background: #fff; transition: background .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .account-status-checkbox:checked + .account-status-box { border-color: var(--aksen); background: var(--aksen); }
-.account-status-checkbox:checked + .account-status-box::after { content: '✓'; }
+.account-status-checkbox:checked + .account-status-box::after { content: ''; width: 10px; height: 10px; border-radius: 2px; background: #fff; }
 .account-status-checkbox:focus-visible + .account-status-box { outline: 3px solid rgba(15, 110, 86, .2); outline-offset: 2px; }
 .account-status-text { display: inline-block; margin-left: 2px; white-space: nowrap; }
 .password-result { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 14px; border: 1px solid #91CBB5; border-radius: 8px; background: #E7F4EF; }

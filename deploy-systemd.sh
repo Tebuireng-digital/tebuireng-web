@@ -78,7 +78,7 @@ install_unit() {
 
   cat > "${temporary_unit}" <<EOF
 [Unit]
-Description=Tebuireng frontend, backend, database, and migration
+Description=Tebuireng frontend, backend, WA gateway, database, and migration
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
@@ -92,7 +92,7 @@ TimeoutStopSec=2min
 ExecStartPre=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} config --quiet
 ExecStartPre=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} up -d mysql
 ExecStartPre=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} --profile tools run --rm migrate
-ExecStart=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} up -d --remove-orphans mysql backend backend-web frontend
+ExecStart=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} up -d --remove-orphans mysql backend backend-web frontend wa-gateway
 ExecStop=${docker_path} compose --env-file ${ENV_FILE} -f ${COMPOSE_FILE} stop
 
 [Install]
@@ -111,11 +111,11 @@ deploy() {
   ensure_environment
   docker volume inspect tebuireng_mysql_data >/dev/null 2>&1 || docker volume create tebuireng_mysql_data >/dev/null
 
-  log "Membangun image frontend dan backend..."
+  log "Membangun image frontend, backend, dan WA gateway..."
   compose build --pull
   install_unit
 
-  log "Menjalankan database, migrasi, backend, dan frontend..."
+  log "Menjalankan database, migrasi, backend, frontend, dan WA gateway..."
   systemctl restart "${SERVICE_NAME}"
   compose ps
   log "Deployment selesai. Cek readiness pada /ready melalui domain aplikasi."
@@ -171,7 +171,7 @@ case "${ACTION}" in
     ;;
   logs)
     ensure_environment
-    compose logs --tail=200 --follow mysql backend backend-web frontend
+    compose logs --tail=200 --follow mysql backend backend-web frontend wa-gateway
     ;;
   *)
     show_usage >&2

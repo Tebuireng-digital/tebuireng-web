@@ -125,7 +125,7 @@ export function AppDropdown({
               onClick={() => chooseOption(option)}
             >
               <span>{option.label}</span>
-              {option.value === value && <span className="app-dropdown-check" aria-hidden="true">✓</span>}
+              {option.value === value && <span className="app-dropdown-check" aria-hidden="true" />}
             </button>
           ))}
           {visibleOptions.length === 0 && <div className="app-dropdown-empty">Opsi tidak ditemukan.</div>}

@@ -174,7 +174,7 @@ function AssignmentMultiDropdown({ id, label, value, options, disabled, onChange
       {isOpen && <div className="app-dropdown-menu assignment-multi-menu" role="listbox" aria-labelledby={id} aria-multiselectable="true">
         {options.map(option => {
           const selected = value.includes(option.key);
-          return <button key={option.key} type="button" role="option" aria-selected={selected} className={`app-dropdown-option assignment-multi-option${selected ? ' is-selected' : ''}`} onClick={() => toggleOption(option.key)}><span className={`assignment-option-check${selected ? ' is-selected' : ''}`} aria-hidden="true">{selected ? '✓' : ''}</span><span>{option.label}</span></button>;
+          return <button key={option.key} type="button" role="option" aria-selected={selected} className={`app-dropdown-option assignment-multi-option${selected ? ' is-selected' : ''}`} onClick={() => toggleOption(option.key)}><span className={`assignment-option-check${selected ? ' is-selected' : ''}`} aria-hidden="true" /><span>{option.label}</span></button>;
         })}
         {options.length === 0 && <div className="app-dropdown-empty">Tidak ada target sesuai jabatan.</div>}
       </div>}
@@ -1396,7 +1396,7 @@ export function DataMasterPage() {
                       disabled={fotoUploading}
                       style={{ fontSize: 12 }}
                     />
-                    {selectedFotoFile && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>📷 Foto dipilih: {selectedFotoFile.name} (Akan diunggah saat disimpan)</p>}
+                    {selectedFotoFile && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Foto dipilih: {selectedFotoFile.name} (Akan diunggah saat disimpan)</p>}
                     {fotoUploading && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Mengunggah foto...</p>}
                     {fotoError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{fotoError}</p>}
                     <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Format JPG, PNG, WEBP (Maks 5 MB)</p>
@@ -2458,7 +2458,7 @@ export function DataMasterPage() {
               disabled={waLoading}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              🔄 Refresh Status
+              Refresh Status
             </button>
           </div>
 
@@ -2476,7 +2476,7 @@ export function DataMasterPage() {
                   boxShadow: `0 0 8px ${waStatus === 'connected' ? '#22c55e' : waStatus === 'connecting' ? '#eab308' : '#ef4444'}`
                 }} />
                 <strong style={{ fontSize: '15px', color: waStatus === 'connected' ? '#166534' : waStatus === 'connecting' ? '#854d0e' : '#991b1b' }}>
-                  {waStatus === 'connected' ? '✅ Terhubung (Aktif)' : waStatus === 'connecting' ? '⏳ Menghubungkan...' : waStatus === 'offline' ? '🔴 Service Offline' : '❌ Belum Terhubung'}
+                  {waStatus === 'connected' ? 'Terhubung (Aktif)' : waStatus === 'connecting' ? 'Menghubungkan...' : waStatus === 'offline' ? 'Service Offline' : 'Belum Terhubung'}
                 </strong>
               </div>
 
@@ -2513,7 +2513,7 @@ export function DataMasterPage() {
                     disabled={waDisconnecting}
                     style={{ width: '100%', padding: '10px 16px', fontSize: '14px' }}
                   >
-                    {waDisconnecting ? 'Memutuskan Sesi...' : '⚠️ Putuskan Sesi WA / Hubungkan Ulang'}
+                    {waDisconnecting ? 'Memutuskan Sesi...' : 'Putuskan Sesi WA / Hubungkan Ulang'}
                   </button>
                 </div>
               )}
@@ -2525,7 +2525,7 @@ export function DataMasterPage() {
 
               {waStatus === 'connected' ? (
                 <div style={{ padding: '40px 20px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>📱</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '68px', height: '68px', marginBottom: '12px', borderRadius: '18px', background: '#dcfce7', color: '#166534', fontSize: '22px', fontWeight: 800, letterSpacing: '0.08em' }}>WA</div>
                   <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>WhatsApp Bot Sudah Terhubung</h4>
                   <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>QR Code tidak diperlukan lagi selama sesi masih aktif.</p>
                 </div>
@@ -2535,13 +2535,13 @@ export function DataMasterPage() {
                     <img src={waQrImage} alt="QR Code WhatsApp" style={{ width: '240px', height: '240px', display: 'block' }} />
                   </div>
                   <p style={{ fontSize: '12px', color: '#64748b', marginTop: '12px', marginBottom: 0 }}>
-                    🔄 Halaman me-refresh QR Code otomatis setiap beberapa detik.
+                    Halaman me-refresh QR Code otomatis setiap beberapa detik.
                   </p>
                 </div>
               ) : (
                 <div style={{ padding: '40px 20px', background: '#f8fafc', borderRadius: '8px' }}>
                   <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
-                    {waStatus === 'connecting' ? '⏳ Sedang memuat QR Code baru...' : 'Tidak ada QR Code yang tersedia.'}
+                    {waStatus === 'connecting' ? 'Sedang memuat QR Code baru...' : 'Tidak ada QR Code yang tersedia.'}
                   </p>
                 </div>
               )}

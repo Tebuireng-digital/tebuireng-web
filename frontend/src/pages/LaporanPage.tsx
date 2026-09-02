@@ -197,7 +197,7 @@ export function LaporanPage() {
             style={{ backgroundColor: 'var(--aksen)', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '6px', cursor: 'pointer', flex: 1, fontWeight: 600 }}
             className="ui-text-title"
           >
-            {downloading ? 'Mengunduh...' : '📄 Unduh Laporan PDF'}
+            {downloading ? 'Mengunduh...' : 'Unduh Laporan PDF'}
           </button>
           <button 
             onClick={() => handleUnduh('xlsx')}
@@ -205,7 +205,7 @@ export function LaporanPage() {
             style={{ backgroundColor: '#10B981', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '6px', cursor: 'pointer', flex: 1, fontWeight: 600 }}
             className="ui-text-title"
           >
-            {downloading ? 'Mengunduh...' : '📊 Unduh Laporan Excel (.xlsx)'}
+            {downloading ? 'Mengunduh...' : 'Unduh Laporan Excel (.xlsx)'}
           </button>
         </div>
         {error && <p className="form-error" style={{ marginTop: '16px', color: '#DC2626' }}>{error}</p>}

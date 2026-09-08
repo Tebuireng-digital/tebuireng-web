@@ -19,7 +19,7 @@ class EkstrakurikulerFeatureTest extends TestCase
         ]);
         $pembimbing = Petugas::create([
             'nama' => 'Pembimbing Ekstra', 'username' => 'pembimbing_ekstra', 'password_hash' => Hash::make('password'),
-            'jabatan' => 'Ustadz', 'status_aktif' => 1, 'wajib_ganti_password' => 0,
+            'jabatan' => 'Piket Pengajian', 'status_aktif' => 1, 'wajib_ganti_password' => 0,
         ]);
 
         $created = $this->actingAs($admin)->postJson('/api/master/ekstrakurikuler', [

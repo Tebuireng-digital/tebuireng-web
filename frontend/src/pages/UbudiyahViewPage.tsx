@@ -57,6 +57,14 @@ interface RoomSessionData {
   santri: RosterSantri[];
 }
 
+interface ArchiveDocument {
+  document_id: number;
+  tahun_pelajaran: string;
+  semester: string;
+  versi: number;
+  diterbitkan_pada: string;
+}
+
 const BULAN_NAMA = [
   '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
@@ -99,6 +107,8 @@ export function UbudiyahViewPage() {
 
   const [downloading, setDownloading] = useState(false);
   const [downloadingBulk, setDownloadingBulk] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishMessage, setPublishMessage] = useState('');
 
   usePageMeta({
     title: 'Lihat Laporan Ubudiyah',
@@ -182,6 +192,11 @@ export function UbudiyahViewPage() {
     enabled: raportEnabled,
     retry: false,
   });
+  const { data: archives = [] } = useQuery<ArchiveDocument[]>({
+    queryKey: ['ubudiyah-archives', selectedSantriId],
+    queryFn: async () => (await api.get(`/api/ubudiyah/${selectedSantriId}/history`)).data,
+    enabled: !!selectedSantriId,
+  });
 
   const handleSelectSantri = (santri: any) => {
     setSelectedSantri(santri);
@@ -243,6 +258,21 @@ export function UbudiyahViewPage() {
       alert('Gagal mengunduh PDF bulk. Pastikan setidaknya 1 santri sudah diisi nilai.');
     } finally {
       setDownloadingBulk(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!selectedSantriId) return;
+    setPublishing(true);
+    setPublishMessage('');
+    try {
+      const response = await api.post(`/api/ubudiyah/${selectedSantriId}/publish`, { bulan, tahun });
+      setPublishMessage(`${response.data.message} Versi ${response.data.versi}.`);
+    } catch (error: unknown) {
+      const response = (error as { response?: { data?: { message?: string } } }).response;
+      setPublishMessage(response?.data?.message || 'Raport pembinaan belum dapat diterbitkan.');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -507,7 +537,9 @@ export function UbudiyahViewPage() {
       {/* Raport Sheet Preview Card */}
       {raport && !loadingRaport && (
         <div style={{ marginTop: '24px' }}>
+          {publishMessage && <div className="alert success" role="status" style={{ marginBottom: '12px' }}>{publishMessage}</div>}
           <div className="raport-actions-bar" style={{ marginBottom: '16px', justifyContent: 'flex-end' }}>
+            {['Admin', 'Pembina Kamar'].includes(user?.jabatan ?? '') && <button className="secondary-button" disabled={publishing} onClick={() => void handlePublish()}>{publishing ? 'Menerbitkan…' : 'Terbitkan arsip'}</button>}
             <button
               className="primary-button"
               disabled={downloading}
@@ -516,6 +548,10 @@ export function UbudiyahViewPage() {
               {downloading ? 'Mengunduh PDF...' : 'Download PDF Santri Ini'}
             </button>
           </div>
+          <section className="panel" aria-labelledby="ubudiyah-archive-title" style={{ marginBottom: '18px' }}>
+            <div className="panel-heading"><div><h2 id="ubudiyah-archive-title">Riwayat penerbitan</h2><p>Arsip resmi tidak berubah ketika nilai aktif dikoreksi.</p></div></div>
+            {archives.length === 0 ? <p className="muted">Belum ada arsip untuk santri ini.</p> : <div className="master-category-list">{archives.map(archive => <div className="master-category-row" key={archive.document_id}><div><strong>{archive.tahun_pelajaran} · {archive.semester} · Versi {archive.versi}</strong><span>Diterbitkan {new Date(archive.diterbitkan_pada).toLocaleString('id-ID')}</span></div><a className="secondary-button" href={`/api/ubudiyah/${selectedSantriId}/documents/${archive.document_id}/pdf`}>Unduh arsip</a></div>)}</div>}
+          </section>
 
           {/* Paper Document Layout */}
           <div className="raport-document" style={{

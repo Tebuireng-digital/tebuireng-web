@@ -191,34 +191,7 @@ export function PrestasiListPage() {
     }
   };
 
-  const handleExportCsv = () => {
-    if (filteredPrestasi.length === 0) {
-      alert('Tidak ada data untuk diekspor.');
-      return;
-    }
-    const headers = ['No', 'Tanggal', 'NIS', 'Nama Santri', 'Nama Prestasi', 'Peringkat', 'Tingkat', 'Keterangan'];
-    const rows = filteredPrestasi.map((item, idx) => [
-      idx + 1,
-      item.tanggal,
-      item.nis || '',
-      `"${(item.nama_santri || '').replace(/"/g, '""')}"`,
-      `"${(item.nama_prestasi || '').replace(/"/g, '""')}"`,
-      `"${(item.peringkat || '').replace(/"/g, '""')}"`,
-      `"${(item.tingkat || '').replace(/"/g, '""')}"`,
-      `"${(item.keterangan || '').replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `rekap-prestasi-santri-${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-  const canManage = user && ['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan);
+  const canManage = user?.jabatan === 'Admin';
 
   if (loading) return <PageSkeleton />;
   if (error) return <div className="error-box">{error}</div>;

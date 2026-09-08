@@ -41,8 +41,8 @@ class PelanggaranPerizinanFeatureTest extends TestCase
             ['setting_key' => 'ambang_notifikasi_poin', 'setting_value' => '20']
         ]);
 
-        $this->pengasuh = Petugas::create([
-            'nama' => 'Pengasuh A', 'username' => 'pengasuh', 'password_hash' => Hash::make('123'), 'jabatan' => 'Pengasuh', 'status_aktif' => 1
+        $this->admin = Petugas::create([
+            'nama' => 'Admin A', 'username' => 'admin', 'password_hash' => Hash::make('123'), 'jabatan' => 'Admin', 'status_aktif' => 1
         ]);
 
         $this->waliKelas = Petugas::create([
@@ -55,10 +55,6 @@ class PelanggaranPerizinanFeatureTest extends TestCase
 
         $this->keamanan = Petugas::create([
             'nama' => 'Keamanan', 'username' => 'km', 'password_hash' => Hash::make('123'), 'jabatan' => 'Keamanan', 'status_aktif' => 1
-        ]);
-        
-        $this->admin = Petugas::create([
-            'nama' => 'Admin', 'username' => 'admin', 'password_hash' => Hash::make('123'), 'jabatan' => 'Admin', 'status_aktif' => 1
         ]);
     }
 

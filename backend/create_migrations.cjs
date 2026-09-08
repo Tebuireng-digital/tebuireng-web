@@ -58,7 +58,7 @@ writeMigration('petugas', `        Schema::create('petugas', function (Blueprint
             $table->string('username', 100)->unique();
             $table->string('password_hash', 255);
             $table->string('no_hp', 20)->nullable();
-            $table->enum('jabatan', ['Pengasuh','Ustadz','Pembina Kamar','Wali Kelas','Keamanan','Admin']);
+            $table->enum('jabatan', ['Admin','Keamanan','Pembina Kamar','Wali Kelas','Piket Pengajian']);
             $table->boolean('status_aktif')->default(1);
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
@@ -307,7 +307,7 @@ writeMigration('perizinan_approval', `        Schema::create('perizinan_approval
             $table->id('approval_id');
             $table->unsignedBigInteger('perizinan_id');
             $table->unsignedTinyInteger('tahap')->comment('1 = Wali Kamar, 2 = Keamanan, dst');
-            $table->enum('jabatan_approver', ['Pembina Kamar','Wali Kelas','Ustadz','Pengasuh','Keamanan','Admin']);
+            $table->enum('jabatan_approver', ['Pembina Kamar','Wali Kelas','Piket Pengajian','Keamanan','Admin']);
             $table->unsignedInteger('petugas_id')->nullable()->comment('diisi saat petugas mengambil keputusan');
             $table->enum('keputusan', ['Menunggu','Disetujui','Ditolak','Gugur'])->default('Menunggu');
             $table->string('catatan', 255)->nullable();

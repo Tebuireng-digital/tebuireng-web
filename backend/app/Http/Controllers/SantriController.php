@@ -12,7 +12,7 @@ class SantriController extends Controller
     public function index(Request $request)
     {
         $petugas = $request->user();
-        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pengasuh', 'Pembina Kamar'], true)) {
+        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar'], true)) {
             return response()->json(['message' => 'Role Anda tidak dapat membuka direktori santri.'], 403);
         }
 

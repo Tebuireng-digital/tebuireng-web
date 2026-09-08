@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class RaportPengajianController extends Controller
@@ -202,8 +203,8 @@ class RaportPengajianController extends Controller
     public function bulkUpsert(Request $request)
     {
         $petugas = $request->user();
-        if (!in_array($petugas->jabatan, ['Admin', 'Ustadz'], true)) {
-            return response()->json(['message' => 'Hanya Admin dan Ustadz yang dapat menginput raport'], 403);
+        if (!in_array($petugas->jabatan, ['Admin', 'Piket Pengajian'], true)) {
+            return response()->json(['message' => 'Hanya Admin dan Piket Pengajian yang dapat menginput raport'], 403);
         }
 
         $data = $request->validate([
@@ -243,8 +244,13 @@ class RaportPengajianController extends Controller
 
         $keputusanField = $jenis === 'AL_QURAN' ? 'keputusan_pbs' : 'keputusan_pbm';
         $now = now();
+        $periode = DB::table('periode_akademik')->where('tahun_pelajaran', $data['tahun_pelajaran'])->where('semester', $data['semester'])->first();
+        if ($periode?->status === 'Ditutup' && $petugas->jabatan !== 'Admin') {
+            return response()->json(['message' => 'Periode raport sudah ditutup. Koreksi setelah penutupan hanya dapat dilakukan Admin.'], 422);
+        }
+        $periodeId = $periode?->periode_id;
 
-        DB::transaction(function () use ($data, $jenis, $targetId, $raportFk, $aspekList, $keputusanField, $petugas, $now) {
+        DB::transaction(function () use ($data, $jenis, $targetId, $raportFk, $aspekList, $keputusanField, $petugas, $now, $periodeId) {
             foreach ($data['entries'] as $entry) {
                 $santriId = $entry['santri_id'];
 
@@ -258,6 +264,7 @@ class RaportPengajianController extends Controller
                 $raportData = [
                     'tahun_pelajaran' => $data['tahun_pelajaran'],
                     'semester' => $data['semester'],
+                    'periode_id' => $periodeId,
                     $raportFk => $targetId,
                     $keputusanField => $entry['keputusan'] ?? null,
                     'predikat_umum' => $entry['predikat_umum'] ?? null,
@@ -387,6 +394,21 @@ class RaportPengajianController extends Controller
         return $pdf->download('Rapor_Pengajian_' . str_replace(' ', '_', $profile->nama) . '_' . $data['tahun_pelajaran'] . '_' . $data['semester'] . '.pdf');
     }
 
+    public function portalHistory(Request $request)
+    {
+        $santri = $request->user('wali');
+        return response()->json(DB::table('report_documents')->where('jenis', 'raport_pengajian')->where('santri_id', $santri->santri_id)->orderByDesc('diterbitkan_pada')->get(['document_id', 'tahun_pelajaran', 'semester', 'versi', 'diterbitkan_pada']));
+    }
+
+    public function portalDocumentPdf(Request $request, int $documentId)
+    {
+        $santri = $request->user('wali');
+        $document = DB::table('report_documents')->where('document_id', $documentId)->where('jenis', 'raport_pengajian')->where('santri_id', $santri->santri_id)->first();
+        abort_unless($document, 404, 'Arsip raport tidak ditemukan.');
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404, 'Berkas arsip raport tidak ditemukan.');
+        return Storage::disk('local')->download($document->file_path, "Raport-{$santri->santri_id}-v{$document->versi}.pdf");
+    }
+
     public function show(Request $request, $santriId)
     {
         $data = $request->validate([
@@ -418,6 +440,39 @@ class RaportPengajianController extends Controller
         $result = $this->buildRaportData($raport, $santri);
 
         return response()->json($result);
+    }
+
+    public function publish(Request $request, int $santriId)
+    {
+        $data = $request->validate(['bulan' => 'required|integer|between:1,12', 'tahun' => 'required|integer|between:2020,2100']);
+        $petugas = $request->user();
+        if (!in_array($petugas->jabatan, ['Admin', 'Piket Pengajian'], true)) return response()->json(['message' => 'Role ini tidak dapat menerbitkan raport.'], 403);
+        $santri = DB::table('santri')->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')->where('santri.santri_id', $santriId)->select('santri.*', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat')->first();
+        $raport = DB::table('raport_pengajian')->where('santri_id', $santriId)->where('bulan', $data['bulan'])->where('tahun', $data['tahun'])->first();
+        if (!$santri || !$raport) return response()->json(['message' => 'Raport belum diisi untuk periode ini.'], 404);
+        $periodStatus = $raport->periode_id ? DB::table('periode_akademik')->where('periode_id', $raport->periode_id)->value('status') : null;
+        if ($periodStatus === 'Ditutup' && $petugas->jabatan !== 'Admin') return response()->json(['message' => 'Periode raport sudah ditutup. Penerbitan ulang setelah penutupan hanya dapat dilakukan Admin.'], 422);
+        if ($petugas->jabatan !== 'Admin' && !$petugas->hasAccess('KelompokPBS', (int) ($raport->kelompok_pbs_id ?? 0)) && !$petugas->hasAccess('KelompokPBM', (int) ($raport->kelompok_pbm_id ?? 0))) return response()->json(['message' => 'Raport berada di luar penugasan Anda.'], 403);
+        $snapshot = $this->buildRaportData($raport, $santri);
+        $version = ((int) DB::table('report_documents')->where(['jenis' => 'raport_pengajian', 'santri_id' => $santriId, 'tahun_pelajaran' => $raport->tahun_pelajaran, 'semester' => $raport->semester])->max('versi')) + 1;
+        $path = "report-documents/raport-pengajian/{$santriId}/{$raport->tahun_pelajaran}-{$raport->semester}-v{$version}.pdf";
+        $pdf = Pdf::loadView('pdf.raport_pengajian', ['data' => $snapshot, 'predikatMap' => self::PREDIKAT_MAP, 'kepribadianMap' => self::KEPRIBADIAN_MAP])->setPaper('A4', 'portrait');
+        Storage::disk('local')->put($path, $pdf->output());
+        $id = DB::table('report_documents')->insertGetId(['jenis' => 'raport_pengajian', 'santri_id' => $santriId, 'periode_id' => $raport->periode_id, 'tahun_pelajaran' => $raport->tahun_pelajaran, 'semester' => $raport->semester, 'versi' => $version, 'file_path' => $path, 'snapshot_data' => json_encode($snapshot), 'diterbitkan_oleh' => $petugas->petugas_id, 'diterbitkan_pada' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(['message' => 'Raport diterbitkan sebagai arsip.', 'document_id' => $id, 'versi' => $version], 201);
+    }
+
+    public function history(Request $request, int $santriId)
+    {
+        return response()->json(DB::table('report_documents')->where('jenis', 'raport_pengajian')->where('santri_id', $santriId)->orderByDesc('diterbitkan_pada')->get(['document_id', 'tahun_pelajaran', 'semester', 'versi', 'diterbitkan_oleh', 'diterbitkan_pada']));
+    }
+
+    public function documentPdf(Request $request, int $santriId, int $documentId)
+    {
+        $document = DB::table('report_documents')->where('document_id', $documentId)->where('jenis', 'raport_pengajian')->where('santri_id', $santriId)->first();
+        abort_unless($document, 404, 'Arsip raport tidak ditemukan.');
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404, 'Berkas arsip raport tidak ditemukan.');
+        return Storage::disk('local')->download($document->file_path, "Raport-{$santriId}-v{$document->versi}.pdf");
     }
 
     /**

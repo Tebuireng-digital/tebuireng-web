@@ -45,10 +45,10 @@ class RaportPengajianFeatureTest extends TestCase
         ]);
 
         $this->ustadz = Petugas::create([
-            'nama' => 'Ustadz Raport',
+            'nama' => 'Piket Pengajian Raport',
             'username' => 'ustadz_raport',
             'password_hash' => Hash::make('password'),
-            'jabatan' => 'Ustadz',
+            'jabatan' => 'Piket Pengajian',
             'status_aktif' => 1,
             'wajib_ganti_password' => 0
         ]);
@@ -137,5 +137,29 @@ class RaportPengajianFeatureTest extends TestCase
         $pdfRes = $this->actingAs($this->ustadz)->get("/api/raport-pengajian/{$this->santriId}/pdf?bulan=8&tahun=2026");
         $pdfRes->assertStatus(200);
         $pdfRes->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_publish_creates_immutable_versions_and_history(): void
+    {
+        $payload = [
+            'jenis' => 'AL_QURAN', 'target_id' => $this->kelompokPbsId, 'bulan' => 8, 'tahun' => 2026,
+            'tahun_pelajaran' => '2026-2027', 'semester' => 'Ganjil',
+            'entries' => [[
+                'santri_id' => $this->santriId,
+                'nilai' => ['Fashohah' => 85, 'Tajwid' => 80, 'Kelancaran' => 90, 'Hafalan' => 78],
+                'kepribadian' => ['Kelakuan' => 'A', 'Kedisiplinan' => 'A', 'Kerajinan' => 'B'],
+                'keputusan' => 'Naik', 'predikat_umum' => 'Memuaskan',
+            ]],
+        ];
+        $this->actingAs($this->ustadz)->postJson('/api/raport-pengajian/bulk', $payload)->assertOk();
+
+        $first = $this->actingAs($this->ustadz)->postJson("/api/raport-pengajian/{$this->santriId}/publish", ['bulan' => 8, 'tahun' => 2026]);
+        $first->assertCreated()->assertJsonPath('versi', 1);
+        $second = $this->actingAs($this->ustadz)->postJson("/api/raport-pengajian/{$this->santriId}/publish", ['bulan' => 8, 'tahun' => 2026]);
+        $second->assertCreated()->assertJsonPath('versi', 2);
+
+        $history = $this->actingAs($this->ustadz)->getJson("/api/raport-pengajian/{$this->santriId}/history");
+        $history->assertOk()->assertJsonCount(2);
+        $this->assertSame(2, DB::table('report_documents')->where('santri_id', $this->santriId)->count());
     }
 }

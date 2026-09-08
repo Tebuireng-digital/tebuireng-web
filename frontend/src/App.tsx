@@ -25,6 +25,9 @@ const RaportViewPage = lazy(() => import('./pages/RaportViewPage').then(module =
 const UbudiyahFormPage = lazy(() => import('./pages/UbudiyahFormPage').then(module => ({ default: module.UbudiyahFormPage })));
 const UbudiyahViewPage = lazy(() => import('./pages/UbudiyahViewPage').then(module => ({ default: module.UbudiyahViewPage })));
 const UbudiyahMasterPage = lazy(() => import('./pages/UbudiyahMasterPage').then(module => ({ default: module.UbudiyahMasterPage })));
+const PeriodeAkademikPage = lazy(() => import('./pages/PeriodeAkademikPage').then(module => ({ default: module.PeriodeAkademikPage })));
+const AbsensiHistoryPage = lazy(() => import('./pages/AbsensiHistoryPage').then(module => ({ default: module.AbsensiHistoryPage })));
+const PelanggaranMasterPage = lazy(() => import('./pages/PelanggaranMasterPage').then(module => ({ default: module.PelanggaranMasterPage })));
 
 type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'verify' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport' | 'ubudiyah';
 
@@ -41,6 +44,7 @@ interface VerificationAttention {
 
 const ABSENSI_CONFIG: Record<string, { nama: string; icon: IconName }> = {
   sekolah: { nama: 'Absensi Kelas Formal', icon: 'school' },
+  keberangkatan: { nama: 'Keberangkatan Kelas', icon: 'school' },
   kamar: { nama: 'Absensi Kamar', icon: 'room' },
   pbs: { nama: 'Absensi Al-Qur\'an Subuh', icon: 'quran' },
   diniyah: { nama: 'Absensi Kelas Madin', icon: 'madin' },
@@ -88,6 +92,8 @@ function Layout() {
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollYRef = useRef(0);
 
+  const isAttendanceRosterPage = location.pathname.startsWith('/absensi/');
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
     const updateViewport = () => {
@@ -128,6 +134,7 @@ function Layout() {
   const [isVerificationMenuOpen, setIsVerificationMenuOpen] = useState(() => location.pathname.startsWith('/verifikasi-data'));
   const [isUbudiyahMenuOpen, setIsUbudiyahMenuOpen] = useState(() => location.pathname.startsWith('/ubudiyah'));
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -155,10 +162,24 @@ function Layout() {
 
   useEffect(() => {
     if (!isMobileMenuOpen) return;
+    requestAnimationFrame(() => mobileCloseButtonRef.current?.focus());
     const handleMenuKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsMobileMenuOpen(false);
         mobileMenuButtonRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = document.querySelectorAll<HTMLElement>('.premium-sidebar a, .premium-sidebar button');
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', handleMenuKeyDown);
@@ -313,6 +334,21 @@ function Layout() {
     icon: ABSENSI_CONFIG[opt.jenis]?.icon || 'home',
   }));
 
+  if (isAttendanceRosterPage) {
+    return (
+      <div className="attendance-focus-layout">
+        <main className="attendance-focus-main">
+          <Suspense fallback={<PageSkeleton rows={8} />}>
+            <Routes>
+              <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
+              <Route path="*" element={<Navigate to="/dashboard" />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="premium-layout">
       {/* Mobile Header */}
@@ -333,15 +369,13 @@ function Layout() {
         inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <div className="sidebar-brand"><span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span><div><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div></div>
-          <button className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
+          <div className="sidebar-brand">
+            <span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span>
+            <div className="sidebar-brand-text"><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div>
+          </div>
+          <button ref={mobileCloseButtonRef} className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-        </div>
-
-        <div className="sidebar-user-box">
-          <span className="user-avatar">{user.nama.slice(0, 1).toUpperCase()}</span>
-          <div><p>{user.nama}</p><span>{user.jabatan}</span></div>
         </div>
 
         <nav id="primary-navigation" className="sidebar-nav" aria-label="Navigasi sidebar">
@@ -389,7 +423,7 @@ function Layout() {
           )}
 
           {/* KELOMPOK MENU PELANGGARAN (COLLAPSIBLE) */}
-          {['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+          {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
             <div className="sidebar-master-menu">
               <button
                 type="button"
@@ -421,11 +455,12 @@ function Layout() {
                   >
                     Daftar Pelanggaran
                   </Link>
+                  {['Admin', 'Keamanan'].includes(user.jabatan) && <Link to="/pelanggaran/master" className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/master' ? 'active' : ''}`} onClick={closeMenu}>Master Pelanggaran</Link>}
               </div>
             </div>
           )}
 
-          {['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+          {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
             <Link
               to="/prestasi/semua"
               className={`sidebar-nav-link ${location.pathname.startsWith('/prestasi') ? 'active' : ''}`}
@@ -437,7 +472,7 @@ function Layout() {
           )}
 
           {/* KELOMPOK MENU PERIZINAN & GERBANG (COLLAPSIBLE) */}
-          {['Admin', 'Keamanan', 'Pengasuh'].includes(user.jabatan) && (
+          {['Admin', 'Keamanan'].includes(user.jabatan) && (
             <div className="sidebar-master-menu">
               <button
                 type="button"
@@ -476,6 +511,9 @@ function Layout() {
           {['Admin', 'Wali Kelas'].includes(user.jabatan) && (
             <Link to="/rekap-kelas" className={`sidebar-nav-link ${location.pathname === '/rekap-kelas' ? 'active' : ''}`} aria-current={location.pathname === '/rekap-kelas' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Rekap Kelas</span></Link>
           )}
+          {['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) && (
+            <Link to="/absensi-histori" className={`sidebar-nav-link ${location.pathname === '/absensi-histori' ? 'active' : ''}`} aria-current={location.pathname === '/absensi-histori' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Histori Absensi</span></Link>
+          )}
 
           {/* KELOMPOK MENU RAPORT PENGAJIAN (COLLAPSIBLE) */}
           {Boolean(user) && (
@@ -492,7 +530,7 @@ function Layout() {
                 <span aria-hidden="true">{isRaportMenuOpen ? '⌃' : '⌄'}</span>
               </button>
               <div id="raport-subnav" className={`sidebar-subnav ${isRaportMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isRaportMenuOpen}>
-                  {['Admin', 'Ustadz'].includes(user.jabatan) && (
+                  {['Admin', 'Piket Pengajian'].includes(user.jabatan) && (
                     <Link
                       to="/raport/input"
                       className={`sidebar-subnav-link ${location.pathname === '/raport/input' ? 'active' : ''}`}
@@ -515,7 +553,7 @@ function Layout() {
           )}
 
           {/* KELOMPOK MENU UBUDIYAH (COLLAPSIBLE) */}
-          {['Admin', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+          {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
             <div className="sidebar-master-menu">
               <button
                 type="button"
@@ -572,8 +610,6 @@ function Layout() {
               </button>
               <div id="verification-subnav" className={`sidebar-subnav ${isVerificationMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isVerificationMenuOpen}>
                 <Link to="/verifikasi-data/santri" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/santri' ? 'active' : ''}`} onClick={closeMenu}>Verifikasi data santri{verificationAttention.santri > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.santri} data perlu diverifikasi`}/>}</Link>
-                <Link to="/verifikasi-data/orda" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/orda' ? 'active' : ''}`} onClick={closeMenu}>Verifikasi ORDA{verificationAttention.orda > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.orda} ORDA perlu diverifikasi`}/>}</Link>
-                <Link to="/verifikasi-data/kamar" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/kamar' ? 'active' : ''}`} onClick={closeMenu}>Verifikasi data kamar{verificationAttention.kamar > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.kamar} mapping kamar perlu diverifikasi`}/>}</Link>
                 <Link to="/verifikasi-data/review" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/review' ? 'active' : ''}`} onClick={closeMenu}>Review kemiripan data{verificationAttention.review > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.review} kemiripan data perlu diverifikasi`}/>}</Link>
               </div>
             </div>
@@ -601,34 +637,21 @@ function Layout() {
                 <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
                 <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
                 <Link to="/data-master/wa-bot" className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`} onClick={closeMenu}>Pengaturan Bot WA</Link>
+                <Link to="/periode-akademik" className={`sidebar-subnav-link ${location.pathname === '/periode-akademik' ? 'active' : ''}`} onClick={closeMenu}>Periode akademik</Link>
               </div>
             </div>
           )}
 
-          {['Pembina Kamar', 'Keamanan', 'Pengasuh', 'Ustadz', 'Wali Kelas'].includes(user.jabatan) && (
-            <Link
-              to="/data-master/santri"
-              className={`sidebar-nav-link ${location.pathname.startsWith('/data-master') ? 'active' : ''}`}
-              aria-current={location.pathname.startsWith('/data-master') ? 'page' : undefined}
-              onClick={closeMenu}
-            >
-              <NavIcon name="database"/><span>Data Santri</span>
-            </Link>
-          )}
-
-          {['Admin', 'Pengasuh'].includes(user.jabatan) && (
+          {['Admin'].includes(user.jabatan) && (
             <Link to="/laporan/detail" className={`sidebar-nav-link ${location.pathname === '/laporan/detail' ? 'active' : ''}`} aria-current={location.pathname === '/laporan/detail' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Laporan Detail</span></Link>
           )}
 
           <Link to="/ganti-kata-sandi" className={`sidebar-nav-link ${location.pathname === '/ganti-kata-sandi' ? 'active' : ''}`} aria-current={location.pathname === '/ganti-kata-sandi' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="lock"/><span>Ganti Password</span></Link>
-
-        </nav>
-
-        <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
-          <button onClick={logout} className="sidebar-logout-btn">
+          <button onClick={() => { closeMenu(); logout(); }} className="sidebar-logout-btn" style={{ marginTop: '12px' }}>
             <NavIcon name="logout"/> Keluar
           </button>
-        </div>
+
+        </nav>
       </div>
 
       <main className="dashboard-content">
@@ -641,11 +664,12 @@ function Layout() {
             <Route path="/pelanggaran" element={<Navigate to="/pelanggaran/semua" replace />} />
             <Route path="/pelanggaran/semua" element={<PelanggaranListPage />} />
             <Route path="/pelanggaran/baru" element={<PelanggaranFormPage />} />
+            <Route path="/pelanggaran/master" element={['Admin', 'Keamanan'].includes(user.jabatan) ? <PelanggaranMasterPage /> : <Navigate to="/dashboard" />} />
             <Route path="/prestasi" element={<Navigate to="/prestasi/semua" replace />} />
             <Route path="/prestasi/semua" element={<PrestasiListPage />} />
 
             <Route path="/perizinan" element={<Navigate to="/perizinan/semua" replace />} />
-            <Route path="/perizinan/semua" element={['Admin', 'Keamanan', 'Pengasuh'].includes(user.jabatan) ? <PerizinanListPage /> : <Navigate to="/dashboard" />} />
+            <Route path="/perizinan/semua" element={['Admin', 'Keamanan'].includes(user.jabatan) ? <PerizinanListPage /> : <Navigate to="/dashboard" />} />
             <Route path="/catat-gerbang" element={
               ['Admin', 'Keamanan'].includes(user.jabatan)
                 ? <CatatGerbangPage />
@@ -656,14 +680,15 @@ function Layout() {
 
             {/* Protected Routes based on Jabatan */}
             <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
+            <Route path="/absensi-histori" element={['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) ? <AbsensiHistoryPage /> : <Navigate to="/dashboard" />} />
             <Route path="/rekap-kelas" element={['Admin', 'Wali Kelas'].includes(user.jabatan) ? <RekapKelasPage /> : <Navigate to="/dashboard" />} />
 
             <Route path="/raport/input" element={
-              ['Admin', 'Ustadz'].includes(user.jabatan)
+              ['Admin', 'Piket Pengajian'].includes(user.jabatan)
                 ? <RaportInputPage />
                 : <Navigate to="/dashboard" />
             } />
-            <Route path="/raport/lihat" element={<RaportViewPage />} />
+            <Route path="/raport/lihat" element={['Admin', 'Piket Pengajian'].includes(user.jabatan) ? <RaportViewPage /> : <Navigate to="/dashboard" />} />
 
             <Route path="/ubudiyah/input" element={
               ['Admin', 'Pembina Kamar'].includes(user.jabatan)
@@ -671,7 +696,7 @@ function Layout() {
                 : <Navigate to="/dashboard" />
             } />
             <Route path="/ubudiyah/lihat" element={
-              ['Admin', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan)
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
                 ? <UbudiyahViewPage />
                 : <Navigate to="/dashboard" />
             } />
@@ -695,10 +720,11 @@ function Layout() {
             } />
 
             <Route path="/laporan/detail" element={
-              ['Admin', 'Pengasuh'].includes(user.jabatan)
+              ['Admin'].includes(user.jabatan)
                 ? <LaporanPage />
                 : <Navigate to="/dashboard" />
             } />
+            <Route path="/periode-akademik" element={user.jabatan === 'Admin' ? <PeriodeAkademikPage /> : <Navigate to="/dashboard" />} />
 
             <Route path="*" element={<Navigate to="/dashboard" />} />
           </Routes>
@@ -716,19 +742,19 @@ function Layout() {
           </Link>
         )}
 
-        {['Admin', 'Keamanan', 'Pembina Kamar', 'Pengasuh'].includes(user.jabatan) && (
+        {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
           <Link to="/pelanggaran/semua" className={location.pathname.startsWith('/pelanggaran') ? 'active' : ''} aria-current={location.pathname.startsWith('/pelanggaran') ? 'page' : undefined} onClick={closeMenu}>
             <NavIcon name="warning"/><span>Pelanggaran</span>
           </Link>
         )}
 
-        {['Admin', 'Keamanan', 'Pengasuh'].includes(user.jabatan) && (
+        {['Admin', 'Keamanan'].includes(user.jabatan) && (
           <Link to="/perizinan/semua" className={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'active' : ''} aria-current={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'page' : undefined} onClick={closeMenu}>
             <NavIcon name="gate"/><span>Perizinan</span>
           </Link>
         )}
 
-        {['Admin', 'Pengasuh'].includes(user.jabatan) && (
+        {['Admin'].includes(user.jabatan) && (
           <Link to="/laporan/detail" className={location.pathname === '/laporan/detail' ? 'active' : ''} aria-current={location.pathname === '/laporan/detail' ? 'page' : undefined} onClick={closeMenu}>
             <NavIcon name="report"/><span>Laporan</span>
           </Link>

@@ -9,12 +9,12 @@ class PelanggaranPolicy
 {
     public function viewAny(Petugas $petugas)
     {
-        return in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan', 'Pembina Kamar'], true);
+        return in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar'], true);
     }
 
     public function view(Petugas $petugas, $pelanggaran)
     {
-        if (in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true)) {
+        if (in_array($petugas->jabatan, ['Admin', 'Keamanan'], true)) {
             return true;
         }
 

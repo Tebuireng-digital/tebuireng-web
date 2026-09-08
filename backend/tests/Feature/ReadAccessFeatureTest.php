@@ -13,7 +13,6 @@ class ReadAccessFeatureTest extends TestCase
     use RefreshDatabase;
 
     private Petugas $admin;
-    private Petugas $pengasuh;
     private Petugas $keamanan;
     private Petugas $pembinaA;
     private Petugas $pembinaB;
@@ -27,12 +26,11 @@ class ReadAccessFeatureTest extends TestCase
         parent::setUp();
 
         $this->admin = $this->petugas('Admin', 'admin-baca');
-        $this->pengasuh = $this->petugas('Pengasuh', 'pengasuh-baca');
         $this->keamanan = $this->petugas('Keamanan', 'keamanan-baca');
         $this->pembinaA = $this->petugas('Pembina Kamar', 'pembina-a-baca');
         $this->pembinaB = $this->petugas('Pembina Kamar', 'pembina-b-baca');
         $this->wali = $this->petugas('Wali Kelas', 'wali-baca');
-        $this->ustadz = $this->petugas('Ustadz', 'ustadz-baca');
+        $this->ustadz = $this->petugas('Piket Pengajian', 'ustadz-baca');
 
         $unitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'MTS', 'nama' => 'MTs']);
         $kamarA = DB::table('kamar')->insertGetId([
@@ -121,7 +119,7 @@ class ReadAccessFeatureTest extends TestCase
         $this->getJson('/api/pelanggaran')->assertOk()->assertJsonCount(2);
         $this->getJson('/api/santri/'.$this->santriB.'/perizinan')->assertOk()->assertJsonCount(1);
 
-        $this->actingAs($this->pengasuh, 'sanctum');
+        $this->actingAs($this->admin, 'sanctum');
         $this->getJson('/api/pelanggaran')->assertOk()->assertJsonCount(2);
         $this->getJson('/api/santri/'.$this->santriB.'/perizinan')->assertOk()->assertJsonCount(1);
     }

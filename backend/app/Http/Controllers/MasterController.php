@@ -15,9 +15,9 @@ class MasterController extends Controller
     private const PENUGASAN = [
         'sekolah' => ['tipe' => 'KelasFormal', 'table' => 'kelas_formal', 'pk' => 'kelas_formal_id', 'label' => 'nama_kelas', 'jabatan' => 'Wali Kelas', 'prefix' => 'Kelas'],
         'kamar' => ['tipe' => 'Kamar', 'table' => 'kamar', 'pk' => 'kamar_id', 'label' => 'nama', 'jabatan' => 'Pembina Kamar', 'prefix' => 'Kamar'],
-        'pbs' => ['tipe' => 'KelompokPBS', 'table' => 'kelompok_pbs', 'pk' => 'kelompok_pbs_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz', 'prefix' => 'PBS'],
-        'diniyah' => ['tipe' => 'KelompokMadin', 'table' => 'kelompok_madin', 'pk' => 'kelompok_madin_id', 'label' => 'nama_kelas_madin', 'jabatan' => 'Ustadz', 'prefix' => 'Madin'],
-        'pbm' => ['tipe' => 'KelompokPBM', 'table' => 'kelompok_pbm', 'pk' => 'kelompok_pbm_id', 'label' => 'nama_kelompok', 'jabatan' => 'Ustadz', 'prefix' => 'PBM'],
+        'pbs' => ['tipe' => 'KelompokPBS', 'table' => 'kelompok_pbs', 'pk' => 'kelompok_pbs_id', 'label' => 'nama_kelompok', 'jabatan' => 'Piket Pengajian', 'prefix' => 'PBS'],
+        'diniyah' => ['tipe' => 'KelompokMadin', 'table' => 'kelompok_madin', 'pk' => 'kelompok_madin_id', 'label' => 'nama_kelas_madin', 'jabatan' => 'Piket Pengajian', 'prefix' => 'Madin'],
+        'pbm' => ['tipe' => 'KelompokPBM', 'table' => 'kelompok_pbm', 'pk' => 'kelompok_pbm_id', 'label' => 'nama_kelompok', 'jabatan' => 'Piket Pengajian', 'prefix' => 'PBM'],
     ];
 
     public function getPetugas()
@@ -75,7 +75,7 @@ class MasterController extends Controller
             'username' => 'required|string|max:100|unique:petugas,username',
             'password' => 'required|string|min:8|max:100',
             'no_hp' => 'nullable|string|max:20',
-            'jabatan' => 'required|in:Pengasuh,Ustadz,Pembina Kamar,Wali Kelas,Keamanan,Admin',
+            'jabatan' => 'required|in:Admin,Keamanan,Pembina Kamar,Wali Kelas,Piket Pengajian',
             'status_aktif' => 'sometimes|boolean',
         ]);
 
@@ -110,7 +110,7 @@ class MasterController extends Controller
             'password' => 'nullable|string|min:8|max:100|confirmed',
             'password_confirmation' => 'nullable|string|min:8|max:100',
             'no_hp' => 'nullable|string|max:20',
-            'jabatan' => 'required|in:Pengasuh,Ustadz,Pembina Kamar,Wali Kelas,Keamanan,Admin',
+            'jabatan' => 'required|in:Admin,Keamanan,Pembina Kamar,Wali Kelas,Piket Pengajian',
             'status_aktif' => 'required|boolean',
         ]);
 
@@ -331,7 +331,7 @@ class MasterController extends Controller
 
     public function countSantri()
     {
-        return response()->json(['total' => DB::table('santri')->count()]);
+        return response()->json(['total' => DB::table('santri')->where('status_aktif', 1)->count()]);
     }
 
     public function storeSantri(Request $request)
@@ -366,7 +366,7 @@ class MasterController extends Controller
             'kelompok_pbs_id' => 'nullable|integer|exists:kelompok_pbs,kelompok_pbs_id',
             'kelompok_pbm_id' => 'nullable|integer|exists:kelompok_pbm,kelompok_pbm_id',
             'nama_wali' => 'nullable|string|max:150',
-            'no_hp_wali' => 'nullable|string|max:20',
+            'no_hp_wali' => 'nullable|string|max:50',
             'status_verifikasi' => 'nullable|in:perlu_verifikasi,terverifikasi_aktif,perlu_lengkapi_profil,perlu_tentukan_kelas,perlu_mapping_kegiatan,perlu_review_identitas,kandidat_alumni,nonaktif',
             'organisasi_daerah_id' => 'nullable|integer|exists:organisasi_daerah,organisasi_daerah_id',
             'no_kk' => 'nullable|string|max:32',
@@ -510,12 +510,51 @@ class MasterController extends Controller
     public function verificationQueue(Request $request)
     {
         $perPage = min(max($request->integer('per_page', 50), 10), 100);
-        $rows = DB::table('santri')
+        $missing = $request->query('missing');
+
+        $query = DB::table('santri')
             ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
             ->select('santri.santri_id', 'santri.no_id_induk', 'santri.nama', 'santri.kamar_id', 'santri.kelas_formal_id', 'santri.kelompok_madin_id', 'santri.kelompok_pbs_id', 'santri.kelompok_pbm_id', 'santri.status_verifikasi', 'unit_pendidikan.kode as kode_unit')
+            ->where('santri.status_aktif', 1)
             ->where(function ($query) {
+                $query->whereNull('santri.status_siswa_sumber')->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
+            });
+
+        if ($missing === 'kamar') {
+            $query->whereNull('santri.kamar_id');
+        } elseif ($missing === 'kelas_formal') {
+            $query->whereNull('santri.kelas_formal_id');
+        } elseif ($missing === 'kelompok_madin') {
+            $query->whereNull('santri.kelompok_madin_id');
+        } elseif ($missing === 'kelompok_pbs') {
+            $query->whereNull('santri.kelompok_pbs_id');
+        } elseif ($missing === 'kelompok_pbm') {
+            $query->whereNull('santri.kelompok_pbm_id');
+        } elseif ($missing === 'no_hp_wali') {
+            $query->where(function ($q) { $q->whereNull('santri.no_hp_wali')->orWhere('santri.no_hp_wali', ''); });
+        } elseif ($missing === 'nik_siswa') {
+            $query->where(function ($q) { $q->whereNull('santri.nik_siswa')->orWhere('santri.nik_siswa', ''); });
+        } elseif ($missing === 'tanpa_no_id') {
+            $query->where(function ($q) {
+                $q->whereNull('santri.no_id_induk')
+                    ->orWhere('santri.no_id_induk', '')
+                    ->orWhere('santri.no_id_induk', 'like', '2699%')
+                    ->orWhere('santri.catatan_import', 'SANTRI_BARU_2026')
+                    ->orWhere('santri.status_siswa_sumber', 'santri_baru_2026');
+            });
+        } elseif ($missing === 'orda') {
+            $query->whereNotExists(function ($subquery) {
+                $subquery->selectRaw('1')
+                    ->from('santri_organisasi_daerah as sod')
+                    ->whereColumn('sod.santri_id', 'santri.santri_id')
+                    ->where('sod.status', 'aktif')
+                    ->whereNull('sod.tanggal_selesai');
+            });
+        } else {
+            $query->where(function ($query) {
                 $query->whereNull('santri.kamar_id')
                     ->orWhereNull('santri.kelas_formal_id')
+                    ->orWhereNull('santri.no_id_induk')
                     ->orWhereExists(function ($subquery) {
                         $subquery->selectRaw('1')
                             ->from('santri_kegiatan_partisipasi as partisipasi')
@@ -535,9 +574,10 @@ class MasterController extends Controller
                                     });
                             });
                     });
-            })
-            ->orderBy('santri.nama')
-            ->paginate($perPage);
+            });
+        }
+
+        $rows = $query->orderBy('santri.nama')->paginate($perPage);
 
         $santri = collect($rows->items());
 
@@ -550,6 +590,7 @@ class MasterController extends Controller
         foreach ($santri as $row) {
             $statusKegiatan = ($partisipasi[$row->santri_id] ?? collect())->pluck('status', 'kode');
             $alasan = [];
+            if (!$row->no_id_induk) $alasan[] = 'Nomor Induk Pondok belum diisi';
             if (!$row->kamar_id && ($statusKegiatan['KAMAR'] ?? 'perlu_verifikasi') !== 'tidak_ikut') $alasan[] = 'kamar belum dipetakan';
             if (!$row->kelas_formal_id) $alasan[] = 'kelas formal belum dipetakan';
             if (!$row->kelompok_madin_id && ($statusKegiatan['DINIYAH'] ?? 'perlu_verifikasi') !== 'tidak_ikut') $alasan[] = 'Madin belum dipetakan';
@@ -563,6 +604,93 @@ class MasterController extends Controller
         return response()->json($rows);
     }
 
+    public function verificationSummary(Request $request)
+    {
+        $activeQuery = DB::table('santri')
+            ->where('santri.status_aktif', 1)
+            ->where(function ($query) {
+                $query->whereNull('santri.status_siswa_sumber')
+                    ->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
+            });
+
+        $totalActive = (clone $activeQuery)->count();
+
+        $santriBaruTotal = (clone $activeQuery)
+            ->where(function ($q) {
+                $q->where('catatan_import', 'SANTRI_BARU_2026')
+                    ->orWhere('status_siswa_sumber', 'santri_baru_2026');
+            })->count();
+
+        $santriBaruPerluVerifikasi = (clone $activeQuery)
+            ->where(function ($q) {
+                $q->where('catatan_import', 'SANTRI_BARU_2026')
+                    ->orWhere('status_siswa_sumber', 'santri_baru_2026');
+            })
+            ->where('status_verifikasi', 'perlu_verifikasi')
+            ->count();
+
+        $missingNoId = (clone $activeQuery)->where(function ($q) {
+            $q->whereNull('no_id_induk')
+                ->orWhere('no_id_induk', '')
+                ->orWhere('no_id_induk', 'like', '2699%')
+                ->orWhere('catatan_import', 'SANTRI_BARU_2026')
+                ->orWhere('status_siswa_sumber', 'santri_baru_2026');
+        })->count();
+        $missingKamar = (clone $activeQuery)->whereNull('kamar_id')->count();
+        $missingKelas = (clone $activeQuery)->where(function ($q) {
+            $q->whereNull('kelas_formal_id')->orWhere('status_verifikasi', 'perlu_tentukan_kelas');
+        })->count();
+        $missingMadin = (clone $activeQuery)->whereNull('kelompok_madin_id')->count();
+        $missingPbs = (clone $activeQuery)->whereNull('kelompok_pbs_id')->count();
+        $missingPbm = (clone $activeQuery)->whereNull('kelompok_pbm_id')->count();
+        $missingHpWali = (clone $activeQuery)->where(function ($q) {
+            $q->whereNull('no_hp_wali')->orWhere('no_hp_wali', '');
+        })->count();
+        $missingNik = (clone $activeQuery)->where(function ($q) {
+            $q->whereNull('nik_siswa')->orWhere('nik_siswa', '');
+        })->count();
+
+        $missingOrda = DB::table('santri')
+            ->leftJoin('santri_organisasi_daerah as sod', function ($join) {
+                $join->on('sod.santri_id', '=', 'santri.santri_id')
+                    ->where('sod.status', 'aktif')
+                    ->whereNull('sod.tanggal_selesai');
+            })
+            ->where('santri.status_aktif', 1)
+            ->where(function ($query) {
+                $query->whereNull('santri.status_siswa_sumber')
+                    ->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
+            })
+            ->whereNull('sod.santri_organisasi_daerah_id')
+            ->count();
+
+        $fields = [
+            ['key' => 'tanpa_no_id', 'label' => 'Belum memiliki Nomor Induk Pondok', 'count' => $missingNoId],
+            ['key' => 'kamar', 'label' => 'Kamar belum dipetakan', 'count' => $missingKamar],
+            ['key' => 'kelas_formal', 'label' => 'Kelas Formal belum dipetakan', 'count' => $missingKelas],
+            ['key' => 'kelompok_madin', 'label' => 'Kelas Madin belum dipetakan', 'count' => $missingMadin],
+            ['key' => 'kelompok_pbs', 'label' => 'Al-Qur’an Subuh belum dipetakan', 'count' => $missingPbs],
+            ['key' => 'kelompok_pbm', 'label' => 'Takhasus Maghrib belum dipetakan', 'count' => $missingPbm],
+            ['key' => 'no_hp_wali', 'label' => 'No. HP Wali belum terisi', 'count' => $missingHpWali],
+            ['key' => 'nik_siswa', 'label' => 'NIK Siswa belum terisi', 'count' => $missingNik],
+            ['key' => 'orda', 'label' => 'ORDA belum ditetapkan', 'count' => $missingOrda],
+        ];
+
+        $fields = array_values(array_filter($fields, static fn ($item) => $item['count'] > 0));
+
+        usort($fields, static fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        return response()->json([
+            'total_santri_aktif' => $totalActive,
+            'santri_baru' => [
+                'total' => $santriBaruTotal,
+                'perlu_verifikasi' => $santriBaruPerluVerifikasi,
+                'tanpa_no_id' => $missingNoId,
+            ],
+            'most_missing_fields' => $fields,
+        ]);
+    }
+
     public function ordaVerificationQueue(Request $request)
     {
         $perPage = min(max($request->integer('per_page', 50), 10), 100);
@@ -572,6 +700,10 @@ class MasterController extends Controller
                 $join->on('sod.santri_id', '=', 'santri.santri_id')
                     ->where('sod.status', 'aktif')
                     ->whereNull('sod.tanggal_selesai');
+            })
+            ->where('santri.status_aktif', 1)
+            ->where(function ($query) {
+                $query->whereNull('santri.status_siswa_sumber')->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
             })
             ->whereNull('sod.santri_organisasi_daerah_id')
             ->select('santri.santri_id', 'santri.no_id_induk', 'santri.nama', 'santri.status_verifikasi', 'unit_pendidikan.kode as kode_unit')
@@ -695,5 +827,47 @@ class MasterController extends Controller
         return $deleted
             ? response()->json(['message' => 'Penugasan dihapus'])
             : response()->json(['message' => 'Penugasan tidak ditemukan'], 404);
+    }
+
+    public function penugasanAttention(Request $request)
+    {
+        $today = now()->toDateString();
+        $activeAssignments = DB::table('petugas_penugasan')
+            ->where('tanggal_mulai', '<=', $today)
+            ->where(function ($q) use ($today) {
+                $q->whereNull('tanggal_selesai')->orWhere('tanggal_selesai', '>=', $today);
+            });
+
+        $unassignedKamar = DB::table('kamar')
+            ->where('status_aktif', 1)
+            ->whereNotIn('kamar_id', (clone $activeAssignments)->where('tipe_target', 'Kamar')->pluck('target_id'))
+            ->count();
+
+        $unassignedKelas = DB::table('kelas_formal')
+            ->whereNotIn('kelas_formal_id', (clone $activeAssignments)->where('tipe_target', 'KelasFormal')->pluck('target_id'))
+            ->count();
+
+        $unassignedMadin = DB::table('kelompok_madin')
+            ->whereNotIn('kelompok_madin_id', (clone $activeAssignments)->where('tipe_target', 'KelompokMadin')->pluck('target_id'))
+            ->count();
+
+        $unassignedPbs = DB::table('kelompok_pbs')
+            ->whereNotIn('kelompok_pbs_id', (clone $activeAssignments)->where('tipe_target', 'KelompokPBS')->pluck('target_id'))
+            ->count();
+
+        $unassignedPbm = DB::table('kelompok_pbm')
+            ->whereNotIn('kelompok_pbm_id', (clone $activeAssignments)->where('tipe_target', 'KelompokPBM')->pluck('target_id'))
+            ->count();
+
+        $totalUnassigned = $unassignedKamar + $unassignedKelas + $unassignedMadin + $unassignedPbs + $unassignedPbm;
+
+        return response()->json([
+            'total_unassigned' => $totalUnassigned,
+            'kamar' => $unassignedKamar,
+            'kelas_formal' => $unassignedKelas,
+            'kelompok_madin' => $unassignedMadin,
+            'kelompok_pbs' => $unassignedPbs,
+            'kelompok_pbm' => $unassignedPbm,
+        ]);
     }
 }

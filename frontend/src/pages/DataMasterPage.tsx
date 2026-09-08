@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
@@ -190,13 +190,13 @@ const getPaginationItems = (current: number, total: number): PaginationItem[] =>
 };
 
 const roleForJenis: Record<string, string> = {
-  sekolah: 'Wali Kelas', kamar: 'Pembina Kamar', pbs: 'Ustadz', diniyah: 'Ustadz', pbm: 'Ustadz',
+  sekolah: 'Wali Kelas', kamar: 'Pembina Kamar', pbs: 'Piket Pengajian', diniyah: 'Piket Pengajian', pbm: 'Piket Pengajian',
 };
 
 const assignmentTypesForRole: Record<string, string[]> = {
   'Pembina Kamar': ['Kamar'],
   'Wali Kelas': ['KelasFormal'],
-  Ustadz: ['KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
+  'Piket Pengajian': ['KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
   Admin: ['Kamar', 'KelasFormal', 'KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
 };
 
@@ -507,12 +507,29 @@ export function DataMasterPage() {
     setSantriOptions(santriOptionsResponse.data);
   };
 
+  const missingFilterParam = new URLSearchParams(location.search).get('missing') || '';
+
+  const getMissingFilterLabel = (key: string): string => {
+    const labels: Record<string, string> = {
+      tanpa_no_id: 'Belum Memiliki Nomor Induk Pondok',
+      kamar: 'Kamar Belum Dipetakan',
+      kelas_formal: 'Kelas Formal Belum Dipetakan',
+      kelompok_madin: 'Kelas Madin Belum Dipetakan',
+      kelompok_pbs: 'Al-Qur’an Subuh Belum Dipetakan',
+      kelompok_pbm: 'Takhasus Maghrib Belum Dipetakan',
+      no_hp_wali: 'No. HP Wali Belum Terisi',
+      nik_siswa: 'NIK Siswa Belum Terisi',
+      orda: 'ORDA Belum Ditetapkan',
+    };
+    return labels[key] || key;
+  };
+
   const fetchVerification = async () => {
     setVerificationLoading(true);
     try {
-      const response = await api.get<VerificationQueueResponse>('/api/master/santri/verifikasi', {
-        params: { page: verificationPage, per_page: 50 },
-      });
+      const params: Record<string, string | number> = { page: verificationPage, per_page: 50 };
+      if (missingFilterParam) params.missing = missingFilterParam;
+      const response = await api.get<VerificationQueueResponse>('/api/master/santri/verifikasi', { params });
       setVerificationList(response.data.data);
       setVerificationLastPage(response.data.last_page);
       setVerificationTotal(response.data.total);
@@ -574,7 +591,7 @@ export function DataMasterPage() {
     if (isVerificationData && activeTab === 'santri') {
       fetchVerification().catch(() => setMessage('Antrean verifikasi gagal dimuat.'));
     }
-  }, [activeTab, isVerificationData, verificationPage]);
+  }, [activeTab, isVerificationData, verificationPage, location.search]);
 
   useEffect(() => {
     if (isVerificationData && activeTab === 'orda') {
@@ -1257,11 +1274,22 @@ export function DataMasterPage() {
         <section className="master-section">
           <div className="section-heading">
             <div>
-              <h2>Antrean pemetaan absensi</h2>
-              <p>Petakan kamar, kelas formal, Madin, Al-Qur’an Subuh, dan Takhasus Maghrib sebelum data dipakai untuk absensi dan rapor.</p>
+              <h2>Antrean pemetaan & verifikasi santri</h2>
+              <p>Petakan Nomor Induk, Kamar, Kelas Formal, Madin, Al-Qur’an Subuh, dan Takhasus Maghrib sebelum data dipakai untuk absensi dan rapor.</p>
             </div>
             <span className="schedule-label">{verificationTotal.toLocaleString('id')} perlu ditinjau</span>
           </div>
+
+          {missingFilterParam && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 14px', borderRadius: 8, marginBottom: 16 }}>
+              <span style={{ fontSize: 13, color: 'var(--tinta)' }}>
+                Menampilkan antrean khusus: <strong>{getMissingFilterLabel(missingFilterParam)}</strong>
+              </span>
+              <Link to="/verifikasi-data/santri" style={{ fontSize: 12, color: 'var(--aksen)', fontWeight: 600, textDecoration: 'none' }}>
+                ✕ Hapus Filter (Tampilkan Semua)
+              </Link>
+            </div>
+          )}
           <div className="table-scroll">
             <table className="master-table">
               <thead><tr><th>No. ID</th><th>Santri</th><th>Unit</th><th>Mapping absensi yang perlu dilengkapi</th><th>Aksi</th></tr></thead>
@@ -1590,7 +1618,7 @@ export function DataMasterPage() {
           <div className="section-heading">
             <div>
               <h2>Review Kemiripan Data Santri</h2>
-              <p>Pencocokan data santri dari file impor/legacy dengan master santri terdaftar. Evaluasi kemiripan nama (tanda baca/typo) dan pemetaan kamar.</p>
+              <p>Review kandidat dari workbook canonical untuk memastikan identitas santri dan pemetaan kamar sebelum dipakai operasional.</p>
             </div>
             <button type="button" className="secondary-button" onClick={() => void handleSyncReview()} disabled={reviewLoading}>
               {reviewLoading ? 'Menyinkronkan...' : 'Sinkronkan Data Review'}
@@ -1707,7 +1735,7 @@ export function DataMasterPage() {
               <thead>
                 <tr>
                   <th>No</th>
-                  <th>Data Sumber (File Lama/Impor)</th>
+                  <th>Data Sumber Review</th>
                   <th>Kandidat Santri Master</th>
                   <th>Kemiripan</th>
                   <th>Status & Informasi Kamar</th>
@@ -1882,7 +1910,7 @@ export function DataMasterPage() {
               <div className="review-compare-grid">
                 {/* Source Box */}
                 <div className="review-compare-card source">
-                  <div className="review-card-title source-title">Data Sumber (File Impor/Lama)</div>
+                  <div className="review-card-title source-title">Data Sumber Review</div>
                   <div className="review-field-group">
                     <div className="review-field-label">Nama Sumber</div>
                     <div className="review-field-value" style={{ fontSize: 15, color: '#1e293b' }}>{activeReviewItem.nama_sumber}</div>
@@ -2558,7 +2586,7 @@ export function DataMasterPage() {
               <div><label className="ui-text-label" htmlFor="petugas-nama">Nama</label><input id="petugas-nama" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.nama || ''} onChange={e => setEditingPetugas(p => ({ ...p, nama: e.target.value }))} /></div>
               <div><label className="ui-text-label" htmlFor="petugas-username">Username</label><input id="petugas-username" className="raport-select" style={{ width: '100%' }} required value={editingPetugas.username || ''} onChange={e => setEditingPetugas(p => ({ ...p, username: e.target.value }))} /></div>
               <div><label className="ui-text-label" htmlFor="petugas-no-hp">No. HP</label><input id="petugas-no-hp" className="raport-select" style={{ width: '100%' }} value={editingPetugas.no_hp || ''} onChange={e => setEditingPetugas(p => ({ ...p, no_hp: e.target.value }))} /></div>
-              <AppDropdown id="petugas-jabatan" label="Jabatan" value={editingPetugas.jabatan || ''} options={['Admin', 'Pengasuh', 'Ustadz', 'Pembina Kamar', 'Wali Kelas', 'Keamanan'].map(role => ({ value: role, label: role }))} onChange={value => { setEditingPetugas(p => ({ ...p, jabatan: value })); setEditingAssignments(current => { const compatible = current.filter(key => (assignmentTypesForRole[value] ?? []).includes(key.split(':')[0])); return value === 'Admin' ? compatible : compatible.slice(0, 1); }); }} />
+              <AppDropdown id="petugas-jabatan" label="Jabatan" value={editingPetugas.jabatan || ''} options={['Admin', 'Keamanan', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].map(role => ({ value: role, label: role }))} onChange={value => { setEditingPetugas(p => ({ ...p, jabatan: value })); setEditingAssignments(current => { const compatible = current.filter(key => (assignmentTypesForRole[value] ?? []).includes(key.split(':')[0])); return value === 'Admin' ? compatible : compatible.slice(0, 1); }); }} />
               <div><label className="ui-text-label" htmlFor="petugas-password">Password {editingPetugas.petugas_id ? '(opsional)' : ''}</label><div className="password-field petugas-password-field"><input id="petugas-password" type={showPetugasPassword ? 'text' : 'password'} className="raport-select petugas-password-input" style={{ width: '100%' }} required={!editingPetugas.petugas_id} minLength={8} value={editingPetugas.password || ''} onChange={e => setEditingPetugas(p => ({ ...p, password: e.target.value, password_confirmation: e.target.value ? p.password_confirmation : '' }))} placeholder={editingPetugas.petugas_id ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter'} /><button type="button" className="password-toggle" onClick={() => setShowPetugasPassword(value => !value)} aria-label={showPetugasPassword ? 'Sembunyikan password' : 'Tampilkan password'} title={showPetugasPassword ? 'Sembunyikan password' : 'Tampilkan password'}><EyeIcon hidden={showPetugasPassword} /></button></div>{editingPetugas.petugas_id && <small className="field-hint">Isi password baru jika ingin mereset password akun ini.</small>}</div>
               {editingPetugas.password && <div><label className="ui-text-label" htmlFor="petugas-password-confirmation">Konfirmasi Password</label><div className="password-field petugas-password-field"><input id="petugas-password-confirmation" type={showPetugasPasswordConfirmation ? 'text' : 'password'} className="raport-select petugas-password-input" style={{ width: '100%' }} required minLength={8} value={editingPetugas.password_confirmation || ''} onChange={e => setEditingPetugas(p => ({ ...p, password_confirmation: e.target.value }))} placeholder="Ulangi password baru" /><button type="button" className="password-toggle" onClick={() => setShowPetugasPasswordConfirmation(value => !value)} aria-label={showPetugasPasswordConfirmation ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'} title={showPetugasPasswordConfirmation ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'}><EyeIcon hidden={showPetugasPasswordConfirmation} /></button></div></div>}
               {editingPetugas.jabatan === 'Admin' ? <AssignmentMultiDropdown id="petugas-tanggung-jawab" label="Tanggung Jawab Absensi" value={editingAssignments} options={editableAssignmentOptions} disabled={!editingPetugas.petugas_id || editableAssignmentOptions.length === 0} onChange={setEditingAssignments} /> : <AppDropdown id="petugas-tanggung-jawab" label="Tanggung Jawab Absensi" value={editingAssignments[0] || ''} options={editableAssignmentOptions.map(option => ({ value: option.key, label: option.label }))} placeholder="Pilih kelas/kamar" disabled={!editingPetugas.petugas_id || editableAssignmentOptions.length === 0} onChange={value => setEditingAssignments(value ? [value] : [])} />}

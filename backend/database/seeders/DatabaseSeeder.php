@@ -16,6 +16,21 @@ class DatabaseSeeder extends Seeder
         $this->call(OrganisasiDaerahSeeder::class);
         $this->call(UbudiyahSeeder::class);
         $this->call(UnitPendidikanSeeder::class);
+        $this->command?->call('import:master-putra');
+
+        $adminId = DB::table('petugas')->where('username', 'admin')->value('petugas_id');
+        if ($adminId) {
+            DB::table('periode_akademik')->updateOrInsert(
+                ['tahun_pelajaran' => '2026/2027', 'semester' => 'Ganjil'],
+                [
+                    'tanggal_mulai' => '2026-07-01',
+                    'tanggal_selesai' => '2026-12-31',
+                    'status' => 'Aktif',
+                    'dibuat_oleh' => $adminId,
+                    'updated_at' => now(),
+                ]
+            );
+        }
 
         foreach ([
             ['kode' => 'KAMAR', 'nama' => 'Kegiatan Kamar'],
@@ -30,7 +45,8 @@ class DatabaseSeeder extends Seeder
         $kegiatanIds = DB::table('jenis_kegiatan')->pluck('jenis_kegiatan_id', 'kode');
         foreach ([
             ['jenis_kegiatan_id' => $kegiatanIds['SEKOLAH'], 'nama_jadwal' => 'Absensi Kelas Formal', 'jam_mulai' => '07:00:00', 'jam_selesai' => '07:30:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar Malam', 'jam_mulai' => '20:00:00', 'jam_selesai' => '20:30:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Keberangkatan Kelas Pagi', 'konteks_operasional' => 'keberangkatan_kelas', 'jam_mulai' => '06:30:00', 'jam_selesai' => '07:00:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar Malam', 'konteks_operasional' => 'kamar', 'jam_mulai' => '20:00:00', 'jam_selesai' => '20:30:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['PBS'], 'nama_jadwal' => 'Belajar Al-Qur\'an Subuh', 'jam_mulai' => '05:00:00', 'jam_selesai' => '06:00:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['DINIYAH'], 'nama_jadwal' => 'Absensi Kelas Madin', 'jam_mulai' => '15:30:00', 'jam_selesai' => '16:00:00'],
             ['jenis_kegiatan_id' => $kegiatanIds['PBM'], 'nama_jadwal' => 'Belajar Takhasus Maghrib', 'jam_mulai' => '18:30:00', 'jam_selesai' => '19:30:00'],
@@ -40,6 +56,8 @@ class DatabaseSeeder extends Seeder
                 $jadwal
             );
         }
+
+        $this->seedOperationalAssignments();
 
         foreach ([
             ['nama' => 'Izin Pulang'],
@@ -68,9 +86,43 @@ class DatabaseSeeder extends Seeder
             ['setting_key' => 'AMBANG_POIN_SP3', 'setting_value' => '50', 'keterangan' => 'Batas poin untuk SP3'],
             ['setting_key' => 'toleransi_menit_terlambat_input', 'setting_value' => '30', 'keterangan' => 'Toleransi menit sebelum input absensi dianggap terlambat'],
             ['setting_key' => 'durasi_edit_absensi_menit', 'setting_value' => '60', 'keterangan' => 'Batas waktu (menit) non-admin bisa edit absensi'],
-            ['setting_key' => 'ambang_notifikasi_poin', 'setting_value' => '20', 'keterangan' => 'Ambang poin untuk mengirim notifikasi ke pengasuh'],
+            ['setting_key' => 'ambang_notifikasi_poin', 'setting_value' => '20', 'keterangan' => 'Ambang poin untuk mengirim notifikasi ke Admin'],
         ] as $setting) {
             DB::table('pengaturan_sistem')->updateOrInsert(['setting_key' => $setting['setting_key']], $setting);
+        }
+    }
+
+    private function seedOperationalAssignments(): void
+    {
+        $today = now()->toDateString();
+        $petugas = DB::table('petugas')->pluck('petugas_id', 'username');
+        $assignments = [
+            ['username' => 'walikelas', 'tipe_target' => 'KelasFormal', 'targets' => DB::table('kelas_formal')->orderBy('kelas_formal_id')->pluck('kelas_formal_id')],
+            ['username' => 'pembinakamar', 'tipe_target' => 'Kamar', 'targets' => DB::table('kamar')->where('status_aktif', 1)->orderBy('kamar_id')->pluck('kamar_id')],
+            ['username' => 'piketpengajian', 'tipe_target' => 'KelompokPBS', 'targets' => DB::table('kelompok_pbs')->orderBy('kelompok_pbs_id')->pluck('kelompok_pbs_id')],
+            ['username' => 'piketpengajian', 'tipe_target' => 'KelompokPBM', 'targets' => DB::table('kelompok_pbm')->orderBy('kelompok_pbm_id')->pluck('kelompok_pbm_id')],
+            ['username' => 'piketpengajian', 'tipe_target' => 'KelompokMadin', 'targets' => DB::table('kelompok_madin')->orderBy('kelompok_madin_id')->pluck('kelompok_madin_id')],
+        ];
+
+        foreach ($assignments as $assignment) {
+            $petugasId = $petugas[$assignment['username']] ?? null;
+            if (!$petugasId) continue;
+            foreach ($assignment['targets'] as $targetId) {
+                $exists = DB::table('petugas_penugasan')
+                    ->where('petugas_id', $petugasId)
+                    ->where('tipe_target', $assignment['tipe_target'])
+                    ->where('target_id', $targetId)
+                    ->whereNull('tanggal_selesai')
+                    ->exists();
+                if (!$exists) {
+                    DB::table('petugas_penugasan')->insert([
+                        'petugas_id' => $petugasId,
+                        'tipe_target' => $assignment['tipe_target'],
+                        'target_id' => $targetId,
+                        'tanggal_mulai' => $today,
+                    ]);
+                }
+            }
         }
     }
 }

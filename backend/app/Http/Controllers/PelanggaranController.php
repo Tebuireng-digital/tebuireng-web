@@ -27,6 +27,29 @@ class PelanggaranController extends Controller
         return response()->json($kategori);
     }
 
+    public function storeKategori(Request $request)
+    {
+        abort_unless(in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true), 403, 'Hanya Admin atau Keamanan yang dapat mengelola master pelanggaran.');
+        $data = $request->validate(['kode_pasal' => 'required|string|max:30', 'kategori' => 'required|in:Ringan,Sedang,Berat,Kewajiban', 'uraian_pelanggaran' => 'required|string|max:1000', 'poin_maks' => 'required|integer|min:1|max:100', 'jenis' => 'required|in:Pelanggaran,Meninggalkan Kewajiban']);
+        $id = DB::table('kategori_pelanggaran')->insertGetId([...$data, 'status_aktif' => 'Aktif', 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->first(), 201);
+    }
+
+    public function updateKategori(Request $request, int $id)
+    {
+        abort_unless(in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true), 403, 'Hanya Admin atau Keamanan yang dapat mengelola master pelanggaran.');
+        $data = $request->validate(['kode_pasal' => 'sometimes|string|max:30', 'kategori' => 'sometimes|in:Ringan,Sedang,Berat,Kewajiban', 'uraian_pelanggaran' => 'sometimes|string|max:1000', 'poin_maks' => 'sometimes|integer|min:1|max:100', 'jenis' => 'sometimes|in:Pelanggaran,Meninggalkan Kewajiban']);
+        DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->update([...$data, 'updated_at' => now()]);
+        return response()->json(DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->first());
+    }
+
+    public function destroyKategori(Request $request, int $id)
+    {
+        abort_unless(in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true), 403, 'Hanya Admin atau Keamanan yang dapat mengelola master pelanggaran.');
+        DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->update(['status_aktif' => 'Tidak Aktif', 'updated_at' => now()]);
+        return response()->json(['message' => 'Master pelanggaran dinonaktifkan; histori tetap dipertahankan.']);
+    }
+
     public function index(Request $request)
     {
         $petugas = $request->user();
@@ -119,6 +142,14 @@ class PelanggaranController extends Controller
                 'poin.max' => 'Jumlah poin pelanggaran manual maksimal 100.',
             ]);
 
+            $customCategory = strtolower(trim($data['kategori_custom']));
+            if ($petugas->jabatan === 'Pembina Kamar' && $customCategory !== 'ringan') {
+                return response()->json(['message' => 'Pembina Kamar hanya dapat menginput pelanggaran Ringan'], 403);
+            }
+            if ($petugas->jabatan === 'Keamanan' && !in_array($customCategory, ['sedang', 'berat'], true)) {
+                return response()->json(['message' => 'Keamanan hanya dapat menginput pelanggaran Sedang dan Berat'], 403);
+            }
+
             $kodePasal = 'CUSTOM-' . strtoupper(Str::random(6));
             $kategoriId = DB::table('kategori_pelanggaran')->insertGetId([
                 'kode_pasal' => $kodePasal,
@@ -196,9 +227,9 @@ class PelanggaranController extends Controller
                 $ambang = DB::table('pengaturan_sistem')->where('setting_key', 'ambang_notifikasi_poin')->value('setting_value') ?? 20;
 
                 if ($totalPoin >= $ambang) {
-                    $pengasuhIds = DB::table('petugas')->where('jabatan', 'Pengasuh')->where('status_aktif', 1)->pluck('petugas_id');
+                    $adminIds = DB::table('petugas')->where('jabatan', 'Admin')->where('status_aktif', 1)->pluck('petugas_id');
                     $notifications = [];
-                    foreach ($pengasuhIds as $pId) {
+                    foreach ($adminIds as $pId) {
                         $notifications[] = [
                             'petugas_id' => $pId,
                             'judul' => 'Ambang Poin Pelanggaran',
@@ -268,7 +299,7 @@ class PelanggaranController extends Controller
     public function getPoin(Request $request, $santriId)
     {
         $petugas = $request->user();
-        if (!in_array($petugas->jabatan, ['Admin', 'Pengasuh', 'Keamanan', 'Pembina Kamar'], true)) {
+        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar'], true)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
         if ($petugas->jabatan === 'Pembina Kamar' && !SantriAccess::canAccess($petugas, (int) $santriId)) {

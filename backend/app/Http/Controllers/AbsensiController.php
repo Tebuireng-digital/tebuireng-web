@@ -33,6 +33,16 @@ class AbsensiController extends Controller
             'target_pk' => 'kamar_id',
             'target_label' => 'nama',
         ],
+        'keberangkatan' => [
+            'kode' => 'KAMAR',
+            'nama' => 'Keberangkatan Kelas',
+            'sumber' => 'Kamar pada sesi pagi',
+            'tipe_target' => 'Kamar',
+            'santri_column' => 'kamar_id',
+            'target_table' => 'kamar',
+            'target_pk' => 'kamar_id',
+            'target_label' => 'nama',
+        ],
         'pbs' => [
             'kode' => 'PBS',
             'nama' => 'Kelompok Al-Qur\'an Subuh',
@@ -68,7 +78,7 @@ class AbsensiController extends Controller
     private const ROLE_TARGETS = [
         'Pembina Kamar' => ['Kamar'],
         'Wali Kelas' => ['KelasFormal'],
-        'Ustadz' => ['KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
+        'Piket Pengajian' => ['KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
         'Admin' => ['Kamar', 'KelasFormal', 'KelompokPBS', 'KelompokMadin', 'KelompokPBM'],
     ];
 
@@ -106,7 +116,7 @@ class AbsensiController extends Controller
                     ]);
             }
 
-            $this->constrainTargetQuery($targetQuery, $config);
+            $this->constrainTargetQuery($targetQuery, $config, $petugas->jabatan !== 'Admin');
 
             if ($config['target_table'] === 'kelompok_pbs') {
                 $targetQuery->addSelect('kategori as kategori_target');
@@ -160,6 +170,11 @@ class AbsensiController extends Controller
 
             $jadwal = DB::table('jadwal_kegiatan')
                 ->where('jenis_kegiatan_id', $kegiatan->jenis_kegiatan_id)
+                ->where('konteks_operasional', match ($slug) {
+                    'keberangkatan' => 'keberangkatan_kelas',
+                    'kamar' => 'kamar',
+                    default => 'utama',
+                })
                 ->where('status_aktif', 1)
                 ->orderBy('jam_mulai')
                 ->get(['jadwal_id', 'nama_jadwal', 'jam_mulai', 'jam_selesai']);
@@ -219,10 +234,14 @@ class AbsensiController extends Controller
             })
             ->where('santri.'.$config['santri_column'], $data['target_id'])
             ->where('santri.status_aktif', 1)
+            ->where(function ($query) {
+                $query->whereNull('santri.status_siswa_sumber')->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
+            })
             ->orderBy('santri.nama')
             ->get([
                 'santri.santri_id',
                 'santri.nis',
+                'santri.no_id_induk',
                 'santri.nama',
                 'absensi.absensi_id',
                 'absensi.status',
@@ -256,27 +275,55 @@ class AbsensiController extends Controller
 
     public function index(Request $request)
     {
-        if (!in_array($request->user()->jabatan, ['Admin', 'Pengasuh'], true)) {
-            return response()->json(['message' => 'Hanya Admin atau Pengasuh yang dapat melihat rekap keseluruhan'], 403);
-        }
+        $petugas = $request->user();
+        $query = DB::table('absensi')
+            ->join('santri', 'santri.santri_id', '=', 'absensi.santri_id')
+            ->join('jenis_kegiatan as jk', 'jk.jenis_kegiatan_id', '=', 'absensi.jenis_kegiatan_id')
+            ->join('jadwal_kegiatan as jadwal', 'jadwal.jadwal_id', '=', 'absensi.jadwal_id')
+            ->leftJoin('unit_pendidikan as unit', 'unit.unit_id', '=', 'santri.unit_id')
+            ->leftJoin('kamar', 'kamar.kamar_id', '=', 'santri.kamar_id')
+            ->select([
+                'absensi.absensi_id', 'absensi.tanggal', 'jk.kode as jenis_kegiatan', 'jk.nama as nama_kegiatan',
+                'jadwal.nama_jadwal', 'santri.santri_id', 'santri.nama as nama_santri', 'unit.kode as unit',
+                'kamar.nama as kamar', 'absensi.status', 'absensi.menit_terlambat', 'absensi.keterangan',
+                'absensi.waktu_input', 'absensi.diinput_oleh',
+            ])
+            ->orderByDesc('absensi.tanggal')
+            ->orderBy('santri.nama');
 
-        $query = DB::table('v_rekap_absensi_harian');
-        foreach (['jenis' => 'jenis_kegiatan', 'tanggal' => 'tanggal', 'status' => 'status'] as $input => $column) {
-            if ($request->filled($input)) {
-                $query->where($column, $request->input($input));
-            }
-        }
-
-        if ($request->filled('kamar_id')) {
-            $query->whereExists(function ($subquery) use ($request) {
-                $subquery->select(DB::raw(1))
-                    ->from('santri')
-                    ->whereColumn('santri.santri_id', 'v_rekap_absensi_harian.santri_id')
-                    ->where('santri.kamar_id', $request->integer('kamar_id'));
+        if ($petugas->jabatan !== 'Admin') {
+            $scopeMap = [
+                'SEKOLAH' => ['KelasFormal', 'kelas_formal_id'],
+                'KAMAR' => ['Kamar', 'kamar_id'],
+                'PBS' => ['KelompokPBS', 'kelompok_pbs_id'],
+                'PBM' => ['KelompokPBM', 'kelompok_pbm_id'],
+                'DINIYAH' => ['KelompokMadin', 'kelompok_madin_id'],
+            ];
+            $query->where(function ($scoped) use ($scopeMap, $petugas) {
+                foreach ($scopeMap as $kode => [$tipeTarget, $studentColumn]) {
+                    $scoped->orWhere(function ($entry) use ($kode, $tipeTarget, $studentColumn, $petugas) {
+                        $entry->where('jk.kode', $kode)->whereExists(function ($assignment) use ($tipeTarget, $studentColumn, $petugas) {
+                            $assignment->selectRaw('1')->from('petugas_penugasan as assignment')
+                                ->where('assignment.petugas_id', $petugas->petugas_id)
+                                ->where('assignment.tipe_target', $tipeTarget)
+                                ->whereColumn("assignment.target_id", "santri.{$studentColumn}")
+                                ->where('assignment.tanggal_mulai', '<=', now()->toDateString())
+                                ->where(function ($end) { $end->whereNull('assignment.tanggal_selesai')->orWhere('assignment.tanggal_selesai', '>=', now()->toDateString()); });
+                        });
+                    });
+                }
             });
         }
 
-        return response()->json($query->get());
+        foreach (['jenis' => 'jk.kode', 'status' => 'absensi.status'] as $input => $column) {
+            if ($request->filled($input)) $query->where($column, $request->input($input));
+        }
+        if ($request->filled('dari')) $query->whereDate('absensi.tanggal', '>=', $request->date('dari'));
+        if ($request->filled('sampai')) $query->whereDate('absensi.tanggal', '<=', $request->date('sampai'));
+        if ($request->filled('santri')) $query->where('santri.nama', 'like', '%'.$request->string('santri').'%');
+        if ($request->filled('kamar_id')) $query->where('santri.kamar_id', $request->integer('kamar_id'));
+
+        return response()->json($query->limit(500)->get());
     }
 
     public function bulkUpsert(Request $request, string $jenis)
@@ -322,6 +369,9 @@ class AbsensiController extends Controller
             ->whereIn('santri_id', $santriIds)
             ->where($config['santri_column'], $data['target_id'])
             ->where('status_aktif', 1)
+            ->where(function ($query) {
+                $query->whereNull('status_siswa_sumber')->orWhere('status_siswa_sumber', '!=', 'legacy_noncanonical');
+            })
             ->count();
         if ($validCount !== $santriIds->count()) {
             return response()->json(['message' => 'Terdapat santri yang bukan anggota kelompok ini'], 422);
@@ -329,6 +379,7 @@ class AbsensiController extends Controller
 
         $now = now();
         $petugas = $request->user();
+        $periodeId = DB::table('periode_akademik')->where('status', 'Aktif')->whereDate('tanggal_mulai', '<=', $data['tanggal'])->whereDate('tanggal_selesai', '>=', $data['tanggal'])->value('periode_id');
         $existingRows = DB::table('absensi')
             ->whereIn('santri_id', $santriIds)
             ->where('jenis_kegiatan_id', $kegiatan->jenis_kegiatan_id)
@@ -345,6 +396,7 @@ class AbsensiController extends Controller
                 'jenis_kegiatan_id' => $kegiatan->jenis_kegiatan_id,
                 'jadwal_id' => $data['jadwal_id'],
                 'tanggal' => $data['tanggal'],
+                'periode_id' => $periodeId,
                 'status' => $item['status'],
                 'menit_terlambat' => $item['status'] === 'Terlambat' ? ($item['menit_terlambat'] ?? null) : null,
                 'keterangan' => $item['keterangan'] ?? null,
@@ -373,7 +425,7 @@ class AbsensiController extends Controller
                 DB::table('absensi')->upsert(
                     $writeData,
                     ['santri_id', 'jenis_kegiatan_id', 'jadwal_id', 'tanggal'],
-                    ['status', 'menit_terlambat', 'keterangan', 'diubah_oleh', 'updated_at']
+                ['periode_id', 'status', 'menit_terlambat', 'keterangan', 'diubah_oleh', 'updated_at']
                 );
             }
 
@@ -487,9 +539,23 @@ class AbsensiController extends Controller
         return $kegiatan ? [$config, $kegiatan] : [null, null];
     }
 
-    private function constrainTargetQuery($query, array $config): void
+    private function constrainTargetQuery($query, array $config, bool $allowEmptyRoster = false): void
     {
-        // Semua kelas formal aktif dari Pend + Kls dapat menjadi target absensi sekolah.
+        if ($allowEmptyRoster) {
+            return;
+        }
+        // Target absensi harus punya roster aktif dari master canonical; referensi
+        // legacy tetap dipertahankan untuk histori tetapi tidak boleh muncul sebagai tugas baru.
+        $query->whereExists(function ($roster) use ($config): void {
+            $roster->selectRaw('1')
+                ->from('santri')
+                ->where('santri.status_aktif', 1)
+                ->where(function ($source) {
+                    $source->whereNull('santri.status_siswa_sumber')
+                        ->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
+                })
+                ->whereColumn('santri.'.$config['santri_column'], $config['target_table'].'.'.$config['target_pk']);
+        });
     }
 
     private function canAccessTarget($petugas, array $config, int $targetId): bool

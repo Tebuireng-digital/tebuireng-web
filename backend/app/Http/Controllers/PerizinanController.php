@@ -34,7 +34,7 @@ class PerizinanController extends Controller
 
     public function getSantriPerizinan(Request $request, $santriId)
     {
-        if (!in_array($request->user()->jabatan, ['Admin', 'Pengasuh', 'Keamanan'], true)) {
+        if (!in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

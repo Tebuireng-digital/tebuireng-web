@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class UbudiyahController extends Controller
@@ -45,7 +46,7 @@ class UbudiyahController extends Controller
         $query = DB::table('kamar')
             ->select('kamar_id as target_id', 'nama as nama_target');
 
-        if (!in_array($petugas->jabatan, ['Admin', 'Pengasuh'], true)) {
+        if (!in_array($petugas->jabatan, ['Admin'], true)) {
             $query->whereIn('kamar_id', $this->assignedRoomIds($petugas->petugas_id));
         }
 
@@ -180,8 +181,13 @@ class UbudiyahController extends Controller
         }
 
         $now = now();
+        $periode = DB::table('periode_akademik')->where('tahun_pelajaran', $data['tahun_pelajaran'])->where('semester', $data['semester'])->first();
+        if ($periode?->status === 'Ditutup' && $petugas->jabatan !== 'Admin') {
+            return response()->json(['message' => 'Periode raport pembinaan sudah ditutup. Koreksi setelah penutupan hanya dapat dilakukan Admin.'], 422);
+        }
+        $periodeId = $periode?->periode_id;
 
-        DB::transaction(function () use ($data, $kamarId, $petugas, $now) {
+        DB::transaction(function () use ($data, $kamarId, $petugas, $now, $periodeId) {
             foreach ($data['entries'] as $entry) {
                 $santriId = $entry['santri_id'];
 
@@ -195,6 +201,7 @@ class UbudiyahController extends Controller
                     'kamar_id' => $kamarId,
                     'tahun_pelajaran' => $data['tahun_pelajaran'],
                     'semester' => $data['semester'],
+                    'periode_id' => $periodeId,
                     'diisi_oleh' => $petugas->petugas_id,
                     'updated_at' => $now,
                 ];
@@ -389,6 +396,39 @@ class UbudiyahController extends Controller
         return $pdf->download($filename);
     }
 
+    public function publish(Request $request, int $santriId)
+    {
+        $data = $request->validate(['bulan' => 'required|integer|between:1,12', 'tahun' => 'required|integer|between:2020,2100']);
+        $petugas = $request->user();
+        if (!in_array($petugas->jabatan, ['Admin', 'Pembina Kamar'], true)) return response()->json(['message' => 'Role ini tidak dapat menerbitkan raport pembinaan.'], 403);
+        $santri = DB::table('santri')->leftJoin('kamar', 'santri.kamar_id', '=', 'kamar.kamar_id')->leftJoin('kelas_formal', 'santri.kelas_formal_id', '=', 'kelas_formal.kelas_formal_id')->where('santri.santri_id', $santriId)->select('santri.*', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat')->first();
+        if (!$santri || !$this->hasRoomAccess($petugas, (int) $santri->kamar_id)) return response()->json(['message' => 'Santri berada di luar penugasan Anda.'], 403);
+        $raport = RaportUbudiyah::where('santri_id', $santriId)->where('bulan', $data['bulan'])->where('tahun', $data['tahun'])->first();
+        if (!$raport) return response()->json(['message' => 'Raport pembinaan belum diisi untuk periode ini.'], 404);
+        $periodStatus = $raport->periode_id ? DB::table('periode_akademik')->where('periode_id', $raport->periode_id)->value('status') : null;
+        if ($periodStatus === 'Ditutup' && $petugas->jabatan !== 'Admin') return response()->json(['message' => 'Periode raport pembinaan sudah ditutup. Penerbitan ulang setelah penutupan hanya dapat dilakukan Admin.'], 422);
+        $snapshot = $this->buildReportCardData($raport, $santri);
+        $version = ((int) DB::table('report_documents')->where(['jenis' => 'raport_pembinaan', 'santri_id' => $santriId, 'tahun_pelajaran' => $raport->tahun_pelajaran, 'semester' => $raport->semester])->max('versi')) + 1;
+        $path = "report-documents/raport-pembinaan/{$santriId}/{$raport->tahun_pelajaran}-{$raport->semester}-v{$version}.pdf";
+        $pdf = Pdf::loadView('pdf.raport_ubudiyah', ['data' => $snapshot])->setPaper('A4', 'portrait');
+        Storage::disk('local')->put($path, $pdf->output());
+        $id = DB::table('report_documents')->insertGetId(['jenis' => 'raport_pembinaan', 'santri_id' => $santriId, 'periode_id' => $raport->periode_id, 'tahun_pelajaran' => $raport->tahun_pelajaran, 'semester' => $raport->semester, 'versi' => $version, 'file_path' => $path, 'snapshot_data' => json_encode($snapshot), 'diterbitkan_oleh' => $petugas->petugas_id, 'diterbitkan_pada' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(['message' => 'Raport pembinaan diterbitkan sebagai arsip.', 'document_id' => $id, 'versi' => $version], 201);
+    }
+
+    public function history(Request $request, int $santriId)
+    {
+        return response()->json(DB::table('report_documents')->where('jenis', 'raport_pembinaan')->where('santri_id', $santriId)->orderByDesc('diterbitkan_pada')->get(['document_id', 'tahun_pelajaran', 'semester', 'versi', 'diterbitkan_oleh', 'diterbitkan_pada']));
+    }
+
+    public function documentPdf(Request $request, int $santriId, int $documentId)
+    {
+        $document = DB::table('report_documents')->where('document_id', $documentId)->where('jenis', 'raport_pembinaan')->where('santri_id', $santriId)->first();
+        abort_unless($document, 404, 'Arsip raport pembinaan tidak ditemukan.');
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404, 'Berkas arsip raport tidak ditemukan.');
+        return Storage::disk('local')->download($document->file_path, "Raport-Pembinaan-{$santriId}-v{$document->versi}.pdf");
+    }
+
     /**
      * Download bulk PDF for all students in a room.
      */
@@ -505,7 +545,7 @@ class UbudiyahController extends Controller
 
     private function hasRoomAccess($petugas, int $kamarId): bool
     {
-        if (in_array($petugas->jabatan, ['Admin', 'Pengasuh'], true)) {
+        if (in_array($petugas->jabatan, ['Admin'], true)) {
             return true;
         }
 

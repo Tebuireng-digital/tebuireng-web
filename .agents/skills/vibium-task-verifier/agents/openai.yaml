@@ -1,0 +1,4 @@
+interface:
+  display_name: Vibium Task Verifier
+  short_description: Verify browser-visible AI task outcomes with Vibium evidence
+  default_prompt: Use Vibium Task Verifier to prove whether this AI task actually works in the browser.

@@ -88,6 +88,14 @@ interface SessionData {
   santri: SessionSantri[];
 }
 
+interface ArchiveDocument {
+  document_id: number;
+  tahun_pelajaran: string;
+  semester: string;
+  versi: number;
+  diterbitkan_pada: string;
+}
+
 const BULAN_NAMA = [
   '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
@@ -168,6 +176,7 @@ export function RaportViewPage() {
   const [tahun, setTahun] = useState(urlTahun);
   const [downloading, setDownloading] = useState(false);
   const [downloadingBulk, setDownloadingBulk] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   usePageMeta({
     title: 'Lihat Raport Pengajian',
@@ -208,6 +217,11 @@ export function RaportViewPage() {
     enabled: raportEnabled,
     retry: false,
   });
+  const { data: archives = [] } = useQuery<ArchiveDocument[]>({
+    queryKey: ['raport-archives', selectedSantriId],
+    queryFn: async () => (await api.get(`/api/raport-pengajian/${selectedSantriId}/history`)).data,
+    enabled: !!selectedSantriId,
+  });
 
   const handleDownloadPdf = async (sId?: number) => {
     const idToUse = sId || selectedSantriId;
@@ -231,6 +245,18 @@ export function RaportViewPage() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const handlePublish = async () => {
+    if (!selectedSantriId) return;
+    setPublishing(true);
+    try {
+      await api.post(`/api/raport-pengajian/${selectedSantriId}/publish`, { bulan, tahun });
+      alert('Raport diterbitkan sebagai arsip versi baru.');
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Raport belum dapat diterbitkan.';
+      alert(message);
+    } finally { setPublishing(false); }
   };
 
   const handleDownloadPdfBulk = async () => {
@@ -547,6 +573,7 @@ export function RaportViewPage() {
 
           {/* Actions */}
           <div className="raport-view-actions">
+            {['Admin', 'Piket Pengajian'].includes(user?.jabatan ?? '') && <button className="secondary-button" disabled={publishing} onClick={() => void handlePublish()}>{publishing ? 'Menerbitkan…' : 'Terbitkan arsip'}</button>}
             <button
               className="primary-button"
               disabled={downloading}
@@ -555,6 +582,10 @@ export function RaportViewPage() {
               {downloading ? 'Mengunduh…' : 'Download PDF Santri Ini'}
             </button>
           </div>
+          <section className="panel" aria-labelledby="raport-archive-title" style={{ marginTop: '18px' }}>
+            <div className="panel-heading"><div><h2 id="raport-archive-title">Riwayat penerbitan</h2><p>Setiap penerbitan disimpan sebagai versi arsip terpisah.</p></div></div>
+            {archives.length === 0 ? <p className="muted">Belum ada arsip untuk santri ini.</p> : <div className="master-category-list">{archives.map(archive => <div className="master-category-row" key={archive.document_id}><div><strong>{archive.tahun_pelajaran} · {archive.semester} · Versi {archive.versi}</strong><span>Diterbitkan {new Date(archive.diterbitkan_pada).toLocaleString('id-ID')}</span></div><a className="secondary-button" href={`/api/raport-pengajian/${selectedSantriId}/documents/${archive.document_id}/pdf`}>Unduh arsip</a></div>)}</div>}
+          </section>
         </div>
       )}
     </section>

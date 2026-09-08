@@ -19,13 +19,12 @@ class PetugasSeeder extends Seeder
 
         $fixturePassword = (string) env('LOCAL_SEED_PASSWORD', 'masuk123');
 
-        // 1. Ensure the default 6 accounts exist
+        // 1. Ensure the default product-role accounts exist
         $defaultUsers = [
             'admin' => ['nama' => 'User Admin', 'jabatan' => 'Admin'],
             'keamanan' => ['nama' => 'User Keamanan', 'jabatan' => 'Keamanan'],
             'pembinakamar' => ['nama' => 'User Pembina Kamar', 'jabatan' => 'Pembina Kamar'],
-            'pengasuh' => ['nama' => 'User Pengasuh', 'jabatan' => 'Pengasuh'],
-            'ustadz' => ['nama' => 'User Ustadz', 'jabatan' => 'Ustadz'],
+            'piketpengajian' => ['nama' => 'User Piket Pengajian', 'jabatan' => 'Piket Pengajian'],
             'walikelas' => ['nama' => 'User Wali Kelas', 'jabatan' => 'Wali Kelas'],
         ];
 
@@ -111,4 +110,3 @@ class PetugasSeeder extends Seeder
         }
     }
 }
-

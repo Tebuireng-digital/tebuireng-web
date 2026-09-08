@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Artisan;
 use OpenSpout\Reader\XLSX\Reader;
 
 class ImportReviewController extends Controller
@@ -18,71 +19,15 @@ class ImportReviewController extends Controller
     /** Menyalin daftar 971 baris review dan mapping CSV lama ke tabel yang dapat dikelola Admin. */
     public function sync(Request $request)
     {
-        $this->syncMappingsFromCsv();
-        $rows = $this->readReviewRows();
-        $sourceRows = $this->sourceRowLookup();
-        $canonical = DB::table('santri')
-            ->where(function ($query) {
-                $query->whereNull('catatan_import')
-                    ->orWhere('catatan_import', 'not like', 'Baru otomatis%');
-            })
-            ->select('santri_id', 'nama')
-            ->get();
-
-        $created = 0;
-        foreach ($rows as $row) {
-            $key = $this->lookupKey($row['nama_sumber'], $row['kode_kamar_sumber']);
-            $sourceRow = array_shift($sourceRows[$row['sumber_sheet']][$key]);
-            $sourceRowNumber = $sourceRow['baris'] ?? $row['baris_review'];
-
-            $auto = DB::table('santri')
-                ->where('nama', $row['nama_sumber'])
-                ->where('catatan_import', 'like', 'Baru otomatis dari '.$row['sumber_sheet'].'%')
-                ->orderBy('santri_id')
-                ->first();
-
-            [$candidateId, $score] = $this->bestCandidate($row['nama_sumber'], $canonical);
-            $hasMapping = !$row['kode_kamar_sumber'] || DB::table('kamar_kode_mappings')
-                ->where('kode_sumber', $row['kode_kamar_sumber'])->exists();
-            $status = ($row['kode_kamar_sumber'] && !$hasMapping && (!$auto || !$auto->kamar_id))
-                ? 'perlu_mapping_kamar'
-                : 'perlu_tinjau';
-
-            $existing = DB::table('santri_import_reviews')
-                ->where('sumber_sheet', $row['sumber_sheet'])
-                ->where('baris_sumber', $sourceRowNumber)
-                ->first();
-            $payload = [
-                'nama_sumber' => $row['nama_sumber'],
-                'kode_kamar_sumber' => $row['kode_kamar_sumber'] ?: null,
-                'data_tambahan' => $row['data_tambahan'] ?: null,
-                'santri_otomatis_id' => $auto?->santri_id,
-                'kandidat_santri_id' => $candidateId,
-                'skor_kemiripan' => $score,
-                'updated_at' => now(),
-            ];
-
-            if ($existing) {
-                // Keputusan Admin bersifat final; sinkronisasi hanya menyegarkan data sumbernya.
-                if (in_array($existing->status, ['perlu_tinjau', 'perlu_mapping_kamar'], true)) {
-                    $payload['status'] = $status;
-                }
-                DB::table('santri_import_reviews')->where('review_id', $existing->review_id)->update($payload);
-            } else {
-                DB::table('santri_import_reviews')->insert($payload + [
-                    'sumber_sheet' => $row['sumber_sheet'],
-                    'baris_sumber' => $sourceRowNumber,
-                    'status' => $status,
-                    'created_at' => now(),
-                ]);
-                $created++;
-            }
-        }
+        $exitCode = Artisan::call('import:master-putra', [
+            '--file' => base_path('../data/MASTER_DATA_SANTRI_PUTRA_2026_2027.xlsx'),
+        ]);
 
         return response()->json([
-            'message' => 'Review impor berhasil disinkronkan.',
-            'total_sumber' => count($rows),
-            'baru_ditambahkan' => $created,
+            'message' => $exitCode === 0
+                ? 'Data master dan review berhasil disinkronkan dari workbook canonical terbaru.'
+                : 'Sinkronisasi workbook canonical gagal.',
+            'status' => $exitCode === 0 ? 'ok' : 'gagal',
         ]);
     }
 
@@ -102,6 +47,18 @@ class ImportReviewController extends Controller
                 'otomatis.nama as nama_santri_otomatis', 'kamar_otomatis.nama as kamar_santri_otomatis',
                 'kandidat.nama as nama_kandidat', 'kamar_kandidat.nama as kamar_kandidat'
             )
+            ->where(function ($query) {
+                $query->whereNull('otomatis.santri_id')
+                    ->orWhere(function ($canonical) {
+                        $canonical->where('otomatis.status_aktif', 1)->where('otomatis.catatan_import', 'MASTER_PUTRA');
+                    });
+            })
+            ->where(function ($query) {
+                $query->whereNull('kandidat.santri_id')
+                    ->orWhere(function ($canonical) {
+                        $canonical->where('kandidat.status_aktif', 1)->where('kandidat.catatan_import', 'MASTER_PUTRA');
+                    });
+            })
             ->orderByRaw("FIELD(r.status, 'perlu_tinjau', 'perlu_mapping_kamar', 'terpisah', 'digabung')")
             ->orderByDesc('r.skor_kemiripan')
             ->orderBy('r.sumber_sheet')->orderBy('r.baris_sumber');

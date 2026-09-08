@@ -13,7 +13,7 @@ return new class extends Migration
             $table->id('approval_id');
             $table->unsignedBigInteger('perizinan_id');
             $table->unsignedTinyInteger('tahap')->comment('1 = Wali Kamar, 2 = Keamanan, dst');
-            $table->enum('jabatan_approver', ['Pembina Kamar','Wali Kelas','Ustadz','Pengasuh','Keamanan','Admin']);
+            $table->enum('jabatan_approver', ['Pembina Kamar','Wali Kelas','Piket Pengajian','Keamanan','Admin']);
             $table->unsignedInteger('petugas_id')->nullable()->comment('diisi saat petugas mengambil keputusan');
             $table->enum('keputusan', ['Menunggu','Disetujui','Ditolak','Gugur'])->default('Menunggu');
             $table->string('catatan', 255)->nullable();

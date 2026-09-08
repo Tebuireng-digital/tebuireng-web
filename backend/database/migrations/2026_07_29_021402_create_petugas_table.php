@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('username', 100)->unique();
             $table->string('password_hash', 255);
             $table->string('no_hp', 20)->nullable();
-            $table->enum('jabatan', ['Pengasuh','Ustadz','Pembina Kamar','Wali Kelas','Keamanan','Admin']);
+            $table->enum('jabatan', ['Admin','Keamanan','Pembina Kamar','Wali Kelas','Piket Pengajian']);
             $table->boolean('status_aktif')->default(1);
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();

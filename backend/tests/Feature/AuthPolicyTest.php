@@ -197,7 +197,7 @@ class AuthPolicyTest extends TestCase
             'username' => 'target-reset',
             'password_hash' => Hash::make('PasswordTarget123'),
             'wajib_ganti_password' => false,
-            'jabatan' => 'Ustadz',
+            'jabatan' => 'Piket Pengajian',
             'status_aktif' => 1,
         ]);
 

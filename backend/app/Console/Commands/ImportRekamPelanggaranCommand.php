@@ -14,7 +14,7 @@ class ImportRekamPelanggaranCommand extends Command
     public function handle()
     {
         $customFile = $this->option('file');
-        $filePath = $customFile ?: '/tmp/data_rekam_santri.xlsx';
+        $filePath = $customFile ?: base_path('../data/data_rekam_santri.xlsx');
 
         if (!file_exists($filePath)) {
             $filePath = base_path('../new data/data_rekam_santri.xlsx');
@@ -75,7 +75,7 @@ class ImportRekamPelanggaranCommand extends Command
 
                 $santri = null;
                 if ($noId) {
-                    $santri = DB::table('santri')->where('nis', $noId)->first();
+                    $santri = DB::table('santri')->where('no_id_induk', $noId)->first();
                 }
                 if (!$santri) {
                     $santri = DB::table('santri')->where('nama', $nama)->first();

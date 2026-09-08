@@ -38,6 +38,7 @@ services:
     volumes:
       - ./backend:/var/www/html
       - ./xlsx:/var/www/xlsx:ro
+      - ./data:/var/www/data:ro
       - ./docs:/var/www/docs:ro
       - ./new data:/var/www/new data:ro
       - backend_vendor:/var/www/html/vendor

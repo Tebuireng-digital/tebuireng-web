@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         $this->call(OrganisasiDaerahSeeder::class);
         $this->call(UbudiyahSeeder::class);
         $this->call(UnitPendidikanSeeder::class);
+        $this->call(PrestasiSeeder::class);
         $this->command?->call('import:master-putra');
 
         $adminId = DB::table('petugas')->where('username', 'admin')->value('petugas_id');

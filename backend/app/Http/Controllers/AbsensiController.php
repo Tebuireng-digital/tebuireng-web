@@ -120,6 +120,10 @@ class AbsensiController extends Controller
 
             if ($config['target_table'] === 'kelompok_pbs') {
                 $targetQuery->addSelect('kategori as kategori_target');
+            } elseif ($config['target_table'] === 'kelompok_madin') {
+                $targetQuery->addSelect('jenjang as kategori_target');
+            } elseif ($config['target_table'] === 'kelompok_pbm') {
+                $targetQuery->addSelect('kategori as kategori_target');
             }
 
             if ($petugas->jabatan !== 'Admin') {
@@ -155,8 +159,60 @@ class AbsensiController extends Controller
                         ? $categoryComparison
                         : strnatcasecmp((string) $left->nomor_target, (string) $right->nomor_target);
                 })->values();
-            }
-            if ($config['target_table'] === 'kelompok_pbs') {
+            } elseif ($config['target_table'] === 'kelompok_pbs') {
+                $targets->each(function ($target) {
+                    $target->nama_target_asli = $target->nama_target;
+                    if (empty($target->kategori_target) || $target->kategori_target === 'MASTER_PUTRA') {
+                        if (preg_match('/^(KELOMPOK [A-Z]|BANDONGAN|TAHSIN|TAHFIDZ|SOROGAN|PASCA WISUDA(?: MA)?)/i', $target->nama_target, $matches)) {
+                            $target->kategori_target = strtoupper(trim($matches[1]));
+                        } else {
+                            $target->kategori_target = 'LAINNYA';
+                        }
+                    }
+                    if (preg_match('/^([^-]+)\s*-\s*(.+)$/', $target->nama_target, $matches)) {
+                        $target->nama_target = trim($matches[2]);
+                    }
+                });
+                $targets = $targets->sort(function ($left, $right) {
+                    $kategoriComparison = strcasecmp($left->kategori_target, $right->kategori_target);
+                    return $kategoriComparison !== 0
+                        ? $kategoriComparison
+                        : strnatcasecmp($left->nama_target, $right->nama_target);
+                })->values();
+            } elseif ($config['target_table'] === 'kelompok_madin') {
+                $targets->each(function ($target) {
+                    $target->nama_target_asli = $target->nama_target;
+                    if (empty($target->kategori_target)) {
+                        if (preg_match('/^(MA|MTS|SMA|SMP|SMK)\b/i', $target->nama_target, $matches)) {
+                            $target->kategori_target = strtoupper(trim($matches[1]));
+                        } else {
+                            $target->kategori_target = 'LAINNYA';
+                        }
+                    }
+                    if (preg_match('/^(?:MA|MTS|SMA|SMP|SMK)\s*-\s*(.+)$/i', $target->nama_target, $matches)) {
+                        $target->nama_target = trim($matches[1]);
+                    }
+                });
+                $targets = $targets->sort(function ($left, $right) {
+                    $kategoriComparison = strcasecmp($left->kategori_target, $right->kategori_target);
+                    return $kategoriComparison !== 0
+                        ? $kategoriComparison
+                        : strnatcasecmp($left->nama_target, $right->nama_target);
+                })->values();
+            } elseif ($config['target_table'] === 'kelompok_pbm') {
+                $targets->each(function ($target) {
+                    $target->nama_target_asli = $target->nama_target;
+                    if (empty($target->kategori_target) || $target->kategori_target === 'MASTER_PUTRA') {
+                        if (preg_match('/^([^-]+)\s*-\s*/', $target->nama_target, $matches)) {
+                            $target->kategori_target = strtoupper(trim($matches[1]));
+                        } else {
+                            $target->kategori_target = 'LAINNYA';
+                        }
+                    }
+                    if (preg_match('/^([^-]+)\s*-\s*(.+)$/', $target->nama_target, $matches)) {
+                        $target->nama_target = trim($matches[2]);
+                    }
+                });
                 $targets = $targets->sort(function ($left, $right) {
                     $kategoriComparison = strcasecmp($left->kategori_target, $right->kategori_target);
                     return $kategoriComparison !== 0

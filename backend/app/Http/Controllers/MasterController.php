@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Support\KamarName;
+use App\Support\MediaUrl;
 use App\Support\SantriAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
 
 class MasterController extends Controller
 {
@@ -306,6 +306,7 @@ class MasterController extends Controller
                 'santri.status_aktif',
                 'santri.status_verifikasi',
                 'santri.foto_path',
+                'santri.foto_uploaded_at',
                 'od.organisasi_daerah_id as sod_organisasi_daerah_id',
                 'od.kode as kode_organisasi_daerah',
                 'od.nama as nama_organisasi_daerah',
@@ -320,7 +321,7 @@ class MasterController extends Controller
             ->get(['p.santri_id', 'j.kode', 'p.status', 'p.alasan'])
             ->groupBy('santri_id');
         foreach ($santri as $row) {
-            $row->foto_url = $row->foto_path ? Storage::url($row->foto_path) : null;
+            $row->foto_url = $row->foto_path ? MediaUrl::santriPhoto((int) $row->santri_id, $row->foto_uploaded_at) : null;
             $row->kegiatan_partisipasi = ($partisipasi[$row->santri_id] ?? collect())
                 ->mapWithKeys(fn ($item) => [strtolower($item->kode) => ['status' => $item->status, 'alasan' => $item->alasan]])
                 ->all();

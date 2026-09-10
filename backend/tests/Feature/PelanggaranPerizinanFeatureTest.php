@@ -93,16 +93,56 @@ class PelanggaranPerizinanFeatureTest extends TestCase
         ])->assertCreated()->assertJsonStructure(['message', 'pelanggaran_id']);
 
         $pelanggaranId = $response->json('pelanggaran_id');
-        $this->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
-            'file' => UploadedFile::fake()->create('bukti.pdf', 10, 'application/pdf'),
-        ])->assertOk();
+        $uploadResponse = $this->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
+            'file' => UploadedFile::fake()->image('bukti.jpg'),
+        ])->assertOk()
+            ->assertJsonPath('message', 'Lampiran berhasil diunggah.');
 
         $lampiran = DB::table('lampiran_pelanggaran')
             ->where('pelanggaran_id', $pelanggaranId)
             ->first();
 
         $this->assertNotNull($lampiran);
+        $this->assertSame('local', $lampiran->disk);
+        $this->assertSame('bukti.jpg', $lampiran->original_filename);
+        $this->assertSame('image/jpeg', $lampiran->mime_type);
+        $this->assertNotEmpty($lampiran->sha256);
         Storage::disk('local')->assertExists($lampiran->path_file);
+
+        $this->getJson('/api/pelanggaran/'.$pelanggaranId.'/lampiran')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.lampiran_id', $lampiran->lampiran_id)
+            ->assertJsonPath('0.preview_url', $uploadResponse->json('lampiran.preview_url'))
+            ->assertJsonPath('0.download_url', $uploadResponse->json('lampiran.download_url'));
+
+        $this->get('/api/pelanggaran/'.$pelanggaranId.'/lampiran/'.$lampiran->lampiran_id)
+            ->assertOk()
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->actingAs($this->pembina, 'sanctum')
+            ->getJson('/api/pelanggaran/'.$pelanggaranId.'/lampiran')
+            ->assertStatus(403);
+    }
+
+    public function test_violation_attachment_rejects_pdf_for_consistent_image_only_contract(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => 'Pelanggaran uji',
+        ])->assertCreated();
+
+        $pelanggaranId = $response->json('pelanggaran_id');
+
+        $this->withHeaders(['Accept' => 'application/json'])
+            ->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
+                'file' => UploadedFile::fake()->create('bukti.pdf', 10, 'application/pdf'),
+            ])->assertStatus(422);
     }
 
     public function test_violation_accepts_actual_points_up_to_category_maximum(): void

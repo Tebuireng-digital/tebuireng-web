@@ -36,16 +36,16 @@ interface KelompokTampilan extends OpsiAbsensi {
 }
 interface DashboardSummary { role: string; perizinan?: { aktif: number; berjalan: number; overdue: number }; notifikasi_belum_dibaca?: number; kamar?: { jumlah: number; headcount: number }; pelanggaran_terbaru?: Array<{ nama: string; tanggal: string; poin: number }> }
 
-const PBS_CATEGORY_ORDER = ['KELOMPOK A', 'KELOMPOK B', 'KELOMPOK C', 'BANDONGAN', 'TAHSIN', 'TAHFIDZ', 'SOROGAN'];
+const PBS_CATEGORY_ORDER = ['KELOMPOK A', 'KELOMPOK B', 'KELOMPOK C', 'PASCA WISUDA', 'PASCA WISUDA MA', 'BANDONGAN', 'TAHSIN', 'TAHFIDZ', 'SOROGAN'];
 
 const pbsDisplayCategory = (target: TargetAbsensi) => {
   const sourceCategory = (target.kategori_target ?? '').trim().toUpperCase();
-  if (['KELOMPOK A', 'KELOMPOK B', 'KELOMPOK C'].includes(sourceCategory)) {
+  if (sourceCategory && sourceCategory !== 'MASTER_PUTRA' && sourceCategory !== 'LAINNYA') {
     return sourceCategory;
   }
 
   const name = target.nama_target.trim().toUpperCase();
-  for (const category of ['BANDONGAN', 'TAHSIN', 'TAHFIDZ', 'SOROGAN']) {
+  for (const category of PBS_CATEGORY_ORDER) {
     if (name.startsWith(category)) return category;
   }
 
@@ -56,6 +56,56 @@ const pbsCategories = (targets: TargetAbsensi[]) => [...new Set(targets.map(pbsD
   .sort((left, right) => {
     const leftOrder = PBS_CATEGORY_ORDER.indexOf(left);
     const rightOrder = PBS_CATEGORY_ORDER.indexOf(right);
+    if (leftOrder !== -1 || rightOrder !== -1) {
+      return (leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder)
+        - (rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder);
+    }
+    return left.localeCompare(right, 'id');
+  });
+
+const MADIN_JENJANG_ORDER = ['MTS', 'SMP', 'MA', 'SMA', 'SMK'];
+
+const madinDisplayCategory = (target: TargetAbsensi) => {
+  const sourceCategory = (target.kategori_target ?? '').trim().toUpperCase();
+  if (sourceCategory && sourceCategory !== 'LAINNYA') {
+    return sourceCategory;
+  }
+  const name = target.nama_target.trim().toUpperCase();
+  for (const jenjang of MADIN_JENJANG_ORDER) {
+    if (name.startsWith(jenjang)) return jenjang;
+  }
+  return sourceCategory || 'LAINNYA';
+};
+
+const madinCategories = (targets: TargetAbsensi[]) => [...new Set(targets.map(madinDisplayCategory))]
+  .sort((left, right) => {
+    const leftOrder = MADIN_JENJANG_ORDER.indexOf(left);
+    const rightOrder = MADIN_JENJANG_ORDER.indexOf(right);
+    if (leftOrder !== -1 || rightOrder !== -1) {
+      return (leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder)
+        - (rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder);
+    }
+    return left.localeCompare(right, 'id');
+  });
+
+const PBM_CATEGORY_ORDER = ['FASOHAH', 'ULA A', 'ULA B', 'WUSTHO A', 'WUSTHO B', 'ULYA', 'SOROGAN KHUSUS'];
+
+const pbmDisplayCategory = (target: TargetAbsensi) => {
+  const sourceCategory = (target.kategori_target ?? '').trim().toUpperCase();
+  if (sourceCategory && sourceCategory !== 'MASTER_PUTRA' && sourceCategory !== 'LAINNYA') {
+    return sourceCategory;
+  }
+  const name = target.nama_target.trim().toUpperCase();
+  for (const category of PBM_CATEGORY_ORDER) {
+    if (name.startsWith(category)) return category;
+  }
+  return sourceCategory || 'LAINNYA';
+};
+
+const pbmCategories = (targets: TargetAbsensi[]) => [...new Set(targets.map(pbmDisplayCategory))]
+  .sort((left, right) => {
+    const leftOrder = PBM_CATEGORY_ORDER.indexOf(left);
+    const rightOrder = PBM_CATEGORY_ORDER.indexOf(right);
     if (leftOrder !== -1 || rightOrder !== -1) {
       return (leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder)
         - (rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder);
@@ -184,13 +234,19 @@ export function DashboardPage() {
         .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }));
       const firstUnit = schoolUnits[0];
       if (firstUnit) firstGroupKey = `sekolah:${firstUnit}`;
-    } else if (kegiatan.jenis === 'kamar') {
+    } else if (kegiatan.jenis === 'kamar' || kegiatan.jenis === 'keberangkatan') {
       const firstCategory = [...new Set(kegiatan.targets.map(target => target.kategori_target ?? 'Kamar lainnya'))]
         .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))[0];
-      if (firstCategory) firstGroupKey = `kamar:${firstCategory}`;
+      if (firstCategory) firstGroupKey = `${kegiatan.jenis}:${firstCategory}`;
     } else if (kegiatan.jenis === 'pbs') {
       const firstCategory = pbsCategories(kegiatan.targets)[0];
       if (firstCategory) firstGroupKey = `pbs:${firstCategory}`;
+    } else if (kegiatan.jenis === 'diniyah') {
+      const firstCategory = madinCategories(kegiatan.targets)[0];
+      if (firstCategory) firstGroupKey = `diniyah:${firstCategory}`;
+    } else if (kegiatan.jenis === 'pbm') {
+      const firstCategory = pbmCategories(kegiatan.targets)[0];
+      if (firstCategory) firstGroupKey = `pbm:${firstCategory}`;
     }
 
     setExpandedRosterGroup(firstGroupKey);
@@ -209,27 +265,41 @@ export function DashboardPage() {
     setExpandedRosterGroup(current => current === key ? null : key);
   };
 
+  const cleanTargetLabel = (kegiatan: KelompokTampilan, target: TargetAbsensi) => {
+    let label = target.nama_target;
+    if (['pbs', 'diniyah', 'pbm'].includes(kegiatan.jenis)) {
+      const dashIdx = label.indexOf(' - ');
+      if (dashIdx !== -1) {
+        label = label.slice(dashIdx + 3).trim();
+      }
+    }
+    return label;
+  };
+
   const targetCards = (kegiatan: KelompokTampilan, targets: TargetAbsensi[]) => {
     const sortedTargets = [...targets].sort((left, right) =>
-      left.nama_target.localeCompare(right.nama_target, 'id', { numeric: true, sensitivity: 'base' })
+      cleanTargetLabel(kegiatan, left).localeCompare(cleanTargetLabel(kegiatan, right), 'id', { numeric: true, sensitivity: 'base' })
     );
     return (
       <div className="target-grid">
-        {sortedTargets.map(target => (
-          <Link
-            className="target-card"
-            key={target.target_id}
-            aria-label={`Buka absensi ${target.nama_target}`}
-            to={`/absensi/${kegiatan.jenis}/${target.target_id}?jadwal=${kegiatan.jadwal[0].jadwal_id}`}
-          >
-            <span className="target-card-label">{target.nama_target}</span>
-            <span className="target-card-action" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </span>
-          </Link>
-        ))}
+        {sortedTargets.map(target => {
+          const displayLabel = cleanTargetLabel(kegiatan, target);
+          return (
+            <Link
+              className="target-card"
+              key={target.target_id}
+              aria-label={`Buka absensi ${displayLabel}`}
+              to={`/absensi/${kegiatan.jenis}/${target.target_id}?jadwal=${kegiatan.jadwal[0].jadwal_id}`}
+            >
+              <span className="target-card-label">{displayLabel}</span>
+              <span className="target-card-action" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </span>
+            </Link>
+          );
+        })}
       </div>
     );
   };
@@ -253,7 +323,9 @@ export function DashboardPage() {
         >
           <span className="roster-category-label">{label}</span>
           <span className="roster-category-toggle-meta">
-            <span className="roster-count-mono">{targets.length} kelompok</span>
+            <span className="roster-count-mono">
+              {targets.length} {kegiatan.jenis === 'sekolah' ? 'kelas' : ((kegiatan.jenis === 'kamar' || kegiatan.jenis === 'keberangkatan') ? 'kamar' : 'kelompok')}
+            </span>
             <span className="roster-chevron-icon" aria-hidden="true">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m6 9 6 6 6-6" />
@@ -274,15 +346,6 @@ export function DashboardPage() {
     'Piket Pengajian': 'Tugas pengajian hari ini',
   };
 
-  const formatRemainingDraftTime = (expiresAt: number): string => {
-    const remainingMs = Math.max(0, expiresAt - Date.now());
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-    if (hours > 0) {
-      return `${hours} jam ${minutes} mnt`;
-    }
-    return `${Math.max(1, minutes)} mnt`;
-  };
 
   const [activeDraft, setActiveDraft] = useState<{
     storageKey: string;
@@ -791,14 +854,14 @@ export function DashboardPage() {
                       return collapsibleTargetGroup(kegiatan, `sekolah:${unitName}`, unitName, targets);
                     })}
                 </div>
-              ) : kegiatan.jenis === 'kamar' ? (
+              ) : (kegiatan.jenis === 'kamar' || kegiatan.jenis === 'keberangkatan') ? (
                 <div className="roster-category-groups">
                   {[...new Set(kegiatan.targets.map(target => target.kategori_target ?? 'Kamar lainnya'))]
                     .sort((left, right) => left.localeCompare(right, 'id', { numeric: true }))
                     .map(category => collapsibleTargetGroup(
                       kegiatan,
-                      `kamar:${category}`,
-                      category,
+                      `${kegiatan.jenis}:${category}`,
+                      category.toLowerCase().startsWith('wisma') ? category : `Wisma ${category}`,
                       kegiatan.targets.filter(target => (target.kategori_target ?? 'Kamar lainnya') === category),
                     ))}
                 </div>
@@ -809,6 +872,24 @@ export function DashboardPage() {
                     `pbs:${category}`,
                     category,
                     kegiatan.targets.filter(target => pbsDisplayCategory(target) === category),
+                  ))}
+                </div>
+              ) : kegiatan.jenis === 'diniyah' ? (
+                <div className="roster-category-groups">
+                  {madinCategories(kegiatan.targets).map(category => collapsibleTargetGroup(
+                    kegiatan,
+                    `diniyah:${category}`,
+                    `Jenjang ${category}`,
+                    kegiatan.targets.filter(target => madinDisplayCategory(target) === category),
+                  ))}
+                </div>
+              ) : kegiatan.jenis === 'pbm' ? (
+                <div className="roster-category-groups">
+                  {pbmCategories(kegiatan.targets).map(category => collapsibleTargetGroup(
+                    kegiatan,
+                    `pbm:${category}`,
+                    category,
+                    kegiatan.targets.filter(target => pbmDisplayCategory(target) === category),
                   ))}
                 </div>
               ) : (

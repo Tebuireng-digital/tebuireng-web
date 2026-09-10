@@ -34,7 +34,25 @@ class PelanggaranPolicy
 
     public function update(Petugas $petugas, $pelanggaran)
     {
-        return $this->checkAccess($petugas, $pelanggaran->santri_id);
+        if ($petugas->jabatan === 'Admin') {
+            return true;
+        }
+
+        if ($petugas->jabatan === 'Keamanan') {
+            $isOwner = (int) $pelanggaran->petugas_pencatat_id === (int) $petugas->petugas_id;
+            if (!$isOwner) {
+                return false;
+            }
+
+            if (!$pelanggaran->created_at) {
+                return false;
+            }
+
+            $createdAt = \Carbon\Carbon::parse($pelanggaran->created_at);
+            return abs(now()->diffInSeconds($createdAt, false)) <= 86400;
+        }
+
+        return false;
     }
 
     public function delete(Petugas $petugas, $pelanggaran)

@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MediaStorage;
+use App\Support\MediaUrl;
 use App\Support\SantriAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class SantriController extends Controller
 {
@@ -25,6 +26,7 @@ class SantriController extends Controller
                 'santri.nis', 
                 'santri.status_aktif',
                 'santri.foto_path',
+                'santri.foto_uploaded_at',
                 'kamar.nama as nama_kamar',
                 'unit_pendidikan.nama as nama_unit'
             )
@@ -65,7 +67,7 @@ class SantriController extends Controller
         }
 
         $results = $query->get()->map(function ($s) {
-            $s->foto_url = $s->foto_path ? Storage::url($s->foto_path) : null;
+            $s->foto_url = $s->foto_path ? MediaUrl::santriPhoto((int) $s->santri_id, $s->foto_uploaded_at) : null;
             return $s;
         });
 
@@ -89,7 +91,7 @@ class SantriController extends Controller
         }
 
         $request->validate([
-            'foto' => ['required', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+            'foto' => MediaStorage::validationRules('santri_photo', true),
         ], [
             'foto.required' => 'File foto wajib diunggah.',
             'foto.image' => 'File yang diunggah harus berupa gambar.',
@@ -98,24 +100,70 @@ class SantriController extends Controller
         ]);
 
         $file = $request->file('foto');
-        $filename = 'santri_' . $id . '_' . time() . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs('santri_foto', $filename, 'public');
+        $uploadedMedia = MediaStorage::store($file, 'santri_photo');
+        $uploadedAt = now();
+        $oldDisk = $santri->foto_disk ?: 'public';
+        $oldPath = $santri->foto_path;
 
-        if ($santri->foto_path && Storage::disk('public')->exists($santri->foto_path)) {
-            Storage::disk('public')->delete($santri->foto_path);
+        try {
+            DB::transaction(function () use ($id, $uploadedMedia, $uploadedAt): void {
+                DB::table('santri')->where('santri_id', $id)->update([
+                    'foto_path' => $uploadedMedia['path'],
+                    'foto_disk' => $uploadedMedia['disk'],
+                    'foto_original_filename' => $uploadedMedia['original_filename'],
+                    'foto_mime_type' => $uploadedMedia['mime_type'],
+                    'foto_size_bytes' => $uploadedMedia['size_bytes'],
+                    'foto_sha256' => $uploadedMedia['sha256'],
+                    'foto_uploaded_at' => $uploadedAt,
+                    'updated_at' => now(),
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            MediaStorage::delete($uploadedMedia['disk'], $uploadedMedia['path']);
+
+            throw $exception;
         }
 
-        DB::table('santri')->where('santri_id', $id)->update([
-            'foto_path' => $path,
-            'updated_at' => now(),
-        ]);
-
-        $fotoUrl = Storage::url($path);
+        if ($oldPath && !($oldDisk === $uploadedMedia['disk'] && $oldPath === $uploadedMedia['path'])) {
+            MediaStorage::delete($oldDisk, $oldPath);
+        }
 
         return response()->json([
             'message' => 'Foto santri berhasil diperbarui.',
-            'foto_path' => $path,
-            'foto_url' => $fotoUrl,
+            'foto_path' => $uploadedMedia['path'],
+            'foto_url' => MediaUrl::santriPhoto($id, $uploadedAt),
         ]);
+    }
+
+    public function showFoto(Request $request, int $id)
+    {
+        $petugas = $request->user();
+        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar'], true)) {
+            return response()->json(['message' => 'Role Anda tidak dapat membuka foto santri.'], 403);
+        }
+
+        if ($petugas->jabatan === 'Pembina Kamar' && !SantriAccess::canAccess($petugas, $id)) {
+            return response()->json(['message' => 'Anda tidak memiliki akses untuk melihat foto santri ini.'], 403);
+        }
+
+        $santri = DB::table('santri')
+            ->select('santri_id', 'nama', 'foto_path', 'foto_disk', 'foto_original_filename', 'foto_mime_type')
+            ->where('santri_id', $id)
+            ->first();
+
+        if (!$santri || !$santri->foto_path) {
+            return response()->json(['message' => 'Foto santri tidak ditemukan.'], 404);
+        }
+
+        $profile = MediaStorage::profile('santri_photo');
+
+        return MediaStorage::stream(
+            $santri->foto_disk ?: $profile['disk'],
+            $santri->foto_path,
+            $santri->foto_original_filename ?: sprintf('santri-%d', $id),
+            $santri->foto_mime_type,
+            $request->boolean('download') ? 'attachment' : 'inline',
+            $profile['fallback_read_disks']
+        );
     }
 }

@@ -88,39 +88,91 @@ class ImportRekamPelanggaranCommand extends Command
                 }
 
                 $matchedCount++;
-                $isPrestasi = (bool) preg_match('/(prestasi|penghargaan|juara|hafidz|hifdz|tahfidz|story telling|banjari)/i', $deskripsi . ' ' . $keterangan);
+                $combined = strtolower($deskripsi . ' ' . $keterangan);
+                $isViolation = $poin > 0 || preg_match('/(rokok|atribut|tralis|subuh|terlambat|kabur|keluar tanpa|hp|vape|berkelahi|mencuri|merugikan)/i', $combined);
 
-                if ($isPrestasi) {
+                if (!$isViolation) {
                     // Impor ke tabel Prestasi
-                    DB::table('prestasi')->insert([
-                        'santri_id' => $santri->santri_id,
-                        'nama_prestasi' => $deskripsi ?: 'Prestasi Santri',
-                        'peringkat' => $keterangan ?: 'Penghargaan',
-                        'tingkat' => 'Tebuireng',
-                        'tanggal' => $tanggal,
-                        'keterangan' => implode(' - ', array_filter([$deskripsi, $keterangan])),
-                        'petugas_pencatat_id' => $adminPetugasId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                    $prestasiInserted++;
+                    $tingkat = 'Pesantren';
+                    if (str_contains($combined, 'nasional') || str_contains($combined, 'ksnr')) {
+                        $tingkat = 'Nasional';
+                    } elseif (str_contains($combined, 'provinsi') || str_contains($combined, 'jawa timur')) {
+                        $tingkat = 'Provinsi';
+                    } elseif (str_contains($combined, 'jombang') || str_contains($combined, 'kabupaten') || str_contains($combined, 'genza') || str_contains($combined, 'unhasy') || str_contains($combined, 'obor langit')) {
+                        $tingkat = 'Kabupaten';
+                    } elseif (str_contains($combined, 'kecamatan') || str_contains($combined, 'kec.ngoro') || str_contains($combined, 'kec. ngoro') || str_contains($combined, 'kec.')) {
+                        $tingkat = 'Kecamatan';
+                    }
+
+                    $peringkat = 'Penghargaan';
+                    if (preg_match('/(Juara\s+[1-3](?:\s+Putri)?)/i', $deskripsi . ' ' . $keterangan, $mJuara)) {
+                        $peringkat = ucwords(strtolower($mJuara[1]));
+                    } elseif (str_contains($combined, 'lolos babak penyisihan')) {
+                        $peringkat = 'Lolos Babak Penyisihan';
+                    } elseif (str_contains($combined, 'semifinal')) {
+                        $peringkat = 'Semifinal 10 Besar';
+                    } elseif (str_contains($combined, 'babak final')) {
+                        $peringkat = 'Babak Final';
+                    } elseif (str_contains($combined, 'delegasi')) {
+                        $peringkat = 'Delegasi';
+                    } elseif ($keterangan) {
+                        $peringkat = $keterangan;
+                    }
+
+                    $namaPrestasi = $deskripsi ?: 'Prestasi Santri';
+                    if (str_contains(strtolower($deskripsi), 'lolos babak penyisihan') && str_contains(strtoupper($keterangan), 'KSNR')) {
+                        $namaPrestasi = 'Kompetisi Sains Nalaria Realistik (' . $keterangan . ')';
+                    } elseif (strcasecmp($deskripsi, 'prestasi') === 0 && $keterangan) {
+                        $namaPrestasi = $keterangan;
+                    }
+
+                    $keteranganLengkap = implode(' - ', array_filter([$deskripsi, $keterangan]));
+
+                    $existingPrestasi = DB::table('prestasi')
+                        ->where('santri_id', $santri->santri_id)
+                        ->where('tanggal', $tanggal)
+                        ->where('nama_prestasi', $namaPrestasi)
+                        ->first();
+
+                    if (!$existingPrestasi) {
+                        DB::table('prestasi')->insert([
+                            'santri_id' => $santri->santri_id,
+                            'nama_prestasi' => $namaPrestasi,
+                            'peringkat' => $peringkat,
+                            'tingkat' => $tingkat,
+                            'tanggal' => $tanggal,
+                            'keterangan' => $keteranganLengkap,
+                            'petugas_pencatat_id' => $adminPetugasId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $prestasiInserted++;
+                    }
                 } else {
                     // Impor ke tabel Pelanggaran
                     $kategoriId = $this->findKategoriId($deskripsi, $poin, $kategoriAll);
                     $catatanText = array_filter([$deskripsi, $keterangan]);
-                    $catatan = implode(' - ', $catatanText);
+                    $catatan = implode(' - ', $catatanText) ?: 'Pelanggaran dari rekam santri';
 
-                    DB::table('pelanggaran')->insert([
-                        'santri_id' => $santri->santri_id,
-                        'kategori_pelanggaran_id' => $kategoriId,
-                        'poin' => $poin,
-                        'tanggal' => $tanggal,
-                        'keterangan' => $catatan ?: 'Pelanggaran dari rekam santri',
-                        'petugas_pencatat_id' => $adminPetugasId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                    $pelanggaranInserted++;
+                    $existingPelanggaran = DB::table('pelanggaran')
+                        ->where('santri_id', $santri->santri_id)
+                        ->where('tanggal', $tanggal)
+                        ->where('keterangan', $catatan)
+                        ->first();
+
+                    if (!$existingPelanggaran) {
+                        DB::table('pelanggaran')->insert([
+                            'santri_id' => $santri->santri_id,
+                            'kategori_pelanggaran_id' => $kategoriId,
+                            'poin' => $poin,
+                            'tanggal' => $tanggal,
+                            'keterangan' => $catatan,
+                            'petugas_pencatat_id' => $adminPetugasId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $pelanggaranInserted++;
+                    }
                 }
 
                 $this->output->progressAdvance();
@@ -148,47 +200,40 @@ class ImportRekamPelanggaranCommand extends Command
 
     private function parseXlsx(string $path): array
     {
-        $zip = new ZipArchive();
-        if ($zip->open($path) !== true) return [];
+        try {
+            $reader = new \OpenSpout\Reader\XLSX\Reader();
+            $reader->open($path);
 
-        $strings = [];
-        if (($index = $zip->locateName('xl/sharedStrings.xml')) !== false) {
-            $xml = simplexml_load_string($zip->getFromIndex($index));
-            foreach ($xml->si as $si) {
-                $strings[] = (string)$si->t ?: (string)$si->r->t;
-            }
-        }
-
-        $sheetXml = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
-        $rows = $sheetXml->sheetData->row;
-
-        $list = [];
-        $headers = [];
-        $idx = 0;
-        foreach ($rows as $row) {
-            $rVals = [];
-            foreach ($row->c as $c) {
-                $val = (string)$c->v;
-                if ((string)$c['t'] === 's' && isset($strings[(int)$val])) {
-                    $val = $strings[(int)$val];
+            $list = [];
+            foreach ($reader->getSheetIterator() as $sheet) {
+                if ($sheet->getName() !== 'Detail Rekam Jejak') {
+                    continue;
                 }
-                $rVals[] = $val;
-            }
 
-            if ($idx === 0) {
-                $headers = $rVals;
-            } else {
-                $item = [];
-                foreach ($headers as $hIdx => $hName) {
-                    $item[trim($hName)] = $rVals[$hIdx] ?? '';
+                $headers = [];
+                $isFirst = true;
+                foreach ($sheet->getRowIterator() as $row) {
+                    $vals = $row->toArray();
+                    if ($isFirst) {
+                        $headers = array_map(fn($h) => trim((string)$h), $vals);
+                        $isFirst = false;
+                        continue;
+                    }
+
+                    $item = [];
+                    foreach ($headers as $idx => $hName) {
+                        $item[$hName] = trim((string)($vals[$idx] ?? ''));
+                    }
+                    $list[] = $item;
                 }
-                $list[] = $item;
+                break;
             }
-            $idx++;
-        }
 
-        $zip->close();
-        return $list;
+            $reader->close();
+            return $list;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     private function findKategoriId(string $deskripsi, int $poin, $kategoriAll): int

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, resolveApiAssetUrl } from '../api';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { SantriPortalAuthProvider, useSantriPortalAuth, type SantriUser } from '../SantriPortalAuthContext';
 
@@ -9,8 +9,15 @@ type PortalSection = 'beranda' | 'profil' | 'kehadiran' | 'pelanggaran' | 'periz
 type PortalRecord = Record<string, any>;
 
 function PortalIcon({ type }: { type: 'home' | 'profile' | 'id-card' | 'lock' | 'bell' | 'settings' | 'award' | 'calendar' | 'warning' | 'permit' | 'report' | 'logout' | 'menu' | 'more' | 'eye' | 'eye-off' }) {
+  if (type === 'home') {
+    return (
+      <svg className="portal-icon portal-icon-home" aria-hidden="true" viewBox="0 0 48 48" fill="currentColor">
+        <path d="M39.5,43h-9c-1.381,0-2.5-1.119-2.5-2.5v-9c0-1.105-0.895-2-2-2h-4c-1.105,0-2,0.895-2,2v9c0,1.381-1.119,2.5-2.5,2.5h-9 C7.119,43,6,41.881,6,40.5V21.413c0-2.299,1.054-4.471,2.859-5.893L23.071,4.321c0.545-0.428,1.313-0.428,1.857,0L39.142,15.52 C40.947,16.942,42,19.113,42,21.411V40.5C42,41.881,40.881,43,39.5,43z" />
+      </svg>
+    );
+  }
+
   const paths = {
-    home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9h13v-9M9 19v-5h6v5"/></>,
     profile: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
     'id-card': <><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2"/><path d="M5.5 16c.7-1.3 1.7-2 3-2s2.3.7 3 2M14 10h4M14 14h4"/></>,
     lock: <><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></>,
@@ -27,7 +34,7 @@ function PortalIcon({ type }: { type: 'home' | 'profile' | 'id-card' | 'lock' | 
     eye: <><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></>,
     'eye-off': <><path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-3.2 3.5M6.2 6.8C3.8 8.3 2.5 12 2.5 12a16 16 0 0 0 5.2 4.5A10.7 10.7 0 0 0 12 18c1 0 2-.2 2.8-.5"/></>,
   };
-  return <svg className="portal-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[type]}</svg>;
+  return <svg className="portal-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{(paths as any)[type]}</svg>;
 }
 
 function PortalLogin({ onLogin }: { onLogin: (user: SantriUser) => void }) {
@@ -192,7 +199,7 @@ function PortalDashboardPage({ user, logout, mobileOpen, setMobileOpen, navigate
               </div>
               {user.foto_url ? (
                 <img
-                  src={user.foto_url}
+                  src={resolveApiAssetUrl(user.foto_url) || ''}
                   alt={user.nama}
                   className="portal-child-photo"
                   style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.8)', flexShrink: 0 }}
@@ -253,7 +260,7 @@ function Profile({ user }: { user: SantriUser }) {
   const educationDetails: Array<[string, string | null | undefined]> = [['Tahun ajaran', user.tahun_ajaran], ['Pendidikan', user.pend_sumber], ['Kelas sumber', user.kelas_sumber], ['Jurusan', user.jurusan], ['Kelas paralel', user.kelas_paralel], ['Asal sekolah', user.asal_sekolah], ['Jenis sekolah', user.jenis_sekolah], ['Status sekolah', user.status_sekolah], ['Ranking', user.ranking]];
   const familyDetails: Array<[string, string | null | undefined]> = [['Nama wali', user.nama_wali], ['Nomor HP wali', user.no_hp_wali], ['Nama ayah', user.nama_ayah], ['Pendidikan ayah', user.pendidikan_ayah], ['Pekerjaan ayah', user.pekerjaan_ayah], ['Nama ibu', user.nama_ibu], ['Pendidikan ibu', user.pendidikan_ibu], ['Pekerjaan ibu', user.pekerjaan_ibu]];
   const addressDetails: Array<[string, string | null | undefined]> = [['Alamat jalan', user.alamat_jalan], ['Desa/Kelurahan', user.desa_kelurahan], ['Kecamatan', user.kecamatan], ['Kabupaten/Kota', user.kabupaten_kota], ['Provinsi', user.provinsi], ['Kode pos', user.kode_pos]];
-  return <section className="portal-profile-page" aria-labelledby="portal-profile-title"><header className="portal-page-heading" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>{user.foto_url ? <img src={user.foto_url} alt={user.nama} style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #0f6e56', flexShrink: 0 }} /> : null}<div><p className="eyebrow">Profil santri</p><h1 id="portal-profile-title">Data Anak</h1><p>Informasi anak, pendidikan, penempatan, dan keluarga.</p></div></header><div className="portal-profile-sections"><ProfileSection title="Identitas" details={identityDetails}/><ProfileSection title="Penempatan" details={assignmentDetails}/><ProfileSection title="Pendidikan" details={educationDetails}/><ProfileSection title="Keluarga" details={familyDetails}/><ProfileSection title="Domisili" details={addressDetails}/></div></section>;
+  return <section className="portal-profile-page" aria-labelledby="portal-profile-title"><header className="portal-page-heading" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>{user.foto_url ? <img src={resolveApiAssetUrl(user.foto_url) || ''} alt={user.nama} style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #0f6e56', flexShrink: 0 }} /> : null}<div><p className="eyebrow">Profil santri</p><h1 id="portal-profile-title">Data Anak</h1><p>Informasi anak, pendidikan, penempatan, dan keluarga.</p></div></header><div className="portal-profile-sections"><ProfileSection title="Identitas" details={identityDetails}/><ProfileSection title="Penempatan" details={assignmentDetails}/><ProfileSection title="Pendidikan" details={educationDetails}/><ProfileSection title="Keluarga" details={familyDetails}/><ProfileSection title="Domisili" details={addressDetails}/></div></section>;
 }
 
 function ProfileSection({ title, details }: { title: string; details: Array<[string, string | null | undefined]> }) {

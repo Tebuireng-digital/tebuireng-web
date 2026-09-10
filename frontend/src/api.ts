@@ -3,6 +3,30 @@ import axios from 'axios';
 const hostname = window.location.hostname || 'localhost';
 export const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${hostname}:8000`;
 
+const apiAssetBaseUrl = (() => {
+  if (/^https?:\/\//i.test(API_BASE_URL)) {
+    return API_BASE_URL;
+  }
+
+  if (API_BASE_URL.startsWith('/')) {
+    return window.location.origin;
+  }
+
+  return new URL(API_BASE_URL, window.location.origin).toString();
+})();
+
+export function resolveApiAssetUrl(path?: string | null) {
+  if (!path) {
+    return null;
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(path)) {
+    return path;
+  }
+
+  return new URL(path, apiAssetBaseUrl).toString();
+}
+
 // Konfigurasi axios untuk Sanctum SPA
 export const api = axios.create({
   baseURL: API_BASE_URL,

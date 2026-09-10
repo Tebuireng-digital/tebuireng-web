@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
@@ -120,6 +121,7 @@ function PaginationControls({
 }
 
 export function CatatGerbangPage() {
+  const { user } = useAuth();
   usePageMeta({
     title: 'Catat Izin & Gerbang',
     description: 'Catat perizinan keluar santri dan verifikasi pos gerbang Pondok Pesantren Tebuireng.',
@@ -138,8 +140,17 @@ export function CatatGerbangPage() {
   const [rencanaKembali, setRencanaKembali] = useState(jakartaDateTime(new Date(Date.now() + 24 * 60 * 60 * 1000)));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<Feedback | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [toast, setToast] = useState<Feedback | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
   const [pendingGateAction, setPendingGateAction] = useState<GateAction | null>(null);
   const [gateActionTime, setGateActionTime] = useState(jakartaDateTime());
   const [correction, setCorrection] = useState<GateCorrection | null>(null);
@@ -153,6 +164,8 @@ export function CatatGerbangPage() {
   // Filter perizinan tidak aktif
   const [inactiveSearch, setInactiveSearch] = useState('');
   const [inactiveStatusFilter, setInactiveStatusFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Pagination State (10 items per page)
   const ITEMS_PER_PAGE = 10;
@@ -172,7 +185,7 @@ export function CatatGerbangPage() {
   };
 
   useEffect(() => {
-    fetchData().catch(() => setMessage({ text: 'Data perizinan tidak dapat dimuat. Periksa koneksi lalu muat ulang halaman.', type: 'error' })).finally(() => setLoading(false));
+    fetchData().catch(() => setToast({ text: 'Data perizinan tidak dapat dimuat. Periksa koneksi lalu muat ulang halaman.', type: 'error' })).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -237,13 +250,16 @@ export function CatatGerbangPage() {
       const matchSearch = !q || [item.nama_santri, item.nis ?? '', item.keperluan]
         .some(val => val.toLowerCase().includes(q));
       const matchStatus = !inactiveStatusFilter || item.status.toLowerCase() === inactiveStatusFilter.toLowerCase();
-      return matchSearch && matchStatus;
+      const waktuMulai = new Date(item.tanggal_mulai.replace(' ', 'T')).getTime();
+      const matchStart = !startDate || waktuMulai >= new Date(`${startDate}T00:00:00`).getTime();
+      const matchEnd = !endDate || waktuMulai <= new Date(`${endDate}T23:59:59`).getTime();
+      return matchSearch && matchStatus && matchStart && matchEnd;
     });
-  }, [inactiveList, inactiveSearch, inactiveStatusFilter]);
+  }, [inactiveList, inactiveSearch, inactiveStatusFilter, startDate, endDate]);
 
   useEffect(() => {
     setInactivePage(1);
-  }, [inactiveSearch, inactiveStatusFilter]);
+  }, [inactiveSearch, inactiveStatusFilter, startDate, endDate]);
 
   const activeTotalPages = Math.ceil(activeList.length / ITEMS_PER_PAGE) || 1;
   const paginatedActiveList = useMemo(() => {
@@ -260,27 +276,59 @@ export function CatatGerbangPage() {
   const createIzin = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedSantri) {
-      setMessage({ text: 'Pilih santri terlebih dahulu sebelum membuat izin.', type: 'error' });
+      setFormError('Pilih santri terlebih dahulu sebelum membuat izin.');
       return;
     }
+    const cleanKeperluan = keperluan.trim();
+    if (!cleanKeperluan) {
+      setFormError('Keperluan izin wajib diisi.');
+      return;
+    }
+    if (cleanKeperluan.length < 3) {
+      setFormError('Keperluan izin minimal 3 karakter.');
+      return;
+    }
+    if (!jenisId) {
+      setFormError('Pilih jenis izin terlebih dahulu.');
+      return;
+    }
+    if (!tanggalMulai) {
+      setFormError('Waktu mulai izin wajib diisi.');
+      return;
+    }
+    if (!rencanaKembali) {
+      setFormError('Rencana waktu kembali wajib diisi.');
+      return;
+    }
+    if (new Date(rencanaKembali).getTime() < new Date(tanggalMulai).getTime()) {
+      setFormError('Rencana waktu kembali tidak boleh lebih awal dari waktu mulai.');
+      return;
+    }
+
     setSaving(true);
-    setMessage(null);
+    setFormError(null);
     try {
       await api.post('/api/perizinan', {
         santri_id: selectedSantri.santri_id,
         jenis_izin_id: Number(jenisId),
-        keperluan,
+        keperluan: cleanKeperluan,
         tanggal_mulai: tanggalMulai,
         rencana_kembali: rencanaKembali,
       });
-      setMessage({ text: 'Izin tersimpan dan status absensi otomatis diperbarui menjadi Izin.', type: 'success' });
+      setToast({ text: 'Izin tersimpan dan status absensi otomatis diperbarui menjadi Izin.', type: 'success' });
       setSelectedSantri(null);
       setSearch('');
       setKeperluan('');
       setIsFormOpen(false);
       await fetchData();
     } catch (error: any) {
-      setMessage({ text: error.response?.data?.message ?? 'Perizinan gagal disimpan. Periksa data lalu coba lagi.', type: 'error' });
+      const responseData = error.response?.data;
+      if (responseData?.errors) {
+        const errorMessages = Object.values(responseData.errors).flat().join(' ');
+        setFormError(errorMessages || responseData.message);
+      } else {
+        setFormError(responseData?.message ?? 'Perizinan gagal disimpan. Periksa data lalu coba lagi.');
+      }
     } finally {
       setSaving(false);
     }
@@ -298,10 +346,10 @@ export function CatatGerbangPage() {
       await api.patch(`/api/perizinan/${id}/gerbang`, {
         [type === 'keluar' ? 'waktu_keluar_aktual' : 'waktu_masuk_aktual']: waktu,
       });
-      setMessage({ text: type === 'keluar' ? 'Waktu keluar tercatat.' : 'Waktu kembali tercatat.', type: 'success' });
+      setToast({ text: type === 'keluar' ? 'Waktu keluar tercatat.' : 'Waktu kembali tercatat.', type: 'success' });
       await fetchData();
     } catch (error: any) {
-      setMessage({ text: error.response?.data?.message ?? 'Data gerbang gagal disimpan. Periksa waktu lalu coba lagi.', type: 'error' });
+      setToast({ text: error.response?.data?.message ?? 'Data gerbang gagal disimpan. Periksa waktu lalu coba lagi.', type: 'error' });
     }
   };
 
@@ -319,10 +367,10 @@ export function CatatGerbangPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      setMessage({ text: `PDF surat izin ${namaSantri} berhasil diunduh.`, type: 'success' });
+      setToast({ text: `PDF surat izin ${namaSantri} berhasil diunduh.`, type: 'success' });
     } catch (error) {
       console.error('Gagal mengunduh PDF:', error);
-      setMessage({ text: 'PDF gagal diunduh. Periksa koneksi lalu coba lagi.', type: 'error' });
+      setToast({ text: 'PDF gagal diunduh. Periksa koneksi lalu coba lagi.', type: 'error' });
     } finally {
       setDownloadingId(null);
     }
@@ -371,11 +419,11 @@ export function CatatGerbangPage() {
         waktu_keluar_aktual: correction.keluar || null,
         waktu_masuk_aktual: correction.masuk || null,
       });
-      setMessage({ text: `Waktu gerbang ${correction.nama} berhasil dikoreksi.`, type: 'success' });
+      setToast({ text: `Waktu gerbang ${correction.nama} berhasil dikoreksi.`, type: 'success' });
       setCorrection(null);
       await fetchData();
     } catch (error: any) {
-      setMessage({ text: error.response?.data?.message ?? 'Koreksi waktu gagal disimpan.', type: 'error' });
+      setToast({ text: error.response?.data?.message ?? 'Koreksi waktu gagal disimpan.', type: 'error' });
     } finally {
       setSavingCorrection(false);
     }
@@ -385,12 +433,74 @@ export function CatatGerbangPage() {
 
   return (
     <div className="permit-page">
-      <header className="dashboard-header page-header">
-        <h1>Perizinan & Gerbang</h1>
-        <p>Kelola perizinan santri, pencatatan gerbang keluar/kembali, serta riwayat perizinan selesai.</p>
-      </header>
+      {/* Toast Notifikasi Pojok Kanan Atas */}
+      {toast && (
+        <div
+          className={`toast-notification-top-right${toast.type === 'error' ? ' toast-error' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="toast-notification-content">
+            <span className="toast-icon-check" aria-hidden="true">
+              {toast.type === 'error' ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              )}
+            </span>
+            <span className="toast-text">{toast.text}</span>
+          </div>
+          <button
+            type="button"
+            className="toast-close-btn"
+            onClick={() => setToast(null)}
+            aria-label="Tutup notifikasi"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
-      {message && <div className={message.type === 'success' ? 'success-box' : 'error-box'} role="status" style={{ marginBottom: 20 }}>{message.text}</div>}
+      <header className="absensi-module-hero" style={{ marginBottom: 24 }}>
+        <div className="absensi-module-hero-main">
+          <span className="page-eyebrow" style={{ color: 'rgba(255, 255, 255, 0.85)', marginBottom: 4, display: 'inline-block' }}>
+            POS KEAMANAN &amp; KONTROL GERBANG
+          </span>
+          <h1 className="absensi-module-hero-title">Perizinan &amp; Catat Gerbang</h1>
+          <p className="absensi-module-hero-desc">
+            Pencatatan keluar/kembali santri di pos gerbang, verifikasi surat izin, dan monitoring kepatuhan jadwal secara real-time.
+          </p>
+          <div className="absensi-module-hero-meta">
+            <span className="absensi-module-pill absensi-module-pill-petugas">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+              Petugas: {user?.nama || 'Petugas Keamanan'}
+            </span>
+            <span className="absensi-module-pill">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {activeList.length} Izin Aktif Berjalan
+            </span>
+            <span className="absensi-module-pill">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {new Intl.DateTimeFormat('id-ID', { dateStyle: 'full' }).format(new Date())}
+            </span>
+          </div>
+        </div>
+        <div className="dashboard-mosque-dark" aria-hidden="true"></div>
+      </header>
 
       {/* COLLAPSIBLE FORM BUAT IZIN SANTRI BARU */}
       <div className="collapsible-form-wrapper">
@@ -401,14 +511,36 @@ export function CatatGerbangPage() {
           aria-expanded={isFormOpen}
         >
           <div className="collapsible-form-toggle-left">
-            <span className="collapsible-form-toggle-icon">{isFormOpen ? '−' : '+'}</span>
-            <span>{isFormOpen ? 'Sembunyikan Form Buat Izin' : 'Buat Izin Santri Baru'}</span>
+            <span className="collapsible-form-toggle-icon">
+              {isFormOpen ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              )}
+            </span>
+            <div>
+              <span className="collapsible-form-title">{isFormOpen ? 'Sembunyikan Form Buat Izin' : 'Buat Izin Santri Baru'}</span>
+              <span className="collapsible-form-subtitle">Pencatatan permohonan izin keluar pondok dan verifikasi awal</span>
+            </div>
           </div>
-          <span className={`collapsible-form-chevron ${isFormOpen ? 'is-open' : ''}`}>▼</span>
+          <span className={`collapsible-form-chevron ${isFormOpen ? 'is-open' : ''}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </span>
         </button>
 
         <form className={`permit-form ${isFormOpen ? 'is-open' : 'is-collapsed'}`} onSubmit={createIzin}>
           <h2>Buat izin santri baru</h2>
+          {formError && (
+            <div className="error-box" role="alert" style={{ marginBottom: 16 }}>
+              {formError}
+            </div>
+          )}
           <label htmlFor="santri-search">Santri *</label>
           <div className="search-field">
             <input
@@ -460,7 +592,7 @@ export function CatatGerbangPage() {
               placeholder="Pilih jenis izin"
               options={jenisList.map(jenis => ({ value: String(jenis.jenis_izin_id), label: jenis.nama }))}
             />
-            <div><label htmlFor="keperluan-izin">Keperluan</label><input id="keperluan-izin" value={keperluan} onChange={event => setKeperluan(event.target.value)} required={isFormOpen} maxLength={255} placeholder="Alasan izin / keperluan" /></div>
+            <div><label htmlFor="keperluan-izin">Keperluan *</label><input id="keperluan-izin" value={keperluan} onChange={event => setKeperluan(event.target.value)} required={isFormOpen} minLength={3} maxLength={255} placeholder="Alasan izin / keperluan (min. 3 karakter)" /></div>
             <DateTimeWibField id="mulai-izin" label="Mulai izin" value={tanggalMulai} onChange={setTanggalMulai} required={isFormOpen} />
             <DateTimeWibField id="rencana-kembali" label="Rencana kembali" value={rencanaKembali} min={tanggalMulai} onChange={setRencanaKembali} required={isFormOpen} />
           </div>
@@ -478,6 +610,9 @@ export function CatatGerbangPage() {
           className={`permit-tab-btn ${activeTab === 'aktif' ? 'active' : ''}`}
           onClick={() => setActiveTab('aktif')}
         >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
           <span>Izin Aktif</span>
           <span className="permit-tab-badge">{activeList.length}</span>
         </button>
@@ -486,6 +621,9 @@ export function CatatGerbangPage() {
           className={`permit-tab-btn ${activeTab === 'riwayat' ? 'active' : ''}`}
           onClick={() => setActiveTab('riwayat')}
         >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
           <span>Riwayat Selesai</span>
           <span className="permit-tab-badge">{inactiveList.length}</span>
         </button>
@@ -493,38 +631,127 @@ export function CatatGerbangPage() {
 
       {/* DAFTAR IZIN AKTIF */}
       {activeTab === 'aktif' && (
-        <section className="permit-list" style={{ marginBottom: 36 }}>
-          <h2>Daftar Izin Aktif</h2>
+        <section className="permit-list" style={{ marginBottom: 36, padding: '20px 24px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Kontrol Gerbang - Izin Aktif</h2>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#64748b' }}>Santri yang memiliki izin aktif dan membutuhkan verifikasi keluar atau kembali di pos keamanan.</p>
+            </div>
+          </div>
+
           {activeList.length === 0 ? (
             <div className="empty-state">Tidak ada santri yang sedang memiliki izin aktif saat ini.</div>
           ) : (
             <>
               {paginatedActiveList.map(item => (
-                <article key={item.perizinan_id} className="permit-card">
-                  <div>
-                    <strong>{item.nama_santri}</strong>
-                    <p>{item.keperluan} · Rencana kembali: {item.rencana_kembali}</p>
-                    <span className="schedule-label" style={{ marginTop: 4, display: 'inline-block' }}>
-                      Status: {item.status}
-                    </span>
+                <article key={item.perizinan_id} className="permit-card-enhanced">
+                  <div className="permit-card-main">
+                    <div className="permit-card-header-info">
+                      <div className="permit-santri-avatar">
+                        {item.nama_santri.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="permit-santri-name-row">
+                          <strong className="permit-santri-name">{item.nama_santri}</strong>
+                          {item.nis && <span className="permit-santri-nis">NIS: {item.nis}</span>}
+                        </div>
+                        <div className="permit-keperluan-tag">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                          </svg>
+                          <span>{item.keperluan}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="permit-timing-grid">
+                      <div className="permit-timing-item">
+                        <span className="permit-timing-label">Mulai Izin</span>
+                        <span className="permit-timing-val">{item.tanggal_mulai}</span>
+                      </div>
+                      <div className="permit-timing-item">
+                        <span className="permit-timing-label">Rencana Kembali</span>
+                        <span className="permit-timing-val highlight-return">{item.rencana_kembali}</span>
+                      </div>
+                      {item.waktu_keluar_aktual && (
+                        <div className="permit-timing-item">
+                          <span className="permit-timing-label">Keluar Real</span>
+                          <span className="permit-timing-val">{item.waktu_keluar_aktual}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="permit-status-badge-wrapper">
+                      {item.status === 'Disetujui' ? (
+                        <span className="permit-badge permit-badge-approved">
+                          <span className="status-dot-amber"></span>
+                          Disetujui (Menunggu Keluar)
+                        </span>
+                      ) : (
+                        <span className="permit-badge permit-badge-running">
+                          <span className="status-dot-blue"></span>
+                          Sedang Berjalan (Di Luar Pondok)
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="permit-card-actions">
+
+                  <div className="permit-card-actions-enhanced">
+                    {item.status === 'Disetujui' ? (
+                      <button
+                        type="button"
+                        className="gate-btn gate-btn-exit"
+                        onClick={() => openGateConfirmation(item)}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                          <polyline points="16 17 21 12 16 7"/>
+                          <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        <span>Catat Keluar</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="gate-btn gate-btn-enter"
+                        onClick={() => openGateConfirmation(item)}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                          <polyline points="10 17 15 12 10 7"/>
+                          <line x1="15" y1="12" x2="3" y2="12"/>
+                        </svg>
+                        <span>Catat Kembali</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="download-pdf-btn"
+                      className="gate-btn-secondary"
+                      onClick={() => openCorrection(item)}
+                      title="Koreksi waktu aktual gerbang"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      <span>Koreksi</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="gate-btn-secondary"
                       onClick={() => handleDownloadPdf(item.perizinan_id, item.nama_santri)}
                       disabled={downloadingId === item.perizinan_id}
-                      aria-label={`Unduh PDF surat izin ${item.nama_santri}`}
+                      title="Unduh surat izin resmi format PDF"
                     >
-                      {downloadingId === item.perizinan_id ? 'Mengunduh…' : 'Unduh PDF'}
-                    </button>
-                    <button type="button" className="secondary-button" onClick={() => openCorrection(item)}>Koreksi waktu</button>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={() => openGateConfirmation(item)}
-                    >
-                      {item.status === 'Disetujui' ? 'Catat keluar' : 'Catat kembali'}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      <span>{downloadingId === item.perizinan_id ? 'Mengunduh...' : 'PDF'}</span>
                     </button>
                   </div>
                 </article>
@@ -571,6 +798,14 @@ export function CatatGerbangPage() {
                 <option value="Kadaluarsa">Kadaluarsa</option>
                 <option value="Dibatalkan">Dibatalkan</option>
               </select>
+            </div>
+            <div>
+              <label htmlFor="filter-dari-perizinan">Dari Tanggal</label>
+              <input type="date" id="filter-dari-perizinan" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label htmlFor="filter-sampai-perizinan">Sampai Tanggal</label>
+              <input type="date" id="filter-sampai-perizinan" value={endDate} onChange={e => setEndDate(e.target.value)} />
             </div>
           </div>
 

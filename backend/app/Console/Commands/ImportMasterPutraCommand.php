@@ -158,10 +158,22 @@ class ImportMasterPutraCommand extends Command
             ], 'kelas_formal_id');
         }
 
+        $pbsRaw = $row['pbs'] ?? '';
+        $pbsCat = 'LAINNYA';
+        if (preg_match('/^(KELOMPOK [A-Z]|BANDONGAN|TAHSIN|TAHFIDZ|SOROGAN|PASCA WISUDA(?: MA)?)/i', $pbsRaw, $pbsMatches)) {
+            $pbsCat = strtoupper(trim($pbsMatches[1]));
+        }
+
+        $pbmRaw = $row['pbm'] ?? '';
+        $pbmCat = 'LAINNYA';
+        if (preg_match('/^([^-]+)\s*-\s*/', $pbmRaw, $pbmMatches)) {
+            $pbmCat = strtoupper(trim($pbmMatches[1]));
+        }
+
         $groupIds = [
             'madin' => $this->upsertGroup($maps, 'madin', 'kelompok_madin', 'nama_kelas_madin', $row['madin'] ?? '', ['jenjang' => $unitCode], 'kelompok_madin_id'),
-            'pbs' => $this->upsertGroup($maps, 'pbs', 'kelompok_pbs', 'nama_kelompok', $row['pbs'] ?? '', ['kategori' => 'MASTER_PUTRA'], 'kelompok_pbs_id'),
-            'pbm' => $this->upsertGroup($maps, 'pbm', 'kelompok_pbm', 'nama_kelompok', $row['pbm'] ?? '', ['kategori' => 'MASTER_PUTRA'], 'kelompok_pbm_id'),
+            'pbs' => $this->upsertGroup($maps, 'pbs', 'kelompok_pbs', 'nama_kelompok', $pbsRaw, ['kategori' => $pbsCat], 'kelompok_pbs_id'),
+            'pbm' => $this->upsertGroup($maps, 'pbm', 'kelompok_pbm', 'nama_kelompok', $pbmRaw, ['kategori' => $pbmCat], 'kelompok_pbm_id'),
         ];
 
         $isBaru = strtoupper(trim($row['status_santri'] ?? '')) === 'BARU' || str_starts_with($noId, '2699');

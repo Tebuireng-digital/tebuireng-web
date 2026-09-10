@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams, Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, resolveApiAssetUrl } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton, Spinner, ValuePulse } from '../components/LoadingSkeleton';
@@ -340,31 +340,80 @@ export function DataMasterPage() {
   const [selectedFotoFile, setSelectedFotoFile] = useState<File | null>(null);
   const [previewFotoUrl, setPreviewFotoUrl] = useState<string | null>(null);
 
+  const replacePreviewFotoUrl = (nextUrl: string | null) => {
+    setPreviewFotoUrl(current => {
+      if (current && current.startsWith('blob:') && current !== nextUrl) {
+        URL.revokeObjectURL(current);
+      }
+      return nextUrl;
+    });
+  };
+
+  useEffect(() => () => {
+    if (previewFotoUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(previewFotoUrl);
+    }
+  }, [previewFotoUrl]);
+
+  const uploadSantriPhoto = async (santriId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('foto', file);
+
+    return api.post(`/api/santri/${santriId}/foto`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  };
+
+  const retrySantriPhotoUpload = async () => {
+    if (!editingSantri.santri_id || !selectedFotoFile) {
+      return;
+    }
+
+    setFotoUploading(true);
+    setFotoError('');
+
+    try {
+      const response = await uploadSantriPhoto(editingSantri.santri_id, selectedFotoFile);
+      setEditingSantri(current => ({
+        ...current,
+        foto_url: response.data.foto_url,
+        foto_path: response.data.foto_path,
+      }));
+      setSelectedFotoFile(null);
+      replacePreviewFotoUrl(null);
+      setSuccessToast(response.data.message || 'Foto santri berhasil diunggah.');
+      await fetchData();
+    } catch (error: any) {
+      setFotoError(error.response?.data?.message || 'Foto belum berhasil diunggah. Coba ulang sekali lagi.');
+    } finally {
+      setFotoUploading(false);
+    }
+  };
+
   const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
+    setSelectedFotoFile(file);
+    setFotoError('');
+
     if (editingSantri.santri_id) {
-      const formData = new FormData();
-      formData.append('foto', file);
       setFotoUploading(true);
-      setFotoError('');
       try {
-        const res = await api.post(`/api/santri/${editingSantri.santri_id}/foto`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const res = await uploadSantriPhoto(editingSantri.santri_id, file);
         setEditingSantri(s => ({ ...s, foto_url: res.data.foto_url, foto_path: res.data.foto_path }));
-        setPreviewFotoUrl(res.data.foto_url);
+        setSelectedFotoFile(null);
+        replacePreviewFotoUrl(null);
         setSuccessToast(res.data.message || 'Foto santri berhasil diunggah.');
         await fetchData();
       } catch (err: any) {
-        setFotoError(err.response?.data?.message || 'Gagal mengunggah foto santri.');
+        setFotoError(err.response?.data?.message || 'Foto belum berhasil diunggah. Coba upload ulang file yang sama.');
       } finally {
         setFotoUploading(false);
       }
     } else {
-      setSelectedFotoFile(file);
-      setPreviewFotoUrl(URL.createObjectURL(file));
+      replacePreviewFotoUrl(URL.createObjectURL(file));
     }
   };
 
@@ -850,20 +899,30 @@ export function DataMasterPage() {
 
       if (isNew && newSantriId && selectedFotoFile) {
         try {
-          const formData = new FormData();
-          formData.append('foto', selectedFotoFile);
-          await api.post(`/api/santri/${newSantriId}/foto`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await uploadSantriPhoto(newSantriId, selectedFotoFile);
+          setSelectedFotoFile(null);
+          replacePreviewFotoUrl(null);
         } catch (fErr: any) {
-          console.warn('Foto upload error during creation:', fErr);
+          setEditingSantri(current => ({ ...current, santri_id: newSantriId }));
+          setFotoError(fErr.response?.data?.message || 'Data santri tersimpan, tetapi foto belum berhasil diunggah.');
+          setErrorToast('Data santri tersimpan, tetapi foto belum berhasil diunggah. Coba unggah ulang dari form ini.');
+          await fetchData();
+          await fetchVerification();
+          await fetchOrdaVerification();
+          if (isNew) {
+            setSantriSearch(savedName);
+            setSantriUnitFilter('');
+            setSantriKamarFilter('');
+            setSantriPage(1);
+          }
+          return;
         }
       }
 
       setSuccessToast(response.data.message || 'Data santri berhasil disimpan.');
       setShowSantriModal(false);
       setSelectedFotoFile(null);
-      setPreviewFotoUrl(null);
+      replacePreviewFotoUrl(null);
       await fetchData();
       await fetchVerification();
       await fetchOrdaVerification();
@@ -1086,15 +1145,17 @@ export function DataMasterPage() {
   const openSantriModal = (s?: SantriMaster) => {
     if (s) {
       setEditingSantri({ ...s });
-      setPreviewFotoUrl(s.foto_url || null);
     } else {
       setEditingSantri({ santri_id: 0, nis: '', nama: '', unit_id: 1, kamar_id: null, nama_wali: '', no_hp_wali: '' });
-      setPreviewFotoUrl(null);
     }
+    replacePreviewFotoUrl(null);
     setSelectedFotoFile(null);
     setFotoError('');
     setShowSantriModal(true);
   };
+
+  const currentSantriPhotoUrl = previewFotoUrl || resolveApiAssetUrl(editingSantri.foto_url) || null;
+  const santriModalBusy = santriLoading || fotoUploading;
 
   if (loading) return <PageSkeleton />;
 
@@ -1180,7 +1241,7 @@ export function DataMasterPage() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         {s.foto_url ? (
-                          <img src={s.foto_url} alt={s.nama} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #cbd5e1' }} />
+                          <img src={resolveApiAssetUrl(s.foto_url) || ''} alt={s.nama} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #cbd5e1' }} />
                         ) : (
                           <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e2e8f0', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                             {s.nama ? s.nama.charAt(0).toUpperCase() : '?'}
@@ -1302,7 +1363,7 @@ export function DataMasterPage() {
                     <td>{item.alasan.length ? item.alasan.join('; ') : 'Perlu keputusan admin'}</td>
                     <td><button className="secondary-button" onClick={() => {
                       const santri = santriList.find(row => row.santri_id === item.santri_id);
-                      if (santri) { setEditingSantri({ ...santri }); setShowSantriModal(true); }
+                      if (santri) openSantriModal(santri);
                     }}>Verifikasi</button></td>
                   </tr>
                 ))}
@@ -1368,7 +1429,7 @@ export function DataMasterPage() {
                     <td>{item.alasan.join('; ')}</td>
                     <td><button className="secondary-button" onClick={() => {
                       const santri = santriList.find(row => row.santri_id === item.santri_id);
-                      if (santri) { setEditingSantri({ ...santri }); setShowSantriModal(true); }
+                      if (santri) openSantriModal(santri);
                     }}>Tentukan ORDA</button></td>
                   </tr>
                 ))}
@@ -1395,7 +1456,7 @@ export function DataMasterPage() {
       {/* FORM MODAL / SECTION UNTUK TAMBAH / EDIT SANTRI */}
       {showSantriModal && (
         <div className="santri-modal-backdrop" onMouseDown={event => {
-          if (event.target === event.currentTarget && !santriLoading) setShowSantriModal(false);
+          if (event.target === event.currentTarget && !santriModalBusy) setShowSantriModal(false);
         }}>
           <section className="santri-modal" role="dialog" aria-modal="true" aria-labelledby="santri-modal-title">
             <header className="santri-modal-header">
@@ -1403,13 +1464,13 @@ export function DataMasterPage() {
                 <h2 id="santri-modal-title">{editingSantri.santri_id ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h2>
                 {editingSantri.no_id_induk && <p>No. ID {editingSantri.no_id_induk}</p>}
               </div>
-              <button type="button" className="santri-modal-close" aria-label="Tutup formulir" disabled={santriLoading} onClick={() => setShowSantriModal(false)}>×</button>
+              <button type="button" className="santri-modal-close" aria-label="Tutup formulir" disabled={santriModalBusy} onClick={() => setShowSantriModal(false)}>×</button>
             </header>
             <form id="santri-form" onSubmit={saveSantri} className="santri-modal-form">
               <div className="santri-modal-body">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 8 }}>
-                  {previewFotoUrl || editingSantri.foto_url ? (
-                    <img src={previewFotoUrl || editingSantri.foto_url || ''} alt={editingSantri.nama || 'Foto santri'} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #0f6e56', flexShrink: 0 }} />
+                  {currentSantriPhotoUrl ? (
+                    <img src={currentSantriPhotoUrl} alt={editingSantri.nama || 'Foto santri'} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #0f6e56', flexShrink: 0 }} />
                   ) : (
                     <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#cbd5e1', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700, flexShrink: 0 }}>
                       {editingSantri.nama ? editingSantri.nama.charAt(0).toUpperCase() : '?'}
@@ -1424,9 +1485,25 @@ export function DataMasterPage() {
                       disabled={fotoUploading}
                       style={{ fontSize: 12 }}
                     />
-                    {selectedFotoFile && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Foto dipilih: {selectedFotoFile.name} (Akan diunggah saat disimpan)</p>}
+                    {selectedFotoFile && (
+                      <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>
+                        {editingSantri.santri_id
+                          ? `File siap diunggah ulang: ${selectedFotoFile.name}`
+                          : `Foto dipilih: ${selectedFotoFile.name} (Akan diunggah saat simpan data)`}
+                      </p>
+                    )}
                     {fotoUploading && <p style={{ fontSize: 11, color: '#0f6e56', marginTop: 4 }}>Mengunggah foto...</p>}
                     {fotoError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{fotoError}</p>}
+                    {editingSantri.santri_id && selectedFotoFile && !fotoUploading && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{ marginTop: 8, padding: '6px 12px', fontSize: 12 }}
+                        onClick={() => void retrySantriPhotoUpload()}
+                      >
+                        Coba Upload Ulang
+                      </button>
+                    )}
                     <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Format JPG, PNG, WEBP (Maks 5 MB)</p>
                   </div>
                 </div>
@@ -1579,7 +1656,7 @@ export function DataMasterPage() {
               </div>
             </form>
             <footer className="santri-modal-footer">
-              <button type="button" className="secondary-button" disabled={santriLoading} onClick={() => setShowSantriModal(false)}>Batal</button>
+              <button type="button" className="secondary-button" disabled={santriModalBusy} onClick={() => setShowSantriModal(false)}>Batal</button>
               <button type="submit" form="santri-form" className="primary-button" disabled={santriLoading}>{santriLoading ? 'Menyimpan...' : 'Simpan Data'}</button>
             </footer>
           </section>

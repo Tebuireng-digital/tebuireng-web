@@ -15,11 +15,9 @@ const PelanggaranFormPage = lazy(() => import('./pages/PelanggaranFormPage').the
 const PelanggaranListPage = lazy(() => import('./pages/PelanggaranListPage').then(module => ({ default: module.PelanggaranListPage })));
 const PrestasiListPage = lazy(() => import('./pages/PrestasiListPage').then(module => ({ default: module.PrestasiListPage })));
 const CatatGerbangPage = lazy(() => import('./pages/CatatGerbangPage').then(module => ({ default: module.CatatGerbangPage })));
-const PerizinanListPage = lazy(() => import('./pages/PerizinanListPage').then(module => ({ default: module.PerizinanListPage })));
 const DataMasterPage = lazy(() => import('./pages/DataMasterPage').then(module => ({ default: module.DataMasterPage })));
 const LaporanPage = lazy(() => import('./pages/LaporanPage').then(module => ({ default: module.LaporanPage })));
 const GantiPasswordPage = lazy(() => import('./pages/GantiPasswordPage').then(module => ({ default: module.GantiPasswordPage })));
-const RekapKelasPage = lazy(() => import('./pages/RekapKelasPage').then(module => ({ default: module.RekapKelasPage })));
 const RaportInputPage = lazy(() => import('./pages/RaportInputPage').then(module => ({ default: module.RaportInputPage })));
 const RaportViewPage = lazy(() => import('./pages/RaportViewPage').then(module => ({ default: module.RaportViewPage })));
 const UbudiyahFormPage = lazy(() => import('./pages/UbudiyahFormPage').then(module => ({ default: module.UbudiyahFormPage })));
@@ -53,26 +51,117 @@ const ABSENSI_CONFIG: Record<string, { nama: string; icon: IconName }> = {
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
-    home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9h13v-9M9 19v-5h6v5"/></>,
-    school: <><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></>,
-    room: <><path d="M3 21v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8"/><path d="M5 11V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4"/><path d="M3 17h18"/></>,
-    quran: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
-    madin: <><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></>,
-    takhasus: <><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></>,
-    warning: <><path d="M12 3 2.8 19h18.4L12 3Z"/><path d="M12 9v4M12 16.5h.01"/></>,
-    verify: <><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.3 2.3 4.8-5"/></>,
-    gate: <><path d="M4 20V8l8-4 8 4v12M8 20V10h8v10M8 14h8"/></>,
-    database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
-    report: <><path d="M6 3h9l3 3v15H6zM14 3v4h4"/><path d="M9 16v-3M12 16V9M15 16v-5"/></>,
-    lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
-    menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
-    logout: <><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></>,
-    more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
-    raport: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
-    ubudiyah: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
+    home: (
+      <path d="M39.5,43h-9c-1.381,0-2.5-1.119-2.5-2.5v-9c0-1.105-0.895-2-2-2h-4c-1.105,0-2,0.895-2,2v9c0,1.381-1.119,2.5-2.5,2.5h-9 C7.119,43,6,41.881,6,40.5V21.413c0-2.299,1.054-4.471,2.859-5.893L23.071,4.321c0.545-0.428,1.313-0.428,1.857,0L39.142,15.52 C40.947,16.942,42,19.113,42,21.411V40.5C42,41.881,40.881,43,39.5,43z" />
+    ),
+    quran: (
+      <>
+        <path d="M21.5,13.2 C15.5,10.8 9.5,11.2 6.8,11.6 C5.2,11.9 4,13.2 4,14.8 L4,34.2 C4,35.9 5.4,37.3 7.1,37.1 C10.2,36.6 16.2,36.2 21.5,38.8 Z" />
+        <path d="M26.5,13.2 C32.5,10.8 38.5,11.2 41.2,11.6 C42.8,11.9 44,13.2 44,14.8 L44,34.2 C44,35.9 42.6,37.3 40.9,37.1 C37.8,36.6 31.8,36.2 26.5,38.8 Z" />
+        <path d="M23,10 h2 v13 l-1,-1.5 l-1,1.5 Z" />
+      </>
+    ),
+    warning: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M21.5,5.8 L4.2,36.8 C2.9,39.1 4.6,42 7.2,42 L40.8,42 C43.4,42 45.1,39.1 43.8,36.8 L26.5,5.8 C25.2,3.5 22.8,3.5 21.5,5.8 Z M21.5,18 C21.5,16.6 22.6,15.5 24,15.5 C25.4,15.5 26.5,16.6 26.5,18 L26,28 C26,29.1 25.1,30 24,30 C22.9,30 22,29.1 22,28 Z M24,33 C25.4,33 26.5,34.1 26.5,35.5 C26.5,36.9 25.4,38 24,38 C22.6,38 21.5,36.9 21.5,35.5 C21.5,34.1 22.6,33 24,33 Z"
+      />
+    ),
+    report: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11,5 C9.3,5 8,6.3 8,8 L8,40 C8,41.7 9.3,43 11,43 L37,43 C38.7,43 40,41.7 40,40 L40,16 L29,5 Z M30,5 L30,14 C30,15.1 30.9,16 32,16 L40,16 Z M14,30.5 C14,29.7 14.7,29 15.5,29 L18,29 C18.8,29 19.5,29.7 19.5,30.5 L19.5,37.5 L14,37.5 Z M21.2,25 C21.2,24.2 21.9,23.5 22.7,23.5 L25.2,23.5 C26,23.5 26.7,24.2 26.7,25 L26.7,37.5 L21.2,37.5 Z M28.5,19 C28.5,18.2 29.2,17.5 30,17.5 L32.5,17.5 C33.3,17.5 34,18.2 34,19 L34,37.5 L28.5,37.5 Z"
+      />
+    ),
+    gate: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M24,4 L5,13 L5,17 L43,17 L43,13 Z M7,19 L7,43 L16.5,43 L16.5,28 C16.5,23.9 19.9,20.5 24,20.5 C28.1,20.5 31.5,23.9 31.5,28 L31.5,43 L41,43 L41,19 Z"
+      />
+    ),
+    raport: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11,5 C9.3,5 8,6.3 8,8 L8,40 C8,41.7 9.3,43 11,43 L37,43 C38.7,43 40,41.7 40,40 L40,16 L29,5 Z M30,5 L30,14 C30,15.1 30.9,16 32,16 L40,16 Z M14,22 C14,21.2 14.7,20.5 15.5,20.5 L26,20.5 C26.8,20.5 27.5,21.2 27.5,22 C27.5,22.8 26.8,23.5 26,23.5 L15.5,23.5 C14.7,23.5 14,22.8 14,22 Z M14,28 C14,27.2 14.7,26.5 15.5,26.5 L33.5,26.5 C34.3,26.5 35,27.2 35,28 C35,28.8 34.3,29.5 33.5,29.5 L15.5,29.5 C14.7,29.5 14,28.8 14,28 Z M14,34 C14,33.2 14.7,32.5 15.5,32.5 L33.5,32.5 C34.3,32.5 35,33.2 35,34 C35,34.8 34.3,35.5 33.5,35.5 L15.5,35.5 C14.7,35.5 14,34.8 14,34 Z"
+      />
+    ),
+    ubudiyah: (
+      <path d="M24,4.5 C24.6,4.5 25.1,4.9 25.4,5.5 L30.3,16.5 C30.6,17.2 31.3,17.7 32,17.8 L44,19.3 C45.3,19.5 45.8,21.1 44.8,22 L36,29.9 C35.4,30.4 35.2,31.2 35.4,32 L37.7,43.9 C38,45.2 36.6,46.2 35.5,45.5 L24.9,39.6 C24.3,39.3 23.7,39.3 23.1,39.6 L12.5,45.5 C11.4,46.2 10,45.2 10.3,43.9 L12.6,32 C12.8,31.2 12.6,30.4 12,29.9 L3.2,22 C2.2,21.1 2.7,19.5 4,19.3 L16,17.8 C16.7,17.7 17.4,17.2 17.7,16.5 L22.6,5.5 C22.9,4.9 23.4,4.5 24,4.5 Z" />
+    ),
+    verify: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M24,4 C13,4 4,13 4,24 C4,35 13,44 24,44 C35,44 44,35 44,24 C44,13 35,4 24,4 Z M20.9,33.1 C20.3,33.7 19.3,33.7 18.7,33.1 L12.9,27.3 C12.3,26.7 12.3,25.7 12.9,25.1 C13.5,24.5 14.5,24.5 15.1,25.1 L19.8,29.8 L32.9,16.7 C33.5,16.1 34.5,16.1 35.1,16.7 C35.7,17.3 35.7,18.3 35.1,18.9 L20.9,33.1 Z"
+      />
+    ),
+    database: (
+      <path d="M40,11 C40,7.7 32.8,5 24,5 C15.2,5 8,7.7 8,11 L8,37 C8,40.3 15.2,43 24,43 C32.8,43 40,40.3 40,37 Z M24,8 C31.2,8 37,9.8 37,11 C37,12.2 31.2,14 24,14 C16.8,14 11,12.2 11,11 C11,9.8 16.8,8 24,8 Z M11,19 C14.3,21.2 19,22 24,22 C29,22 33.7,21.2 37,19 L37,23 C37,25.2 31.2,27 24,27 C16.8,27 11,25.2 11,23 Z M11,31 C14.3,33.2 19,34 24,34 C29,34 33.7,33.2 37,31 L37,36 C37,38.2 31.2,40 24,40 C16.8,40 11,38.2 11,36 Z" />
+    ),
+    lock: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M16,18 L16,13 C16,8.6 19.6,5 24,5 C28.4,5 32,8.6 32,13 L32,18 L35,18 C36.7,18 38,19.3 38,21 L38,40 C38,41.7 36.7,43 35,43 L13,43 C11.3,43 10,41.7 10,40 L10,21 C10,19.3 11.3,18 13,18 Z M20.5,18 L27.5,18 L27.5,13 C27.5,11.1 25.9,9.5 24,9.5 C22.1,9.5 20.5,11.1 20.5,13 Z M24,26 C22.3,26 21,27.3 21,29 C21,30.2 21.7,31.2 22.7,31.7 L22.2,36 C22.1,36.6 22.5,37 23,37 L25,37 C25.5,37 25.9,36.6 25.8,36 L25.3,31.7 C26.3,31.2 27,30.2 27,29 C27,27.3 25.7,26 24,26 Z"
+      />
+    ),
+    logout: (
+      <path d="M10,8 C10,6.3 11.3,5 13,5 L24,5 C25.7,5 27,6.3 27,8 L27,13 L22.5,13 L22.5,9.5 L14.5,9.5 L14.5,38.5 L22.5,38.5 L22.5,35 L27,35 L27,40 C27,41.7 25.7,43 24,43 L13,43 C11.3,43 10,41.7 10,40 Z M28,21.5 L28,16 L39.5,24 L28,32 L28,26.5 L19,26.5 L19,21.5 Z" />
+    ),
+    school: (
+      <>
+        <path d="M24,7 L4,17 L24,27 L44,17 Z" />
+        <path d="M11,23.5 L11,33 C11,37.5 16.8,41 24,41 C31.2,41 37,37.5 37,33 L37,23.5 L33,25.5 L33,32 C33,34.5 29,37 24,37 C19,37 15,34.5 15,32 L15,25.5 Z" />
+        <path d="M40.5,19 L40.5,33 C39.5,33.5 39,34.5 39,35.5 C39,37 40.2,38 41.5,38 C42.8,38 44,37 44,35.5 C44,34.5 43.5,33.5 42.5,33 L42.5,18 Z" />
+      </>
+    ),
+    room: (
+      <path d="M6,13 C6,11.3 7.3,10 9,10 L11,10 C12.7,10 14,11.3 14,13 L14,22 L34,22 L34,13 C34,11.3 35.3,10 37,10 L39,10 C40.7,10 42,11.3 42,13 L42,37 L38,37 L38,33 L10,33 L10,37 L6,37 Z M14,24 L34,24 C35.7,24 37,25.3 37,27 L37,30 L11,30 L11,27 C11,25.3 12.3,24 14,24 Z M13,16 C13,14.9 13.9,14 15,14 L20,14 C21.1,14 22,14.9 22,16 L22,20 L13,20 Z M26,16 C26,14.9 26.9,14 28,14 L33,14 C34.1,14 35,14.9 35,16 L35,20 L26,20 Z" />
+    ),
+    madin: (
+      <path d="M9,5 C7.3,5 6,6.3 6,8 L6,40 C6,41.7 7.3,43 9,43 L37,43 C39.8,43 42,40.8 42,38 L42,8 C42,6.3 40.7,5 39,5 L9,5 Z M37,39 L10,39 C9.4,39 9,38.6 9,38 C9,37.4 9.4,37 10,37 L37,37 C38.1,37 39,37.9 39,39 C38.4,39 37.7,39 37,39 Z M14,13 H34 V16 H14 Z M14,20 H34 V23 H14 Z M14,27 H28 V30 H14 Z" />
+    ),
+    takhasus: (
+      <>
+        <path d="M26.5,5 C15.7,5 7,13.7 7,24.5 C7,35.3 15.7,44 26.5,44 C33.1,44 38.9,40.7 42.4,35.7 C33.2,36.5 25.2,29.3 25.2,20 C25.2,13.6 28.5,8 33.6,5.3 C31.3,5.1 28.9,5 26.5,5 Z" />
+        <path d="M37,13 L38.5,17.5 L43,17.5 L39.5,20 L41,24.5 L37,22 L33,24.5 L34.5,20 L31,17.5 L35.5,17.5 Z" />
+      </>
+    ),
+    menu: (
+      <path d="M6,10 C6,8.9 6.9,8 8,8 L40,8 C41.1,8 42,8.9 42,10 C42,11.1 41.1,12 40,12 L8,12 C6.9,12 6,11.1 6,10 Z M6,24 C6,22.9 6.9,22 8,22 L40,22 C41.1,22 42,22.9 42,24 C42,25.1 41.1,26 40,26 L8,26 C6.9,26 6,25.1 6,24 Z M6,38 C6,36.9 6.9,36 8,36 L40,36 C41.1,36 42,36.9 42,38 C42,39.1 41.1,40 40,40 L8,40 C6.9,40 6,39.1 6,38 Z" />
+    ),
+    more: (
+      <path d="M12,24 C12,21.8 13.8,20 16,20 C18.2,20 20,21.8 20,24 C20,26.2 18.2,28 16,28 C13.8,28 12,26.2 12,24 Z M22,24 C22,21.8 23.8,20 26,20 C28.2,20 30,21.8 30,24 C30,26.2 28.2,28 26,28 C23.8,28 22,26.2 22,24 Z M32,24 C32,21.8 33.8,20 36,20 C38.2,20 40,21.8 40,24 C40,26.2 38.2,28 36,28 C33.8,28 32,26.2 32,24 Z" />
+    ),
   };
-  return <svg className="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+
+  return (
+    <svg
+      className={`nav-icon nav-icon-${name}`}
+      aria-hidden="true"
+      viewBox="0 0 48 48"
+      fill="currentColor"
+    >
+      {paths[name]}
+    </svg>
+  );
 }
+
+function ChevronIcon({ isOpen }: { isOpen: boolean }) {
+  return (
+    <span className={`sidebar-chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </span>
+  );
+}
+
+
 
 function Layout() {
   const { user, logout, loading } = useAuth();
@@ -93,6 +182,42 @@ function Layout() {
   const lastScrollYRef = useRef(0);
 
   const isAttendanceRosterPage = location.pathname.startsWith('/absensi/');
+
+  const railRef = useRef<HTMLElement>(null);
+  const unhoverTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+
+    const handleMouseEnter = () => {
+      if (unhoverTimerRef.current) {
+        window.clearTimeout(unhoverTimerRef.current);
+        unhoverTimerRef.current = null;
+      }
+      el.classList.add('is-hovered');
+    };
+
+    const handleMouseLeave = () => {
+      if (unhoverTimerRef.current) {
+        window.clearTimeout(unhoverTimerRef.current);
+      }
+      unhoverTimerRef.current = window.setTimeout(() => {
+        el.classList.remove('is-hovered');
+      }, 380);
+    };
+
+    el.addEventListener('mouseenter', handleMouseEnter);
+    el.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      if (unhoverTimerRef.current) {
+        window.clearTimeout(unhoverTimerRef.current);
+      }
+      el.removeEventListener('mouseenter', handleMouseEnter);
+      el.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
@@ -128,7 +253,6 @@ function Layout() {
   }, []);
   const [isAbsensiMenuOpen, setIsAbsensiMenuOpen] = useState(() => location.pathname.startsWith('/absensi-kegiatan') || (location.pathname === '/dashboard' && !!currentJenis));
   const [isPelanggaranMenuOpen, setIsPelanggaranMenuOpen] = useState(() => location.pathname.startsWith('/pelanggaran'));
-  const [isPerizinanMenuOpen, setIsPerizinanMenuOpen] = useState(() => location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang');
   const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(() => location.pathname.startsWith('/data-master'));
   const [isRaportMenuOpen, setIsRaportMenuOpen] = useState(true);
   const [isVerificationMenuOpen, setIsVerificationMenuOpen] = useState(() => location.pathname.startsWith('/verifikasi-data'));
@@ -136,6 +260,12 @@ function Layout() {
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/pelanggaran')) {
+      setIsPelanggaranMenuOpen(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const timers = new WeakMap<EventTarget, number>();
@@ -238,7 +368,6 @@ function Layout() {
       const next = !open;
       if (next) {
         setIsPelanggaranMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
@@ -251,20 +380,6 @@ function Layout() {
       const next = !open;
       if (next) {
         setIsAbsensiMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
-        setIsMasterMenuOpen(false);
-        setIsVerificationMenuOpen(false);
-        setIsUbudiyahMenuOpen(false);
-      }
-      return next;
-    });
-  };
-  const togglePerizinanMenu = () => {
-    setIsPerizinanMenuOpen(open => {
-      const next = !open;
-      if (next) {
-        setIsAbsensiMenuOpen(false);
-        setIsPelanggaranMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
@@ -278,7 +393,6 @@ function Layout() {
       if (next) {
         setIsAbsensiMenuOpen(false);
         setIsPelanggaranMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
         setIsRaportMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
@@ -292,7 +406,6 @@ function Layout() {
       if (next) {
         setIsAbsensiMenuOpen(false);
         setIsPelanggaranMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
@@ -306,7 +419,6 @@ function Layout() {
       if (next) {
         setIsAbsensiMenuOpen(false);
         setIsPelanggaranMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
       }
@@ -319,7 +431,6 @@ function Layout() {
       if (next) {
         setIsAbsensiMenuOpen(false);
         setIsPelanggaranMenuOpen(false);
-        setIsPerizinanMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsRaportMenuOpen(false);
         setIsVerificationMenuOpen(false);
@@ -353,7 +464,7 @@ function Layout() {
     <div className="premium-layout">
       {/* Mobile Header */}
       <header className="mobile-header">
-        <div className="mobile-brand"><span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span><div><h2 className="mobile-header-title">SIMANTEB</h2><small>Sistem Manajemen Tebuireng</small></div></div>
+        <div className="mobile-brand"><span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span><div><h2 className="mobile-header-title">SIMANTEB</h2><small>Sistem Informasi Manajemen Tebu Ireng</small></div></div>
         <button ref={mobileMenuButtonRef} className="mobile-menu-btn" aria-label="Buka menu navigasi" aria-expanded={isMobileMenuOpen} aria-controls="primary-navigation" onClick={openMenu}>
           <NavIcon name="menu" />
         </button>
@@ -362,21 +473,28 @@ function Layout() {
       {/* Sidebar Overlay for Mobile */}
       <div className={`sidebar-overlay ${isMobileMenuOpen ? 'open' : ''}`} onClick={closeMenu}></div>
 
-      {/* Sidebar / Navigation */}
-      <div
-        className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''}`}
-        aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
-        inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <div className="sidebar-brand">
-            <span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span>
-            <div className="sidebar-brand-text"><h2 className="sidebar-title">SIMANTEB</h2><p>Sistem Manajemen Tebuireng</p></div>
+      {/* Sidebar Rail / Layout Container for Desktop */}
+      <aside ref={railRef} className="sidebar-rail collapsed">
+        <div
+          className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''} collapsed`}
+          aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+          inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+        >
+          <div className="sidebar-header">
+            <div className="sidebar-brand">
+              <span className="brand-mark"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB" /></span>
+              <div className="sidebar-brand-text">
+                <h2 className="sidebar-title">SIMANTEB</h2>
+                <p className="sidebar-subtitle">Sistem Informasi Manajemen Tebu Ireng</p>
+              </div>
+            </div>
+            <div className="sidebar-header-actions">
+              <button ref={mobileCloseButtonRef} className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
           </div>
-          <button ref={mobileCloseButtonRef} className="mobile-close-btn" aria-label="Tutup menu navigasi" onClick={closeMenu}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
+          <div className="sidebar-divider" aria-hidden="true" />
 
         <nav id="primary-navigation" className="sidebar-nav" aria-label="Navigasi sidebar">
           <Link
@@ -396,13 +514,14 @@ function Layout() {
                 aria-label="Buka atau tutup Menu Absensi"
                 aria-expanded={isAbsensiMenuOpen}
                 aria-controls="absensi-subnav"
-                className={`sidebar-nav-link sidebar-master-trigger ${(location.pathname.startsWith('/absensi-kegiatan') || (location.pathname === '/dashboard' && !!currentJenis)) ? 'active' : ''}`}
+                className={`sidebar-nav-link sidebar-master-trigger ${(location.pathname.startsWith('/absensi-kegiatan') || location.pathname === '/absensi-histori' || location.pathname === '/rekap-kelas' || (location.pathname === '/dashboard' && !!currentJenis)) ? 'active' : ''}`}
                 onClick={toggleAbsensiMenu}
               >
                 <span className="nav-label"><NavIcon name="quran"/><span>Menu Absensi</span></span>
-                <span aria-hidden="true">{isAbsensiMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isAbsensiMenuOpen} />
               </button>
               <div id="absensi-subnav" className={`sidebar-subnav ${isAbsensiMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isAbsensiMenuOpen}>
+                <div className="sidebar-subnav-inner">
                   {userAbsensiMenus.map(item => {
                     const isActive = (location.pathname === '/dashboard' && currentJenis === item.jenis) ||
                                      (location.pathname === `/absensi-kegiatan/${item.jenis}`);
@@ -416,8 +535,20 @@ function Layout() {
                       >
                         {item.nama}
                       </Link>
-                  );
-                })}
+                    );
+                  })}
+                  {['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) && (
+                    <Link
+                      to="/absensi-histori"
+                      className={`sidebar-subnav-link ${location.pathname === '/absensi-histori' || location.pathname === '/rekap-kelas' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/absensi-histori' || location.pathname === '/rekap-kelas' ? 'page' : undefined}
+                      onClick={closeMenu}
+                      style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', marginTop: 4, paddingTop: 6 }}
+                    >
+                      Rekap &amp; Histori
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -434,9 +565,10 @@ function Layout() {
                 onClick={togglePelanggaranMenu}
               >
                 <span className="nav-label"><NavIcon name="warning"/><span>Pelanggaran</span></span>
-                <span aria-hidden="true">{isPelanggaranMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isPelanggaranMenuOpen} />
               </button>
               <div id="pelanggaran-subnav" className={`sidebar-subnav ${isPelanggaranMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isPelanggaranMenuOpen}>
+                <div className="sidebar-subnav-inner">
                   {['Admin', 'Keamanan', 'Pembina Kamar'].includes(user.jabatan) && (
                     <Link
                       to="/pelanggaran/baru"
@@ -455,7 +587,17 @@ function Layout() {
                   >
                     Daftar Pelanggaran
                   </Link>
-                  {['Admin', 'Keamanan'].includes(user.jabatan) && <Link to="/pelanggaran/master" className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/master' ? 'active' : ''}`} onClick={closeMenu}>Master Pelanggaran</Link>}
+                  {['Admin', 'Keamanan'].includes(user.jabatan) && (
+                    <Link
+                      to="/pelanggaran/master"
+                      className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/master' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/pelanggaran/master' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Master Pelanggaran
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -471,49 +613,19 @@ function Layout() {
             </Link>
           )}
 
-          {/* KELOMPOK MENU PERIZINAN & GERBANG (COLLAPSIBLE) */}
+          {/* MENU PERIZINAN & GERBANG (DIRECT SINGLE LINK) */}
           {['Admin', 'Keamanan'].includes(user.jabatan) && (
-            <div className="sidebar-master-menu">
-              <button
-                type="button"
-                aria-label="Buka atau tutup menu Perizinan dan Gerbang"
-                aria-expanded={isPerizinanMenuOpen}
-                aria-controls="perizinan-subnav"
-                className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'active' : ''}`}
-                onClick={togglePerizinanMenu}
-              >
-                <span className="nav-label"><NavIcon name="gate"/><span>Perizinan & Gerbang</span></span>
-                <span aria-hidden="true">{isPerizinanMenuOpen ? '⌃' : '⌄'}</span>
-              </button>
-              <div id="perizinan-subnav" className={`sidebar-subnav ${isPerizinanMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isPerizinanMenuOpen}>
-                  {['Admin', 'Keamanan'].includes(user.jabatan) && (
-                    <Link
-                      to="/catat-gerbang"
-                      className={`sidebar-subnav-link ${location.pathname === '/catat-gerbang' ? 'active' : ''}`}
-                      aria-current={location.pathname === '/catat-gerbang' ? 'page' : undefined}
-                      onClick={closeMenu}
-                    >
-                      Catat Izin & Gerbang
-                    </Link>
-                  )}
-                  <Link
-                    to="/perizinan/semua"
-                    className={`sidebar-subnav-link ${location.pathname === '/perizinan/semua' || location.pathname === '/perizinan' ? 'active' : ''}`}
-                    aria-current={location.pathname === '/perizinan/semua' || location.pathname === '/perizinan' ? 'page' : undefined}
-                    onClick={closeMenu}
-                  >
-                    Daftar Perizinan
-                  </Link>
-              </div>
-            </div>
+            <Link
+              to="/perizinan"
+              className={`sidebar-nav-link ${location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'active' : ''}`}
+              aria-current={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'page' : undefined}
+              onClick={closeMenu}
+            >
+              <NavIcon name="gate" />
+              <span>Perizinan &amp; Gerbang</span>
+            </Link>
           )}
 
-          {['Admin', 'Wali Kelas'].includes(user.jabatan) && (
-            <Link to="/rekap-kelas" className={`sidebar-nav-link ${location.pathname === '/rekap-kelas' ? 'active' : ''}`} aria-current={location.pathname === '/rekap-kelas' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Rekap Kelas</span></Link>
-          )}
-          {['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) && (
-            <Link to="/absensi-histori" className={`sidebar-nav-link ${location.pathname === '/absensi-histori' ? 'active' : ''}`} aria-current={location.pathname === '/absensi-histori' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="report"/><span>Histori Absensi</span></Link>
-          )}
 
           {/* KELOMPOK MENU RAPORT PENGAJIAN (COLLAPSIBLE) */}
           {Boolean(user) && (
@@ -527,9 +639,10 @@ function Layout() {
                 onClick={toggleRaportMenu}
               >
                 <span className="nav-label"><NavIcon name="raport"/><span>Raport Pengajian</span></span>
-                <span aria-hidden="true">{isRaportMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isRaportMenuOpen} />
               </button>
               <div id="raport-subnav" className={`sidebar-subnav ${isRaportMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isRaportMenuOpen}>
+                <div className="sidebar-subnav-inner">
                   {['Admin', 'Piket Pengajian'].includes(user.jabatan) && (
                     <Link
                       to="/raport/input"
@@ -548,6 +661,7 @@ function Layout() {
                   >
                     Lihat Raport
                   </Link>
+                </div>
               </div>
             </div>
           )}
@@ -564,40 +678,42 @@ function Layout() {
                 onClick={toggleUbudiyahMenu}
               >
                 <span className="nav-label"><NavIcon name="ubudiyah"/><span>Menu Ubudiyah</span></span>
-                <span aria-hidden="true">{isUbudiyahMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isUbudiyahMenuOpen} />
               </button>
               <div id="ubudiyah-subnav" className={`sidebar-subnav ${isUbudiyahMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isUbudiyahMenuOpen}>
-                {!ubudiyahReady && <p className="sidebar-subnav-notice" role="status">Modul belum siap</p>}
-                {ubudiyahReady && <>
-                  {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+                <div className="sidebar-subnav-inner">
+                  {!ubudiyahReady && <p className="sidebar-subnav-notice" role="status">Modul belum siap</p>}
+                  {ubudiyahReady && <>
+                    {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+                      <Link
+                        to="/ubudiyah/input"
+                        className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/input' ? 'active' : ''}`}
+                        aria-current={location.pathname === '/ubudiyah/input' ? 'page' : undefined}
+                        onClick={closeMenu}
+                      >
+                        Input Ubudiyah
+                      </Link>
+                    )}
                     <Link
-                      to="/ubudiyah/input"
-                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/input' ? 'active' : ''}`}
-                      aria-current={location.pathname === '/ubudiyah/input' ? 'page' : undefined}
+                      to="/ubudiyah/lihat"
+                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/lihat' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/ubudiyah/lihat' ? 'page' : undefined}
                       onClick={closeMenu}
                     >
-                      Input Ubudiyah
+                      Lihat Ubudiyah
                     </Link>
-                  )}
-                  <Link
-                    to="/ubudiyah/lihat"
-                    className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/lihat' ? 'active' : ''}`}
-                    aria-current={location.pathname === '/ubudiyah/lihat' ? 'page' : undefined}
-                    onClick={closeMenu}
-                  >
-                    Lihat Ubudiyah
-                  </Link>
-                  {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
-                    <Link
-                      to="/ubudiyah/master"
-                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/master' ? 'active' : ''}`}
-                      aria-current={location.pathname === '/ubudiyah/master' ? 'page' : undefined}
-                      onClick={closeMenu}
-                    >
-                      Master Kriteria
-                    </Link>
-                  )}
-                </>}
+                    {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+                      <Link
+                        to="/ubudiyah/master"
+                        className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/master' ? 'active' : ''}`}
+                        aria-current={location.pathname === '/ubudiyah/master' ? 'page' : undefined}
+                        onClick={closeMenu}
+                      >
+                        Master Kriteria
+                      </Link>
+                    )}
+                  </>}
+                </div>
               </div>
             </div>
           )}
@@ -606,11 +722,13 @@ function Layout() {
             <div className="sidebar-master-menu">
               <button type="button" aria-label="Buka atau tutup Verifikasi Data" aria-expanded={isVerificationMenuOpen} aria-controls="verification-subnav" className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/verifikasi-data') ? 'active' : ''}`} onClick={toggleVerificationMenu}>
                 <span className="nav-label"><NavIcon name="verify"/><span>Verifikasi Data</span>{hasVerificationAttention && <span className="nav-attention-dot" aria-label="Masih ada antrean verifikasi"/>}</span>
-                <span aria-hidden="true">{isVerificationMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isVerificationMenuOpen} />
               </button>
               <div id="verification-subnav" className={`sidebar-subnav ${isVerificationMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isVerificationMenuOpen}>
-                <Link to="/verifikasi-data/santri" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/santri' ? 'active' : ''}`} onClick={closeMenu}>Verifikasi data santri{verificationAttention.santri > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.santri} data perlu diverifikasi`}/>}</Link>
-                <Link to="/verifikasi-data/review" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/review' ? 'active' : ''}`} onClick={closeMenu}>Review kemiripan data{verificationAttention.review > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.review} kemiripan data perlu diverifikasi`}/>}</Link>
+                <div className="sidebar-subnav-inner">
+                  <Link to="/verifikasi-data/santri" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/santri' ? 'active' : ''}`} onClick={closeMenu}>Verifikasi data santri{verificationAttention.santri > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.santri} data perlu diverifikasi`}/>}</Link>
+                  <Link to="/verifikasi-data/review" className={`sidebar-subnav-link ${location.pathname === '/verifikasi-data/review' ? 'active' : ''}`} onClick={closeMenu}>Review kemiripan data{verificationAttention.review > 0 && <span className="nav-attention-dot" aria-label={`${verificationAttention.review} kemiripan data perlu diverifikasi`}/>}</Link>
+                </div>
               </div>
             </div>
           )}
@@ -626,18 +744,20 @@ function Layout() {
                 onClick={toggleMasterMenu}
               >
                 <span className="nav-label"><NavIcon name="database"/><span>Data Master</span></span>
-                <span aria-hidden="true">{isMasterMenuOpen ? '⌃' : '⌄'}</span>
+                <ChevronIcon isOpen={isMasterMenuOpen} />
               </button>
               <div id="master-subnav" className={`sidebar-subnav ${isMasterMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isMasterMenuOpen}>
-                <Link to="/data-master/santri" className={`sidebar-subnav-link ${location.pathname === '/data-master/santri' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/santri' ? 'page' : undefined} onClick={closeMenu}>Data santri</Link>
-                <Link to="/data-master/alumni" className={`sidebar-subnav-link ${location.pathname === '/data-master/alumni' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/alumni' ? 'page' : undefined} onClick={closeMenu}>Data alumni</Link>
-                <Link to="/data-master/organisasi-daerah" className={`sidebar-subnav-link ${location.pathname === '/data-master/organisasi-daerah' ? 'active' : ''}`} onClick={closeMenu}>Data ORDA</Link>
-                <Link to="/data-master/ekstrakurikuler" className={`sidebar-subnav-link ${location.pathname === '/data-master/ekstrakurikuler' ? 'active' : ''}`} onClick={closeMenu}>Data ekstrakurikuler</Link>
-                <Link to="/data-master/wisma" className={`sidebar-subnav-link ${location.pathname === '/data-master/wisma' ? 'active' : ''}`} onClick={closeMenu}>Data wisma</Link>
-                <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
-                <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
-                <Link to="/data-master/wa-bot" className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`} onClick={closeMenu}>Pengaturan Bot WA</Link>
-                <Link to="/periode-akademik" className={`sidebar-subnav-link ${location.pathname === '/periode-akademik' ? 'active' : ''}`} onClick={closeMenu}>Periode akademik</Link>
+                <div className="sidebar-subnav-inner">
+                  <Link to="/data-master/santri" className={`sidebar-subnav-link ${location.pathname === '/data-master/santri' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/santri' ? 'page' : undefined} onClick={closeMenu}>Data santri</Link>
+                  <Link to="/data-master/alumni" className={`sidebar-subnav-link ${location.pathname === '/data-master/alumni' ? 'active' : ''}`} aria-current={location.pathname === '/data-master/alumni' ? 'page' : undefined} onClick={closeMenu}>Data alumni</Link>
+                  <Link to="/data-master/organisasi-daerah" className={`sidebar-subnav-link ${location.pathname === '/data-master/organisasi-daerah' ? 'active' : ''}`} onClick={closeMenu}>Data ORDA</Link>
+                  <Link to="/data-master/ekstrakurikuler" className={`sidebar-subnav-link ${location.pathname === '/data-master/ekstrakurikuler' ? 'active' : ''}`} onClick={closeMenu}>Data ekstrakurikuler</Link>
+                  <Link to="/data-master/wisma" className={`sidebar-subnav-link ${location.pathname === '/data-master/wisma' ? 'active' : ''}`} onClick={closeMenu}>Data wisma</Link>
+                  <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
+                  <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
+                  <Link to="/data-master/wa-bot" className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`} onClick={closeMenu}>Pengaturan Bot WA</Link>
+                  <Link to="/periode-akademik" className={`sidebar-subnav-link ${location.pathname === '/periode-akademik' ? 'active' : ''}`} onClick={closeMenu}>Periode akademik</Link>
+                </div>
               </div>
             </div>
           )}
@@ -647,12 +767,13 @@ function Layout() {
           )}
 
           <Link to="/ganti-kata-sandi" className={`sidebar-nav-link ${location.pathname === '/ganti-kata-sandi' ? 'active' : ''}`} aria-current={location.pathname === '/ganti-kata-sandi' ? 'page' : undefined} onClick={closeMenu}><NavIcon name="lock"/><span>Ganti Password</span></Link>
-          <button onClick={() => { closeMenu(); logout(); }} className="sidebar-logout-btn" style={{ marginTop: '12px' }}>
-            <NavIcon name="logout"/> Keluar
+          <button onClick={() => { closeMenu(); logout(); }} className="sidebar-logout-btn" title="Keluar dari akun" style={{ marginTop: '12px' }}>
+            <NavIcon name="logout"/><span className="logout-text">Keluar</span>
           </button>
 
         </nav>
       </div>
+      </aside>
 
       <main className="dashboard-content">
         <Suspense fallback={<PageSkeleton rows={6} />}>
@@ -668,20 +789,16 @@ function Layout() {
             <Route path="/prestasi" element={<Navigate to="/prestasi/semua" replace />} />
             <Route path="/prestasi/semua" element={<PrestasiListPage />} />
 
-            <Route path="/perizinan" element={<Navigate to="/perizinan/semua" replace />} />
-            <Route path="/perizinan/semua" element={['Admin', 'Keamanan'].includes(user.jabatan) ? <PerizinanListPage /> : <Navigate to="/dashboard" />} />
-            <Route path="/catat-gerbang" element={
-              ['Admin', 'Keamanan'].includes(user.jabatan)
-                ? <CatatGerbangPage />
-                : <Navigate to="/dashboard" />
-            } />
+            <Route path="/perizinan" element={['Admin', 'Keamanan'].includes(user.jabatan) ? <CatatGerbangPage /> : <Navigate to="/dashboard" />} />
+            <Route path="/perizinan/semua" element={<Navigate to="/perizinan" replace />} />
+            <Route path="/catat-gerbang" element={<Navigate to="/perizinan" replace />} />
 
             <Route path="/ganti-kata-sandi" element={<GantiPasswordPage />} />
 
             {/* Protected Routes based on Jabatan */}
             <Route path="/absensi/:jenis/:id" element={<BulkInputPage />} />
             <Route path="/absensi-histori" element={['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) ? <AbsensiHistoryPage /> : <Navigate to="/dashboard" />} />
-            <Route path="/rekap-kelas" element={['Admin', 'Wali Kelas'].includes(user.jabatan) ? <RekapKelasPage /> : <Navigate to="/dashboard" />} />
+            <Route path="/rekap-kelas" element={<Navigate to="/absensi-histori" replace />} />
 
             <Route path="/raport/input" element={
               ['Admin', 'Piket Pengajian'].includes(user.jabatan)
@@ -736,8 +853,8 @@ function Layout() {
           <NavIcon name="home"/><span>Beranda</span>
         </Link>
 
-        {['Admin', 'Wali Kelas'].includes(user.jabatan) && (
-          <Link to="/rekap-kelas" className={location.pathname === '/rekap-kelas' ? 'active' : ''} aria-current={location.pathname === '/rekap-kelas' ? 'page' : undefined} onClick={closeMenu}>
+        {['Admin', 'Wali Kelas', 'Pembina Kamar', 'Piket Pengajian'].includes(user.jabatan) && (
+          <Link to="/absensi-histori" className={location.pathname === '/absensi-histori' || location.pathname === '/rekap-kelas' ? 'active' : ''} aria-current={location.pathname === '/absensi-histori' || location.pathname === '/rekap-kelas' ? 'page' : undefined} onClick={closeMenu}>
             <NavIcon name="report"/><span>Rekap</span>
           </Link>
         )}
@@ -749,8 +866,8 @@ function Layout() {
         )}
 
         {['Admin', 'Keamanan'].includes(user.jabatan) && (
-          <Link to="/perizinan/semua" className={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'active' : ''} aria-current={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'page' : undefined} onClick={closeMenu}>
-            <NavIcon name="gate"/><span>Perizinan</span>
+          <Link to="/perizinan" className={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'active' : ''} aria-current={location.pathname.startsWith('/perizinan') || location.pathname === '/catat-gerbang' ? 'page' : undefined} onClick={closeMenu}>
+            <NavIcon name="gate"/><span>Perizinan &amp; Gerbang</span>
           </Link>
         )}
 

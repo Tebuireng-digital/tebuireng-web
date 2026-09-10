@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MediaStorage;
+use App\Support\MediaUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
-
-use Illuminate\Support\Facades\Storage;
 
 class SantriPortalController extends Controller
 {
@@ -55,6 +55,34 @@ class SantriPortalController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
         return response()->json(['user' => $this->userForResponse($user)]);
+    }
+
+    public function foto(Request $request)
+    {
+        $wali = Auth::guard('wali')->user();
+        if (!$wali) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $santri = DB::table('santri')
+            ->select('santri_id', 'foto_path', 'foto_disk', 'foto_original_filename', 'foto_mime_type')
+            ->where('santri_id', $wali->santri_id)
+            ->first();
+
+        if (!$santri || !$santri->foto_path) {
+            return response()->json(['message' => 'Foto santri tidak ditemukan.'], 404);
+        }
+
+        $profile = MediaStorage::profile('santri_photo');
+
+        return MediaStorage::stream(
+            $santri->foto_disk ?: $profile['disk'],
+            $santri->foto_path,
+            $santri->foto_original_filename ?: sprintf('santri-%d', $wali->santri_id),
+            $santri->foto_mime_type,
+            $request->boolean('download') ? 'attachment' : 'inline',
+            $profile['fallback_read_disks']
+        );
     }
 
     public function changePassword(Request $request)
@@ -147,7 +175,7 @@ class SantriPortalController extends Controller
                 $join->on('santri.santri_id', '=', 'pendidikan.santri_id');
             })
             ->where('santri.santri_id', $wali->santri_id)
-            ->select('santri.no_id_induk', 'santri.nis', 'santri.nik_siswa', 'santri.nama', 'santri.jenis_kelamin', 'santri.tempat_lahir', 'santri.tanggal_lahir', 'santri.no_hp_santri', 'santri.foto_path', 'santri.alamat_jalan', 'santri.provinsi', 'santri.kabupaten_kota', 'santri.kecamatan', 'santri.desa_kelurahan', 'santri.kode_pos', 'santri.nama_wali', 'santri.no_hp_wali', 'unit_pendidikan.kode as unit_kode', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat', 'kelompok_madin.nama_kelas_madin as nama_madin', 'kelompok_pbs.nama_kelompok as nama_al_quran_subuh', 'kelompok_pbm.nama_kelompok as nama_takhasus', 'santri_keluarga.no_kk', 'santri_keluarga.nama_ayah', 'santri_keluarga.nik_ayah', 'santri_keluarga.pendidikan_ayah', 'santri_keluarga.pekerjaan_ayah', 'santri_keluarga.nama_ibu', 'santri_keluarga.nik_ibu', 'santri_keluarga.pendidikan_ibu', 'santri_keluarga.pekerjaan_ibu', 'santri_keluarga.rata_rata_penghasilan', 'pendidikan.tahun_ajaran', 'pendidikan.pend_sumber', 'pendidikan.kelas_sumber', 'pendidikan.jurusan', 'pendidikan.kelas_paralel', 'pendidikan.ranking', 'pendidikan.status_siswa_sumber as status_siswa_pendidikan', 'pendidikan.asal_sekolah', 'pendidikan.jenis_sekolah', 'pendidikan.status_sekolah', 'pendidikan.lokasi_sekolah', 'pendidikan.no_un', 'pendidikan.kip', 'pendidikan.saldo_spp')
+            ->select('santri.no_id_induk', 'santri.nis', 'santri.nik_siswa', 'santri.nama', 'santri.jenis_kelamin', 'santri.tempat_lahir', 'santri.tanggal_lahir', 'santri.no_hp_santri', 'santri.foto_path', 'santri.foto_uploaded_at', 'santri.alamat_jalan', 'santri.provinsi', 'santri.kabupaten_kota', 'santri.kecamatan', 'santri.desa_kelurahan', 'santri.kode_pos', 'santri.nama_wali', 'santri.no_hp_wali', 'unit_pendidikan.kode as unit_kode', 'kamar.nama as nama_kamar', 'kelas_formal.nama_kelas', 'kelas_formal.tingkat', 'kelompok_madin.nama_kelas_madin as nama_madin', 'kelompok_pbs.nama_kelompok as nama_al_quran_subuh', 'kelompok_pbm.nama_kelompok as nama_takhasus', 'santri_keluarga.no_kk', 'santri_keluarga.nama_ayah', 'santri_keluarga.nik_ayah', 'santri_keluarga.pendidikan_ayah', 'santri_keluarga.pekerjaan_ayah', 'santri_keluarga.nama_ibu', 'santri_keluarga.nik_ibu', 'santri_keluarga.pendidikan_ibu', 'santri_keluarga.pekerjaan_ibu', 'santri_keluarga.rata_rata_penghasilan', 'pendidikan.tahun_ajaran', 'pendidikan.pend_sumber', 'pendidikan.kelas_sumber', 'pendidikan.jurusan', 'pendidikan.kelas_paralel', 'pendidikan.ranking', 'pendidikan.status_siswa_sumber as status_siswa_pendidikan', 'pendidikan.asal_sekolah', 'pendidikan.jenis_sekolah', 'pendidikan.status_sekolah', 'pendidikan.lokasi_sekolah', 'pendidikan.no_un', 'pendidikan.kip', 'pendidikan.saldo_spp')
             ->first();
 
         return [
@@ -157,7 +185,7 @@ class SantriPortalController extends Controller
             'nis' => $profile?->nis,
             'nik_siswa' => $profile?->nik_siswa,
             'nama' => $profile?->nama ?? $wali->username,
-            'foto_url' => $profile?->foto_path ? Storage::url($profile->foto_path) : null,
+            'foto_url' => $profile?->foto_path ? MediaUrl::portalSantriPhoto($profile->foto_uploaded_at) : null,
             'jenis_kelamin' => $profile?->jenis_kelamin,
             'tempat_lahir' => $profile?->tempat_lahir,
             'tanggal_lahir' => $profile?->tanggal_lahir,

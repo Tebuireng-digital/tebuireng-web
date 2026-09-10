@@ -46,46 +46,95 @@ class PerizinanController extends Controller
             ->get());
     }
 
+    /**
+     * Sanitasi string input: menghapus script/style block, tag HTML, null byte, dan normalisasi spasi.
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $clean = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $value);
+        $clean = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', '', $clean);
+        $clean = strip_tags($clean);
+        $clean = str_replace(chr(0), '', $clean);
+        $clean = trim(preg_replace('/\s+/u', ' ', $clean));
+
+        return $clean === '' ? null : $clean;
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
             'santri_id' => 'required|integer|exists:santri,santri_id',
-            'jenis_izin_id' => 'required|integer',
-            'keperluan' => 'required|string|max:255',
-            'tanggal_mulai' => 'required|date',
+            'jenis_izin_id' => 'required|integer|exists:jenis_izin,jenis_izin_id',
+            'keperluan' => 'required|string|min:3|max:255',
+            'tanggal_mulai' => 'required|date|after:2020-01-01',
             'rencana_kembali' => 'required|date|after_or_equal:tanggal_mulai',
+        ], [
+            'santri_id.required' => 'Pilih santri penerima izin.',
+            'santri_id.exists' => 'Data santri tidak valid di sistem.',
+            'jenis_izin_id.required' => 'Pilih jenis izin.',
+            'jenis_izin_id.exists' => 'Jenis izin yang dipilih tidak valid di sistem.',
+            'keperluan.required' => 'Keperluan izin wajib diisi.',
+            'keperluan.min' => 'Keperluan izin minimal 3 karakter.',
+            'keperluan.max' => 'Keperluan izin maksimal 255 karakter.',
+            'tanggal_mulai.required' => 'Waktu mulai izin wajib diisi.',
+            'tanggal_mulai.after' => 'Waktu mulai izin tidak valid.',
+            'rencana_kembali.required' => 'Rencana waktu kembali wajib diisi.',
+            'rencana_kembali.after_or_equal' => 'Rencana waktu kembali harus setelah atau sama dengan waktu mulai.',
         ]);
 
         $petugas = Auth::user();
         
         $model = new Perizinan();
-        $model->santri_id = $data['santri_id'];
+        $model->santri_id = (int) $data['santri_id'];
         if (Gate::forUser($petugas)->denies('create', $model)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $jenisIzin = DB::table('jenis_izin')->where('jenis_izin_id', $data['jenis_izin_id'])->first();
-        if (!$jenisIzin) {
-            return response()->json(['message' => 'Jenis izin tidak ditemukan'], 404);
+        $cleanKeperluan = $this->sanitizeInput($data['keperluan']);
+        if (!$cleanKeperluan || mb_strlen($cleanKeperluan) < 3) {
+            return response()->json([
+                'message' => 'Keperluan izin tidak boleh kosong atau hanya berisi tag HTML.',
+                'errors' => ['keperluan' => ['Keperluan izin minimal 3 karakter valid.']],
+            ], 422);
+        }
+
+        $tanggalMulai = \Carbon\Carbon::parse($data['tanggal_mulai'])->toDateTimeString();
+        $rencanaKembali = \Carbon\Carbon::parse($data['rencana_kembali'])->toDateTimeString();
+
+        $diffInDays = \Carbon\Carbon::parse($tanggalMulai)->diffInDays(\Carbon\Carbon::parse($rencanaKembali));
+        if ($diffInDays > 90) {
+            return response()->json([
+                'message' => 'Durasi izin tidak boleh melebihi 90 hari.',
+                'errors' => ['rencana_kembali' => ['Maksimal durasi izin adalah 90 hari.']],
+            ], 422);
         }
 
         $bentrok = DB::table('perizinan')
-            ->where('santri_id', $data['santri_id'])
+            ->where('santri_id', (int) $data['santri_id'])
             ->whereIn('status', ['Disetujui', 'Sedang Berjalan'])
-            ->where('tanggal_mulai', '<=', $data['rencana_kembali'])
-            ->where('rencana_kembali', '>=', $data['tanggal_mulai'])
+            ->where('tanggal_mulai', '<=', $rencanaKembali)
+            ->where('rencana_kembali', '>=', $tanggalMulai)
             ->exists();
         if ($bentrok) {
             return response()->json(['message' => 'Santri masih memiliki izin aktif pada rentang tersebut'], 422);
         }
 
-        $perizinanId = DB::transaction(function () use ($data, $petugas) {
-            $data['status'] = 'Disetujui';
-            $data['diajukan_oleh'] = $petugas->petugas_id;
-            $data['created_at'] = now();
-            $data['updated_at'] = now();
-
-            return DB::table('perizinan')->insertGetId($data);
+        $perizinanId = DB::transaction(function () use ($data, $cleanKeperluan, $tanggalMulai, $rencanaKembali, $petugas) {
+            return DB::table('perizinan')->insertGetId([
+                'santri_id' => (int) $data['santri_id'],
+                'jenis_izin_id' => (int) $data['jenis_izin_id'],
+                'keperluan' => $cleanKeperluan,
+                'tanggal_mulai' => $tanggalMulai,
+                'rencana_kembali' => $rencanaKembali,
+                'status' => 'Disetujui',
+                'diajukan_oleh' => $petugas->petugas_id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         });
 
         event(new PerizinanDisetujui($perizinanId));
@@ -230,7 +279,9 @@ class PerizinanController extends Controller
 
         $status = $waktuMasuk ? 'Selesai' : ($waktuKeluar ? 'Sedang Berjalan' : 'Disetujui');
 
-        DB::transaction(function () use ($perizinan, $id, $waktuKeluar, $waktuMasuk, $status, $petugas, $data) {
+        $alasanKoreksi = isset($data['alasan_koreksi']) ? $this->sanitizeInput($data['alasan_koreksi']) : null;
+
+        DB::transaction(function () use ($perizinan, $id, $waktuKeluar, $waktuMasuk, $status, $petugas, $alasanKoreksi) {
             DB::table('perizinan_gerbang_koreksi')->insert([
                 'perizinan_id' => $id,
                 'waktu_keluar_sebelum' => $perizinan->waktu_keluar_aktual,
@@ -240,7 +291,7 @@ class PerizinanController extends Controller
                 'status_sebelum' => $perizinan->status,
                 'status_sesudah' => $status,
                 'dikoreksi_oleh' => $petugas->petugas_id,
-                'alasan_koreksi' => $data['alasan_koreksi'] ?? null,
+                'alasan_koreksi' => $alasanKoreksi,
                 'created_at' => now(),
             ]);
 

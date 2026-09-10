@@ -12,6 +12,7 @@ Route::prefix('santri-portal')->middleware('web')->group(function () {
     Route::middleware('auth:wali')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\SantriPortalController::class, 'logout']);
         Route::get('/me', [\App\Http\Controllers\SantriPortalController::class, 'me']);
+        Route::get('/foto', [\App\Http\Controllers\SantriPortalController::class, 'foto']);
         Route::post('/ganti-password', [\App\Http\Controllers\SantriPortalController::class, 'changePassword']);
 
         Route::get('/kehadiran', [\App\Http\Controllers\SantriPortalController::class, 'kehadiran']);
@@ -45,12 +46,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/pelanggaran/kategori/{id}', [\App\Http\Controllers\PelanggaranController::class, 'updateKategori'])->middleware('role:Admin,Keamanan');
     Route::delete('/pelanggaran/kategori/{id}', [\App\Http\Controllers\PelanggaranController::class, 'destroyKategori'])->middleware('role:Admin,Keamanan');
     Route::post('/pelanggaran', [\App\Http\Controllers\PelanggaranController::class, 'store']);
+    Route::patch('/pelanggaran/{id}', [\App\Http\Controllers\PelanggaranController::class, 'update'])->middleware('role:Admin,Keamanan');
     Route::post('/pelanggaran/{id}/lampiran', [\App\Http\Controllers\PelanggaranController::class, 'uploadLampiran']);
+    Route::get('/pelanggaran/{id}/lampiran', [\App\Http\Controllers\PelanggaranController::class, 'listLampiran']);
+    Route::get('/pelanggaran/{id}/lampiran/{lampiranId}', [\App\Http\Controllers\PelanggaranController::class, 'showLampiran']);
     Route::get('/santri/{id}/poin', [\App\Http\Controllers\PelanggaranController::class, 'getPoin']);
 
     Route::get('/prestasi', [\App\Http\Controllers\PrestasiController::class, 'index']);
-    Route::post('/prestasi', [\App\Http\Controllers\PrestasiController::class, 'store']);
-    Route::delete('/prestasi/{id}', [\App\Http\Controllers\PrestasiController::class, 'destroy']);
+    Route::post('/prestasi', [\App\Http\Controllers\PrestasiController::class, 'store'])->middleware('role:Admin');
+    Route::put('/prestasi/{id}', [\App\Http\Controllers\PrestasiController::class, 'update'])->middleware('role:Admin');
+    Route::delete('/prestasi/{id}', [\App\Http\Controllers\PrestasiController::class, 'destroy'])->middleware('role:Admin');
 
     Route::get('/perizinan', [\App\Http\Controllers\PerizinanController::class, 'index'])->middleware('role:Keamanan,Admin');
     Route::get('/perizinan-jenis', [\App\Http\Controllers\PerizinanController::class, 'jenis'])->middleware('role:Keamanan');
@@ -70,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/santri/{id}/perizinan', [\App\Http\Controllers\PerizinanController::class, 'getSantriPerizinan']);
     Route::get('/santri', [\App\Http\Controllers\SantriController::class, 'index']);
     Route::post('/santri/{id}/foto', [\App\Http\Controllers\SantriController::class, 'uploadFoto'])->middleware('role:Admin,Pembina Kamar');
+    Route::get('/santri/{id}/foto', [\App\Http\Controllers\SantriController::class, 'showFoto']);
 
     // Admin & Master
     Route::post('/petugas/{id}/reset-password', [\App\Http\Controllers\PetugasController::class, 'resetPassword'])->middleware('role:Admin');

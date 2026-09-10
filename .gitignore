@@ -1,3 +1,5 @@
 /backups/
 /.env.production
 /wa-gateway/sessions/
+/temp/
+*.pptx

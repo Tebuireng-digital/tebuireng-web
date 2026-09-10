@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 use App\Models\Pelanggaran;
+use App\Support\MediaStorage;
+use App\Support\MediaUrl;
 use App\Support\SantriAccess;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 class PelanggaranController extends Controller
@@ -20,10 +21,13 @@ class PelanggaranController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $kategori = DB::table('kategori_pelanggaran')
-            ->where('status_aktif', 'Aktif')
-            ->orderBy('poin_maks', 'asc')
-            ->get();
+        $query = DB::table('kategori_pelanggaran');
+
+        if (!$request->boolean('all') || !in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true)) {
+            $query->where('status_aktif', 'Aktif');
+        }
+
+        $kategori = $query->orderBy('poin_maks', 'asc')->get();
         return response()->json($kategori);
     }
 
@@ -38,7 +42,14 @@ class PelanggaranController extends Controller
     public function updateKategori(Request $request, int $id)
     {
         abort_unless(in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true), 403, 'Hanya Admin atau Keamanan yang dapat mengelola master pelanggaran.');
-        $data = $request->validate(['kode_pasal' => 'sometimes|string|max:30', 'kategori' => 'sometimes|in:Ringan,Sedang,Berat,Kewajiban', 'uraian_pelanggaran' => 'sometimes|string|max:1000', 'poin_maks' => 'sometimes|integer|min:1|max:100', 'jenis' => 'sometimes|in:Pelanggaran,Meninggalkan Kewajiban']);
+        $data = $request->validate([
+            'kode_pasal' => 'sometimes|string|max:30',
+            'kategori' => 'sometimes|in:Ringan,Sedang,Berat,Kewajiban',
+            'uraian_pelanggaran' => 'sometimes|string|max:1000',
+            'poin_maks' => 'sometimes|integer|min:1|max:100',
+            'jenis' => 'sometimes|in:Pelanggaran,Meninggalkan Kewajiban',
+            'status_aktif' => 'sometimes|in:Aktif,Tidak Aktif',
+        ]);
         DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->update([...$data, 'updated_at' => now()]);
         return response()->json(DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->first());
     }
@@ -88,7 +99,35 @@ class PelanggaranController extends Controller
             }
         }
 
-        return response()->json($query->orderBy('pelanggaran.tanggal', 'desc')->get());
+        $records = $query->orderBy('pelanggaran.tanggal', 'desc')->get();
+        $now = now();
+
+        $result = $records->map(function ($row) use ($petugas, $now) {
+            $canEdit = false;
+            $isLocked = false;
+
+            if ($petugas->jabatan === 'Admin') {
+                $canEdit = true;
+            } elseif ($petugas->jabatan === 'Keamanan') {
+                $isOwner = (int) $row->petugas_pencatat_id === (int) $petugas->petugas_id;
+                if ($isOwner) {
+                    if ($row->created_at) {
+                        $diffSeconds = abs($now->diffInSeconds(\Carbon\Carbon::parse($row->created_at), false));
+                        if ($diffSeconds <= 86400) {
+                            $canEdit = true;
+                        } else {
+                            $isLocked = true;
+                        }
+                    }
+                }
+            }
+
+            $row->can_edit = $canEdit;
+            $row->is_locked = $isLocked;
+            return $row;
+        });
+
+        return response()->json($result);
     }
 
     public function store(Request $request)
@@ -101,7 +140,7 @@ class PelanggaranController extends Controller
             'poin' => 'nullable|integer|min:1',
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string',
-            'file' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
+            'file' => MediaStorage::validationRules('pelanggaran_attachment'),
         ], [
             'santri_id.required' => 'Santri wajib dipilih.',
             'santri_id.exists' => 'Santri yang dipilih tidak ditemukan.',
@@ -112,6 +151,7 @@ class PelanggaranController extends Controller
             'poin.integer' => 'Jumlah poin harus berupa angka.',
             'poin.min' => 'Jumlah poin minimal adalah 1.',
             'file.file' => 'Bukti foto harus berupa file yang dapat diunggah.',
+            'file.image' => 'Bukti pendukung harus berupa gambar yang valid.',
             'file.mimes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
             'file.max' => 'Ukuran bukti foto maksimal 5 MB.',
         ]);
@@ -198,27 +238,17 @@ class PelanggaranController extends Controller
         $data['created_at'] = now()->toDateTimeString();
         $data['updated_at'] = now()->toDateTimeString();
 
-        $attachmentPath = null;
+        $storedAttachment = null;
         $attachment = $request->file('file');
         unset($data['file']);
 
         try {
-            $pelanggaranId = DB::transaction(function () use ($data, $petugas, $attachment, &$attachmentPath) {
+            $pelanggaranId = DB::transaction(function () use ($data, $petugas, $attachment, &$storedAttachment) {
                 $pelanggaranId = DB::table('pelanggaran')->insertGetId($data);
 
                 if ($attachment) {
-                    $attachmentPath = $attachment->storeAs(
-                        'pelanggaran_lampiran',
-                        Str::uuid() . '.' . $attachment->getClientOriginalExtension(),
-                        'local'
-                    );
-
-                    DB::table('lampiran_pelanggaran')->insert([
-                        'pelanggaran_id' => $pelanggaranId,
-                        'path_file' => $attachmentPath,
-                        'diunggah_oleh' => $petugas->petugas_id,
-                        'created_at' => now(),
-                    ]);
+                    $storedAttachment = MediaStorage::store($attachment, 'pelanggaran_attachment');
+                    $this->persistLampiran($pelanggaranId, $petugas->petugas_id, $storedAttachment);
                 }
 
                 Cache::forget("santri:{$data['santri_id']}:poin");
@@ -248,8 +278,8 @@ class PelanggaranController extends Controller
                 return $pelanggaranId;
             });
         } catch (\Throwable $exception) {
-            if ($attachmentPath) {
-                Storage::disk('local')->delete($attachmentPath);
+            if (is_array($storedAttachment)) {
+                MediaStorage::delete($storedAttachment['disk'], $storedAttachment['path']);
             }
 
             throw $exception;
@@ -263,37 +293,169 @@ class PelanggaranController extends Controller
         ], 201);
     }
 
-    public function uploadLampiran(Request $request, $id)
+    public function update(Request $request, int $id)
     {
-        $pelanggaran = DB::table('pelanggaran')->where('pelanggaran_id', $id)->first();
+        $pelanggaran = $this->findPelanggaranModel($id);
         if (!$pelanggaran) {
-            return response()->json(['message' => 'Not found'], 404);
+            return response()->json(['message' => 'Pelanggaran tidak ditemukan.'], 404);
         }
 
-        $model = new Pelanggaran((array) $pelanggaran);
-        $model->exists = true;
-        if (Gate::forUser($request->user())->denies('update', $model)) {
+        if (Gate::forUser($request->user())->denies('update', $pelanggaran)) {
+            $isOwner = (int) $pelanggaran->petugas_pencatat_id === (int) $request->user()->petugas_id;
+            if ($request->user()->jabatan === 'Keamanan' && $isOwner) {
+                return response()->json([
+                    'message' => 'Batas waktu koreksi (24 jam) telah berakhir. Data telah dikunci.',
+                ], 403);
+            }
+            return response()->json(['message' => 'Role kamu tidak memiliki hak mengoreksi data ini.'], 403);
+        }
+
+        $validated = $request->validate([
+            'santri_id' => 'required|integer|exists:santri,santri_id',
+            'kategori_pelanggaran_id' => 'required|integer|exists:kategori_pelanggaran,kategori_pelanggaran_id',
+            'tanggal' => 'required|date|before_or_equal:today',
+            'keterangan' => 'nullable|string',
+            'alasan_koreksi' => 'required|string|min:5|max:500',
+        ], [
+            'alasan_koreksi.required' => 'Alasan koreksi wajib diisi.',
+            'alasan_koreksi.min' => 'Alasan koreksi minimal 5 karakter.',
+            'tanggal.before_or_equal' => 'Tanggal pelanggaran tidak boleh di masa depan.',
+        ]);
+
+        $kategori = DB::table('kategori_pelanggaran')
+            ->where('kategori_pelanggaran_id', $validated['kategori_pelanggaran_id'])
+            ->first();
+
+        $poin = $kategori->poin_maks ?? 0;
+
+        DB::table('pelanggaran')
+            ->where('pelanggaran_id', $id)
+            ->update([
+                'santri_id' => $validated['santri_id'],
+                'kategori_pelanggaran_id' => $validated['kategori_pelanggaran_id'],
+                'tanggal' => $validated['tanggal'],
+                'keterangan' => $validated['keterangan'],
+                'poin' => $poin,
+                'diubah_oleh_petugas_id' => $request->user()->petugas_id,
+                'alasan_koreksi' => $validated['alasan_koreksi'],
+                'waktu_koreksi' => now(),
+                'jumlah_koreksi' => DB::raw('COALESCE(jumlah_koreksi, 0) + 1'),
+                'updated_at' => now(),
+            ]);
+
+        $updated = DB::table('pelanggaran')
+            ->join('kategori_pelanggaran', 'pelanggaran.kategori_pelanggaran_id', '=', 'kategori_pelanggaran.kategori_pelanggaran_id')
+            ->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id')
+            ->select('pelanggaran.*', 'santri.nama as nama_santri', 'kategori_pelanggaran.uraian_pelanggaran', 'kategori_pelanggaran.kategori', 'kategori_pelanggaran.poin_maks')
+            ->where('pelanggaran.pelanggaran_id', $id)
+            ->first();
+
+        if ($updated) {
+            $updated->can_edit = Gate::forUser($request->user())->allows('update', $this->findPelanggaranModel($id));
+            $updated->is_locked = false;
+        }
+
+        return response()->json([
+            'message' => 'Data pelanggaran berhasil dikoreksi.',
+            'data' => $updated,
+        ]);
+    }
+
+    public function uploadLampiran(Request $request, $id)
+    {
+        $pelanggaran = $this->findPelanggaranModel((int) $id);
+        if (!$pelanggaran) {
+            return response()->json(['message' => 'Pelanggaran tidak ditemukan.'], 404);
+        }
+
+        if (Gate::forUser($request->user())->denies('update', $pelanggaran)) {
             return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
         }
 
         $request->validate([
-            'file' => 'required|file|mimes:jpeg,png,jpg,webp,pdf|max:5120',
+            'file' => MediaStorage::validationRules('pelanggaran_attachment', true),
+        ], [
+            'file.required' => 'Bukti foto wajib diunggah.',
+            'file.file' => 'Bukti foto harus berupa file yang dapat diunggah.',
+            'file.image' => 'Bukti pendukung harus berupa gambar yang valid.',
+            'file.mimes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
+            'file.max' => 'Ukuran bukti foto maksimal 5 MB.',
         ]);
 
         $file = $request->file('file');
-        $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
-        
-        // Simpan ke local disk. Abstraksi bisa diletakkan di Service nanti.
-        $path = $file->storeAs('pelanggaran_lampiran', $fileName, 'local');
+        $storedAttachment = MediaStorage::store($file, 'pelanggaran_attachment');
 
-        DB::table('lampiran_pelanggaran')->insert([
-            'pelanggaran_id' => $id,
-            'path_file' => $path,
-            'diunggah_oleh' => $request->user()->petugas_id,
-            'created_at' => now()
+        try {
+            $lampiranId = DB::transaction(function () use ($id, $request, $storedAttachment) {
+                return $this->persistLampiran((int) $id, $request->user()->petugas_id, $storedAttachment);
+            });
+        } catch (\Throwable $exception) {
+            MediaStorage::delete($storedAttachment['disk'], $storedAttachment['path']);
+
+            throw $exception;
+        }
+
+        $lampiran = DB::table('lampiran_pelanggaran')
+            ->where('lampiran_id', $lampiranId)
+            ->first();
+
+        return response()->json([
+            'message' => 'Lampiran berhasil diunggah.',
+            'lampiran' => $lampiran ? $this->formatLampiranResponse($lampiran) : null,
         ]);
+    }
 
-        return response()->json(['message' => 'Lampiran berhasil diunggah', 'path' => $path]);
+    public function listLampiran(Request $request, int $id)
+    {
+        $pelanggaran = $this->findPelanggaranModel($id);
+        if (!$pelanggaran) {
+            return response()->json(['message' => 'Pelanggaran tidak ditemukan.'], 404);
+        }
+
+        if (Gate::forUser($request->user())->denies('view', $pelanggaran)) {
+            return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
+        }
+
+        $lampiran = DB::table('lampiran_pelanggaran')
+            ->where('pelanggaran_id', $id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('lampiran_id')
+            ->get()
+            ->map(fn ($item) => $this->formatLampiranResponse($item));
+
+        return response()->json($lampiran);
+    }
+
+    public function showLampiran(Request $request, int $id, int $lampiranId)
+    {
+        $pelanggaran = $this->findPelanggaranModel($id);
+        if (!$pelanggaran) {
+            return response()->json(['message' => 'Pelanggaran tidak ditemukan.'], 404);
+        }
+
+        if (Gate::forUser($request->user())->denies('view', $pelanggaran)) {
+            return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
+        }
+
+        $lampiran = DB::table('lampiran_pelanggaran')
+            ->where('pelanggaran_id', $id)
+            ->where('lampiran_id', $lampiranId)
+            ->first();
+
+        if (!$lampiran) {
+            return response()->json(['message' => 'Lampiran tidak ditemukan.'], 404);
+        }
+
+        $profile = MediaStorage::profile('pelanggaran_attachment');
+
+        return MediaStorage::stream(
+            $lampiran->disk ?: $profile['disk'],
+            $lampiran->path_file,
+            $lampiran->original_filename ?: sprintf('pelanggaran-%d-lampiran-%d', $id, $lampiranId),
+            $lampiran->mime_type,
+            $request->boolean('download') ? 'attachment' : 'inline',
+            $profile['fallback_read_disks']
+        );
     }
 
     public function getPoin(Request $request, $santriId)
@@ -317,5 +479,78 @@ class PelanggaranController extends Controller
                 ->where('santri_id', $santriId)
                 ->sum('poin');
         });
+    }
+
+    /**
+     * @param  array{
+     *     disk:string,
+     *     path:string,
+     *     original_filename:string,
+     *     mime_type:string,
+     *     size_bytes:int,
+     *     sha256:string
+     * }  $storedAttachment
+     */
+    private function persistLampiran(int $pelanggaranId, int $petugasId, array $storedAttachment): int
+    {
+        $timestamp = now();
+
+        return DB::table('lampiran_pelanggaran')->insertGetId([
+            'pelanggaran_id' => $pelanggaranId,
+            'path_file' => $storedAttachment['path'],
+            'disk' => $storedAttachment['disk'],
+            'original_filename' => $storedAttachment['original_filename'],
+            'mime_type' => $storedAttachment['mime_type'],
+            'size_bytes' => $storedAttachment['size_bytes'],
+            'sha256' => $storedAttachment['sha256'],
+            'diunggah_oleh' => $petugasId,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
+    }
+
+    private function findPelanggaranModel(int $id): ?Pelanggaran
+    {
+        $pelanggaran = DB::table('pelanggaran')->where('pelanggaran_id', $id)->first();
+        if (!$pelanggaran) {
+            return null;
+        }
+
+        $model = new Pelanggaran((array) $pelanggaran);
+        $model->exists = true;
+
+        return $model;
+    }
+
+    /**
+     * @return array{
+     *     lampiran_id:int,
+     *     pelanggaran_id:int,
+     *     original_filename:string,
+     *     mime_type:string|null,
+     *     size_bytes:int|null,
+     *     created_at:mixed,
+     *     preview_url:string,
+     *     download_url:string
+     * }
+     */
+    private function formatLampiranResponse(object $lampiran): array
+    {
+        $previewUrl = MediaUrl::pelanggaranLampiran(
+            (int) $lampiran->pelanggaran_id,
+            (int) $lampiran->lampiran_id,
+            $lampiran->updated_at ?? $lampiran->created_at
+        );
+
+        return [
+            'lampiran_id' => (int) $lampiran->lampiran_id,
+            'pelanggaran_id' => (int) $lampiran->pelanggaran_id,
+            'original_filename' => $lampiran->original_filename ?: basename($lampiran->path_file),
+            'mime_type' => $lampiran->mime_type,
+            'size_bytes' => $lampiran->size_bytes !== null ? (int) $lampiran->size_bytes : null,
+            'created_at' => $lampiran->created_at,
+            'preview_url' => $previewUrl,
+            'download_url' => $previewUrl.(str_contains($previewUrl, '?') ? '&' : '?').'download=1',
+        ];
     }
 }

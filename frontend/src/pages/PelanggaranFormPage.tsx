@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -10,6 +10,53 @@ const validationFieldMessages: Record<string, string> = {
   tanggal: 'Tanggal kejadian wajib diisi dengan benar.',
   poin: 'Jumlah poin harus diisi sesuai batas poin kategori yang dipilih.',
   keterangan: 'Catatan tambahan tidak dapat diproses. Periksa kembali isinya.',
+};
+
+type FormFeedback = {
+  type: 'success' | 'error';
+  title: string;
+  message: string;
+};
+
+type SantriSearchStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface InputHistoryRecord {
+  pelanggaran_id: number;
+  santri_id: number;
+  petugas_pencatat_id?: number | null;
+  nama_santri: string;
+  kategori_pelanggaran_id: number;
+  uraian_pelanggaran: string;
+  kategori: string;
+  poin?: number | null;
+  poin_maks: number;
+  tanggal: string;
+  keterangan?: string | null;
+  catatan?: string | null;
+  tindakan_sanksi?: string | null;
+}
+
+const HISTORY_ROW_LIMIT = 8;
+
+const backendFieldMap: Record<string, string> = {
+  santri_id: 'santri',
+  kategori_pelanggaran_id: 'kategori',
+  uraian_pelanggaran_custom: 'uraian',
+  kategori_custom: 'kategoriCustom',
+  tanggal: 'tanggal',
+  poin: 'poin',
+  file: 'file',
+  keterangan: 'catatan',
+};
+
+const focusableFieldIds: Record<string, string> = {
+  santri: 'student-search',
+  kategori: 'violation-category',
+  tanggal: 'violation-date',
+  poin: 'violation-points',
+  uraian: 'custom-uraian',
+  kategoriCustom: 'custom-kategori',
+  catatan: 'violation-notes',
 };
 
 const getReadableValidationMessage = (error: any): string => {
@@ -40,6 +87,8 @@ const getReadableValidationMessage = (error: any): string => {
   return responseData?.message || 'Data pelanggaran belum dapat disimpan. Periksa kembali isian formulir lalu coba lagi.';
 };
 
+const getLocalFieldKey = (field?: string) => (field ? backendFieldMap[field] : undefined);
+
 export function PelanggaranFormPage() {
   usePageMeta({
     title: 'Input Pelanggaran Baru',
@@ -47,18 +96,18 @@ export function PelanggaranFormPage() {
   });
 
   const { user } = useAuth();
-  
-  // Santri Search State
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedSantri, setSelectedSantri] = useState<any | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearchingSantri, setIsSearchingSantri] = useState(false);
+  const [santriSearchStatus, setSantriSearchStatus] = useState<SantriSearchStatus>('idle');
+  const [activeSantriIndex, setActiveSantriIndex] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
-  const categorySearchRef = useRef<HTMLInputElement>(null);
+  const categoryInputRef = useRef<HTMLInputElement>(null);
 
-  // Kategori State
   const [kategoriList, setKategoriList] = useState<any[]>([]);
   const [kategoriId, setKategoriId] = useState('');
   const [poin, setPoin] = useState('');
@@ -67,223 +116,401 @@ export function PelanggaranFormPage() {
   const [activeKategoriIndex, setActiveKategoriIndex] = useState(0);
   const [isLoadingKategori, setIsLoadingKategori] = useState(true);
 
-  // Custom violation state
-  const [uraianPelanggaranCustom, setUraianPelanggaranCustom] = useState('');
-  const [kategoriCustom, setKategoriCustom] = useState<'Ringan' | 'Sedang' | 'Berat' | 'Kewajiban'>('Ringan');
-  const isCustomKategori = kategoriId === '0';
+  const selectedKategori = kategoriList.find(item => String(item.kategori_pelanggaran_id) === kategoriId);
+  const poinMaks = selectedKategori ? Number(selectedKategori.poin_maks) : null;
 
-  // Form State
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [catatan, setCatatan] = useState('');
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [poinAccumulated, setPoinAccumulated] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalState, setModalState] = useState<{ isOpen: boolean, type: 'success' | 'error', message: string }>({ isOpen: false, type: 'success', message: '' });
+  const [formFeedback, setFormFeedback] = useState<FormFeedback | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const modalRef = useRef<HTMLDivElement>(null);
-  const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const [inputHistory, setInputHistory] = useState<InputHistoryRecord[]>([]);
+  const [isInputHistoryLoading, setIsInputHistoryLoading] = useState(true);
+  const [inputHistoryError, setInputHistoryError] = useState('');
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
+  useEffect(() => {
+    return () => {
+      if (fotoPreview) {
+        URL.revokeObjectURL(fotoPreview);
+      }
+    };
+  }, [fotoPreview]);
 
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        setModalState({ isOpen: true, type: 'error', message: 'Foto harus berformat JPG, PNG, atau WEBP.' });
-        e.target.value = '';
-        return;
+  const clearResolvedSuccess = () => {
+    setPoinAccumulated(current => (current === null ? current : null));
+    setFormFeedback(current => (current?.type === 'success' ? null : current));
+  };
+
+  const clearFieldError = (field: string) => {
+    setFieldErrors(previous => {
+      if (!previous[field]) {
+        return previous;
       }
 
-      if (file.size > 5 * 1024 * 1024) {
-        setModalState({ isOpen: true, type: 'error', message: 'Ukuran foto maksimal 5 MB.' });
-        e.target.value = '';
-        return;
-      }
+      const next = { ...previous };
+      delete next[field];
+      return next;
+    });
+  };
 
-      if (fotoPreview) URL.revokeObjectURL(fotoPreview);
-      setFoto(file);
-      setFotoPreview(URL.createObjectURL(file));
+  const focusField = (field: string) => {
+    const fieldId = focusableFieldIds[field];
+    if (!fieldId) {
+      return;
     }
+
+    requestAnimationFrame(() => {
+      const element = document.getElementById(fieldId) as HTMLElement | null;
+      if (!element) {
+        return;
+      }
+
+      element.focus?.();
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const showFieldError = (field: string, title: string, message: string) => {
+    setFieldErrors({ [field]: message });
+    setFormFeedback({ type: 'error', title, message });
+    focusField(field);
+  };
+
+  const handleFotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0) {
+      return;
+    }
+
+    clearResolvedSuccess();
+    clearFieldError('file');
+
+    const file = event.target.files[0];
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      const message = 'Format bukti foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
+      setFieldErrors(previous => ({ ...previous, file: message }));
+      setFormFeedback({ type: 'error', title: 'Bukti foto belum sesuai', message });
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      const message = 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 5 MB.';
+      setFieldErrors(previous => ({ ...previous, file: message }));
+      setFormFeedback({ type: 'error', title: 'Bukti foto belum sesuai', message });
+      event.target.value = '';
+      return;
+    }
+
+    if (fotoPreview) {
+      URL.revokeObjectURL(fotoPreview);
+    }
+
+    setFoto(file);
+    setFotoPreview(URL.createObjectURL(file));
   };
 
   const handleRemoveFoto = () => {
+    clearResolvedSuccess();
+    clearFieldError('file');
     setFoto(null);
+
     if (fotoPreview) {
       URL.revokeObjectURL(fotoPreview);
       setFotoPreview(null);
     }
-    if (photoInputRef.current) photoInputRef.current.value = '';
+
+    if (photoInputRef.current) {
+      photoInputRef.current.value = '';
+    }
   };
 
   const getSeverityClass = (kategori: string) => {
-    const k = (kategori || '').toLowerCase().trim();
-    if (k === 'kewajiban') return 'severity-badge severity-kewajiban';
-    if (k === 'berat') return 'severity-badge severity-berat';
-    if (k === 'sedang') return 'severity-badge severity-sedang';
+    const normalizedCategory = (kategori || '').toLowerCase().trim();
+    if (normalizedCategory === 'kewajiban') return 'severity-badge severity-kewajiban';
+    if (normalizedCategory === 'berat') return 'severity-badge severity-berat';
+    if (normalizedCategory === 'sedang') return 'severity-badge severity-sedang';
     return 'severity-badge severity-ringan';
   };
 
   useEffect(() => {
-    // Fetch Kategori Pelanggaran
     setIsLoadingKategori(true);
-    api.get('/api/pelanggaran/kategori').then(res => {
-      let filtered = res.data;
-      if (user && (user as any).jabatan === 'Pembina Kamar') {
-        filtered = res.data.filter((k: any) => k.kategori?.toLowerCase().trim() === 'ringan');
-      } else if (user && (user as any).jabatan === 'Keamanan') {
-        filtered = res.data.filter((k: any) => ['sedang', 'berat'].includes(k.kategori?.toLowerCase().trim()));
-      }
-      setKategoriList(filtered);
-    }).catch(console.error).finally(() => setIsLoadingKategori(false));
+    api.get('/api/pelanggaran/kategori')
+      .then(response => {
+        let filtered = response.data;
+        if (user?.jabatan === 'Pembina Kamar') {
+          filtered = response.data.filter((item: any) => item.kategori?.toLowerCase().trim() === 'ringan');
+        } else if (user?.jabatan === 'Keamanan') {
+          filtered = response.data.filter((item: any) => ['sedang', 'berat'].includes(item.kategori?.toLowerCase().trim()));
+        }
+        setKategoriList(filtered);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoadingKategori(false));
+  }, [user]);
 
-    // Click outside handler for dropdown
+  const loadInputHistory = async (options?: { silent?: boolean; signal?: AbortSignal }) => {
+    const petugasId = user?.petugas_id;
+    if (!petugasId) {
+      setInputHistory([]);
+      setInputHistoryError('');
+      setIsInputHistoryLoading(false);
+      return;
+    }
+
+    if (!options?.silent) {
+      setIsInputHistoryLoading(true);
+    }
+    setInputHistoryError('');
+
+    try {
+      const response = await api.get('/api/pelanggaran', options?.signal ? { signal: options.signal } : undefined);
+      const records = Array.isArray(response.data) ? response.data : [];
+      const ownHistory = records
+        .filter((record: InputHistoryRecord) => Number(record.petugas_pencatat_id) === Number(petugasId))
+        .sort((first: InputHistoryRecord, second: InputHistoryRecord) => {
+          const byDate = second.tanggal.localeCompare(first.tanggal);
+          if (byDate !== 0) {
+            return byDate;
+          }
+          return second.pelanggaran_id - first.pelanggaran_id;
+        });
+
+      setInputHistory(ownHistory);
+    } catch (error: any) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
+        return;
+      }
+
+      if (options?.silent) {
+        return;
+      }
+
+      setInputHistoryError(error.response?.data?.message || 'Riwayat input terbaru belum dapat dimuat.');
+      setInputHistory([]);
+    } finally {
+      if (!options?.silent) {
+        setIsInputHistoryLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadInputHistory({ signal: controller.signal });
+
+    return () => {
+      controller.abort();
+    };
+  }, [user?.petugas_id]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
         setIsKategoriOpen(false);
+        if (selectedKategori) {
+          setKategoriSearch(selectedKategori.uraian_pelanggaran);
+        } else {
+          setKategoriSearch('');
+        }
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedKategori]);
 
   useEffect(() => {
-    if (!modalState.isOpen) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const closeButton = modalCloseRef.current;
-    closeButton?.focus();
+    const normalizedSearchTerm = searchTerm.trim();
+    const selectedSantriName = selectedSantri?.nama?.trim();
 
-    const handleDialogKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setModalState({ ...modalState, isOpen: false });
-      }
-    };
-    document.addEventListener("keydown", handleDialogKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleDialogKeyDown);
-      previouslyFocused?.focus();
-    };
-  }, [modalState.isOpen]);
-
-  // Search Santri Effect (Debounced)
-  useEffect(() => {
-    if (searchTerm.trim().length >= 2 && (!selectedSantri || searchTerm !== selectedSantri.nama)) {
-      const delayDebounceFn = setTimeout(() => {
-        setIsSearchingSantri(true);
-        api.get(`/api/santri?q=${encodeURIComponent(searchTerm.trim())}`).then(res => {
-          setSearchResults(res.data);
-          setShowDropdown(true);
-        }).catch(console.error).finally(() => setIsSearchingSantri(false));
-      }, 300);
-      return () => clearTimeout(delayDebounceFn);
-    } else {
+    if (normalizedSearchTerm.length < 2 || (selectedSantriName && normalizedSearchTerm === selectedSantriName)) {
+      setIsSearchingSantri(false);
+      setSantriSearchStatus('idle');
       setShowDropdown(false);
+      setSearchResults([]);
+      setActiveSantriIndex(0);
+      return;
     }
+
+    const controller = new AbortController();
+    let isCurrent = true;
+
+    setShowDropdown(true);
+    setIsSearchingSantri(true);
+    setSantriSearchStatus('loading');
+    setSearchResults([]);
+    setActiveSantriIndex(0);
+
+    const debounceHandle = window.setTimeout(() => {
+      api.get(`/api/santri?q=${encodeURIComponent(normalizedSearchTerm)}`, { signal: controller.signal })
+        .then(response => {
+          if (!isCurrent) {
+            return;
+          }
+
+          setSearchResults(response.data);
+          setSantriSearchStatus('success');
+          setActiveSantriIndex(0);
+        })
+        .catch(error => {
+          if (!isCurrent) {
+            return;
+          }
+
+          if (error?.name !== 'CanceledError' && error?.code !== 'ERR_CANCELED') {
+            console.error(error);
+            setSantriSearchStatus('error');
+          }
+        })
+        .finally(() => {
+          if (isCurrent) {
+            setIsSearchingSantri(false);
+          }
+        });
+    }, 300);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(debounceHandle);
+      controller.abort();
+    };
   }, [searchTerm, selectedSantri]);
 
   const handleSelectSantri = (santri: any) => {
+    clearResolvedSuccess();
+    clearFieldError('santri');
     setSelectedSantri(santri);
     setSearchTerm(santri.nama);
     setSearchResults([]);
+    setSantriSearchStatus('idle');
     setShowDropdown(false);
   };
 
   const handleClearSantri = () => {
+    clearResolvedSuccess();
+    clearFieldError('santri');
     setSelectedSantri(null);
     setSearchTerm('');
     setSearchResults([]);
-    setPoinAccumulated(null);
+    setSantriSearchStatus('idle');
+    setShowDropdown(false);
+    setActiveSantriIndex(0);
+    setTimeout(() => {
+      document.getElementById('student-search')?.focus();
+    }, 0);
   };
 
-  const selectedKategori = kategoriList.find(kat => String(kat.kategori_pelanggaran_id) === kategoriId);
-  const poinMaks = isCustomKategori ? 100 : (selectedKategori ? Number(selectedKategori.poin_maks) : null);
+  const handleSantriKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || searchResults.length === 0) {
+      if (event.key === 'ArrowDown' && searchResults.length > 0) {
+        setShowDropdown(true);
+      }
+      return;
+    }
 
-  const handleKategoriChange = (value: string) => {
-    setKategoriId(value);
-    if (value === '0') {
-      setPoin('5');
-    } else {
-      const kategori = kategoriList.find(kat => String(kat.kategori_pelanggaran_id) === value);
-      setPoin(kategori ? String(kategori.poin_maks) : '');
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSantriIndex(previous => Math.min(previous + 1, searchResults.length - 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSantriIndex(previous => Math.max(previous - 1, 0));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (searchResults[activeSantriIndex]) {
+        handleSelectSantri(searchResults[activeSantriIndex]);
+      }
+    } else if (event.key === 'Escape') {
+      setShowDropdown(false);
     }
   };
 
-  const filteredKategoriList = kategoriList.filter(kat => {
-    const search = kategoriSearch.trim().toLowerCase();
-    if (!search) return true;
-    return `${kat.kategori} ${kat.uraian_pelanggaran}`.toLowerCase().includes(search);
-  });
+  const handleKategoriChange = (value: string) => {
+    clearResolvedSuccess();
+    clearFieldError('kategori');
+    clearFieldError('poin');
+    setKategoriId(value);
+    const kategori = kategoriList.find(item => String(item.kategori_pelanggaran_id) === value);
+    setPoin(kategori ? String(kategori.poin_maks) : '');
+  };
 
-  const selectKategori = (kat: any) => {
-    handleKategoriChange(String(kat.kategori_pelanggaran_id));
-    setKategoriSearch('');
+  const filteredKategoriList = useMemo(() => {
+    const query = kategoriSearch.trim().toLowerCase();
+    if (!query || (selectedKategori && query === selectedKategori.uraian_pelanggaran.toLowerCase())) {
+      return kategoriList;
+    }
+
+    return kategoriList.filter(item =>
+      `${item.kategori} ${item.uraian_pelanggaran}`.toLowerCase().includes(query)
+    );
+  }, [kategoriList, kategoriSearch, selectedKategori]);
+
+  const selectKategori = (kategori: any) => {
+    handleKategoriChange(String(kategori.kategori_pelanggaran_id));
+    setKategoriSearch(kategori.uraian_pelanggaran);
     setIsKategoriOpen(false);
     setActiveKategoriIndex(0);
   };
 
-  const handleKategoriKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleKategoriKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isKategoriOpen) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setIsKategoriOpen(true);
+      }
+      return;
+    }
+
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setIsKategoriOpen(true);
       setActiveKategoriIndex(index => Math.min(index + 1, Math.max(filteredKategoriList.length - 1, 0)));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setIsKategoriOpen(true);
       setActiveKategoriIndex(index => Math.max(index - 1, 0));
-    } else if (event.key === 'Enter' || event.key === ' ') {
+    } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (!isKategoriOpen) {
-        setIsKategoriOpen(true);
-        setTimeout(() => categorySearchRef.current?.focus(), 0);
-      } else if (filteredKategoriList[activeKategoriIndex]) {
+      if (filteredKategoriList[activeKategoriIndex]) {
         selectKategori(filteredKategoriList[activeKategoriIndex]);
       }
     } else if (event.key === 'Escape') {
+      event.preventDefault();
       setIsKategoriOpen(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setFieldErrors({});
-    const showFormError = (field: string, message: string) => {
-      setFieldErrors({ [field]: message });
-      setModalState({ isOpen: true, type: 'error', message });
-    };
+    setFormFeedback(null);
 
     if (!selectedSantri) {
-      showFormError('santri', 'Pilih santri terlebih dahulu sebelum menyimpan pelanggaran.');
+      showFieldError('santri', 'Pilih santri terlebih dahulu', 'Pilih santri terlebih dahulu sebelum menyimpan pelanggaran.');
       return;
     }
-    if (!kategoriId) {
-      showFormError('kategori', 'Pilih kategori pelanggaran terlebih dahulu.');
+    if (!kategoriId || !selectedKategori) {
+      showFieldError('kategori', 'Pilih jenis pelanggaran terlebih dahulu', 'Pilih jenis pelanggaran dari daftar kategori yang tersedia.');
       return;
     }
     if (!tanggal) {
-      showFormError('tanggal', 'Isi tanggal kejadian terlebih dahulu.');
+      showFieldError('tanggal', 'Tanggal kejadian belum diisi', 'Isi tanggal kejadian terlebih dahulu.');
       return;
     }
 
-    if (isCustomKategori) {
-      if (!uraianPelanggaranCustom.trim()) {
-        showFormError('uraian', 'Ketik nama atau uraian pelanggaran baru terlebih dahulu.');
-        return;
-      }
-      if (!poin || Number(poin) < 1 || Number(poin) > 100) {
-        showFormError('poin', 'Jumlah poin pelanggaran manual harus antara 1 dan 100.');
-        return;
-      }
-    } else {
-      if (!poin || Number(poin) < 1 || (poinMaks !== null && Number(poin) > poinMaks)) {
-        showFormError('poin', `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.`);
-        return;
-      }
+    if (!poin || Number(poin) < 1 || (poinMaks !== null && Number(poin) > poinMaks)) {
+      showFieldError('poin', 'Jumlah poin belum sesuai panduan', `Jumlah poin harus antara 1 dan ${poinMaks ?? 0} poin.`);
+      return;
     }
 
+    clearResolvedSuccess();
     setIsSubmitting(true);
+
     try {
       const formData = new FormData();
       formData.append('santri_id', String(selectedSantri.santri_id));
@@ -292,442 +519,684 @@ export function PelanggaranFormPage() {
       formData.append('tanggal', tanggal);
       formData.append('keterangan', catatan);
 
-      if (isCustomKategori) {
-        formData.append('uraian_pelanggaran_custom', uraianPelanggaranCustom.trim());
-        formData.append('kategori_custom', kategoriCustom);
+      if (foto) {
+        formData.append('file', foto);
       }
-      if (foto) formData.append('file', foto);
 
       await api.post('/api/pelanggaran', formData);
 
-      // Fetching the refreshed total is secondary to the successful save.
+      let successMessage = foto
+        ? 'Data pelanggaran dan foto pendukung berhasil disimpan.'
+        : 'Data pelanggaran berhasil disimpan.';
+
       try {
-        const resPoin = await api.get(`/api/santri/${selectedSantri.santri_id}/poin`);
-        setPoinAccumulated(resPoin.data.total_poin);
+        const poinResponse = await api.get(`/api/santri/${selectedSantri.santri_id}/poin`);
+        setPoinAccumulated(poinResponse.data.total_poin);
       } catch (poinError) {
         console.warn('Pelanggaran tersimpan, tetapi total poin belum dapat dimuat.', poinError);
         setPoinAccumulated(null);
+        successMessage = 'Data pelanggaran berhasil disimpan. Total poin terbaru belum dapat dimuat saat ini.';
       }
-      
-      setModalState({ isOpen: true, type: 'success', message: 'Berhasil menyimpan pelanggaran!' });
-      
-      // Reset form optional
+
+      setFormFeedback({
+        type: 'success',
+        title: 'Pelanggaran tersimpan',
+        message: successMessage,
+      });
+      void loadInputHistory({ silent: true });
+
       setKategoriId('');
-      setUraianPelanggaranCustom('');
+      setKategoriSearch('');
       setPoin('');
       setCatatan('');
       setFoto(null);
-      if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+      clearFieldError('file');
+      if (fotoPreview) {
+        URL.revokeObjectURL(fotoPreview);
+      }
       setFotoPreview(null);
-      if (photoInputRef.current) photoInputRef.current.value = '';
-    } catch (err: any) {
-      setModalState({ isOpen: true, type: 'error', message: getReadableValidationMessage(err) });
+      if (photoInputRef.current) {
+        photoInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      const validationErrors = error.response?.data?.errors as Record<string, string[]> | undefined;
+      const firstValidationField = validationErrors ? Object.keys(validationErrors)[0] : undefined;
+      const localField = getLocalFieldKey(firstValidationField);
+      const message = getReadableValidationMessage(error);
+
+      if (localField) {
+        setFieldErrors({ [localField]: message });
+        focusField(localField);
+      }
+
+      setFormFeedback({
+        type: 'error',
+        title: 'Data belum berhasil disimpan',
+        message,
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleStartAnotherEntry = () => {
+    setPoinAccumulated(null);
+    setFormFeedback(null);
+    requestAnimationFrame(() => {
+      document.getElementById('violation-category')?.focus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
+  const shouldShowFeedback = formFeedback && (formFeedback.type === 'error' || poinAccumulated === null);
+  const shouldShowSantriDropdown = showDropdown && searchTerm.trim().length >= 2;
+  const shouldShowSantriLoadingState = shouldShowSantriDropdown && isSearchingSantri;
+  const shouldShowSantriResults = shouldShowSantriDropdown && santriSearchStatus === 'success' && searchResults.length > 0;
+  const shouldShowSantriEmptyState = shouldShowSantriDropdown && santriSearchStatus === 'success' && searchResults.length === 0;
+  const shouldShowSantriErrorState = shouldShowSantriDropdown && santriSearchStatus === 'error';
+  const visibleInputHistory = useMemo(() => inputHistory.slice(0, HISTORY_ROW_LIMIT), [inputHistory]);
+  const historyDescription = user?.jabatan === 'Admin'
+    ? 'Catatan yang Anda input sebagai admin akan muncul di sini. Gunakan daftar pelanggaran untuk pencarian lengkap per santri atau kategori.'
+    : 'Catatan yang Anda input terakhir akan muncul di sini. Gunakan daftar pelanggaran untuk pencarian lengkap per santri atau kategori.';
+
   return (
     <div className="violation-page">
-      
-      {/* Modal Pesan Sukses / Error */}
-      {modalState.isOpen && (
-        <div className="violation-modal-backdrop">
-          <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="violation-modal-title" aria-describedby="violation-modal-message" className={`violation-modal ${modalState.type}`}>
-            <div className="violation-modal-icon" aria-hidden="true">
-              {modalState.type === 'success' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-              )}
-            </div>
-            <span className="violation-modal-eyebrow">{modalState.type === 'success' ? 'Tersimpan' : 'Perlu diperiksa'}</span>
-            <h2 id="violation-modal-title">
-              {modalState.type === 'success' ? 'Pelanggaran berhasil dicatat' : 'Data belum lengkap'}
-            </h2>
-            <p id="violation-modal-message" className="violation-modal-message">
-              {modalState.message}
-            </p>
-            <div className="violation-modal-actions">
-              <button 
-                ref={modalCloseRef}
-                onClick={() => setModalState({ ...modalState, isOpen: false })}
-                className="violation-modal-close"
+      <div className="violation-layout-grid">
+        <div className="violation-form-main">
+          <div className="stat-card violation-card">
+            {shouldShowFeedback && formFeedback && (
+              <div
+                id="violation-feedback"
+                className={`violation-feedback is-${formFeedback.type}`}
+                role={formFeedback.type === 'error' ? 'alert' : 'status'}
               >
-                Lanjutkan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="page-heading">
-        <span className="page-eyebrow">Kedisiplinan Santri</span>
-        <h1>Input Pelanggaran</h1>
-        <p>Catat data pelanggaran tata tertib secara rinci dan lampirkan bukti pendukung.</p>
-      </div>
-
-      <div className="stat-card violation-card">
-        <div className="form-section-heading">
-          <div>
-            <h2>Data Pelanggaran & Bukti</h2>
-            <p>Lengkapi identitas santri, kategori pelanggaran, dan lampirkan bukti foto.</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} noValidate className="violation-form">
-          
-          {/* Autocomplete Pencarian Santri */}
-          <div className="student-search-field" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }} ref={dropdownRef}>
-            <label htmlFor="student-search">Cari Santri (Nama / NIS)</label>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input 
-                id="student-search"
-                type="text"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-controls="student-search-results"
-                aria-expanded={showDropdown && searchResults.length > 0}
-                placeholder="Ketik nama atau NIS santri..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  if (selectedSantri) setSelectedSantri(null);
-                }}
-                style={{
-                  paddingRight: '44px',
-                  borderColor: selectedSantri ? '#10B981' : undefined,
-                  backgroundColor: selectedSantri ? '#F0FDF4' : undefined,
-                  fontWeight: selectedSantri ? 600 : undefined,
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                }}
-                aria-invalid={Boolean(fieldErrors.santri)}
-                aria-describedby={fieldErrors.santri ? 'student-search-error' : undefined}
-              />
-              {selectedSantri && (
-                <button type="button" onClick={handleClearSantri} className="btn-clear-input" aria-label="Hapus santri terpilih" style={{ position: 'absolute', right: '8px' }}>
-                  X
-                </button>
-              )}
-            </div>
-            {selectedSantri && (
-              <small className="selected-student-school">
-                Asal sekolah: {selectedSantri.nama_unit || 'Belum tercatat'}
-              </small>
-            )}
-            {isSearchingSantri && <small className="field-hint">Sedang mencari santri...</small>}
-            {fieldErrors.santri && <small id="student-search-error" className="field-error" role="alert">{fieldErrors.santri}</small>}
-
-            {/* Dropdown Hasil Pencarian */}
-            {showDropdown && searchResults.length > 0 && (
-              <div id="student-search-results" role="listbox" className="student-search-dropdown">
-                {searchResults.map((s, idx) => (
-              <button
-                    className={`student-search-result ${selectedSantri?.santri_id === s.santri_id ? 'is-selected' : ''}`} 
-                    type="button" 
-                    role="option" 
-                    aria-selected={selectedSantri?.santri_id === s.santri_id} 
-                    key={s.santri_id ?? idx} 
-                    onClick={() => handleSelectSantri(s)}
-                  >
-                    <span className="search-result-name">{s.nama}</span>
-                    <span className="search-result-meta">NIS: {s.nis || '-'} &bull; {s.nama_kamar || 'Kamar -'} &bull; {s.nama_unit || 'Unit -'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            
-            {showDropdown && searchResults.length === 0 && searchTerm.length >= 2 && (
-              <div className="student-search-empty">
-                Tidak ada santri yang cocok.
-              </div>
-            )}
-          </div>
-
-          {/* Tanggal Pelanggaran */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label htmlFor="violation-date">Tanggal Kejadian</label>
-            <input 
-              id="violation-date"
-              type="date"
-              value={tanggal}
-              onChange={(e) => setTanggal(e.target.value)}
-              required
-              aria-invalid={Boolean(fieldErrors.tanggal)}
-              aria-describedby={fieldErrors.tanggal ? 'violation-date-error' : undefined}
-            />
-            {fieldErrors.tanggal && <small id="violation-date-error" className="field-error" role="alert">{fieldErrors.tanggal}</small>}
-          </div>
-
-          {/* Combobox Kategori Pelanggaran */}
-          <div ref={categoryDropdownRef} className="category-picker-field">
-            <label htmlFor="violation-category">Kategori Pelanggaran</label>
-            <button
-              type="button"
-              id="violation-category"
-              className={`category-picker-trigger ${isKategoriOpen ? 'is-open' : ''}`}
-              role="combobox"
-              aria-expanded={isKategoriOpen}
-              aria-controls="violation-category-menu"
-              aria-haspopup="listbox"
-              aria-invalid={Boolean(fieldErrors.kategori)}
-              aria-describedby={fieldErrors.kategori ? 'violation-category-error' : undefined}
-              onClick={() => {
-                setIsKategoriOpen(open => !open);
-                setTimeout(() => categorySearchRef.current?.focus(), 0);
-              }}
-              onKeyDown={handleKategoriKeyDown}
-            >
-              <span className={selectedKategori || isCustomKategori ? 'category-picker-value' : 'category-picker-placeholder'}>
-                {isLoadingKategori ? 'Memuat kategori pelanggaran...' : isCustomKategori
-                  ? (uraianPelanggaranCustom ? `[Manual] ${uraianPelanggaranCustom}` : '+ Lainnya / Input Manual (Tidak ada di panduan)')
-                  : (selectedKategori ? selectedKategori.uraian_pelanggaran : 'Pilih jenis pelanggaran')}
-              </span>
-              {selectedKategori && (
-                <span className="category-picker-meta">
-                  <span className={getSeverityClass(selectedKategori.kategori)}>{selectedKategori.kategori}</span>
-                  <span className="points-pill-tag">{selectedKategori.poin_maks} poin maks</span>
-                </span>
-              )}
-              {isCustomKategori && (
-                <span className="category-picker-meta">
-                  <span className={getSeverityClass(kategoriCustom)}>{kategoriCustom}</span>
-                  <span className="points-pill-tag">Input Manual</span>
-                </span>
-              )}
-              <span className="category-picker-chevron" aria-hidden="true">⌄</span>
-              </button>
-            {fieldErrors.kategori && <small id="violation-category-error" className="field-error" role="alert">{fieldErrors.kategori}</small>}
-
-            {isKategoriOpen && (
-              <div id="violation-category-menu" className="category-picker-menu" role="listbox" aria-label="Pilihan jenis pelanggaran">
-                <div className="category-picker-search-wrap">
-                  <span aria-hidden="true">⌕</span>
-                  <input
-                    ref={categorySearchRef}
-                    type="search"
-                    value={kategoriSearch}
-                    onChange={(event) => {
-                      setKategoriSearch(event.target.value);
-                      setActiveKategoriIndex(0);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        setActiveKategoriIndex(index => Math.min(index + 1, Math.max(filteredKategoriList.length - 1, 0)));
-                      } else if (event.key === 'ArrowUp') {
-                        event.preventDefault();
-                        setActiveKategoriIndex(index => Math.max(index - 1, 0));
-                      } else if (event.key === 'Enter' && filteredKategoriList[activeKategoriIndex]) {
-                        event.preventDefault();
-                        selectKategori(filteredKategoriList[activeKategoriIndex]);
-                      } else if (event.key === 'Escape') {
-                        setIsKategoriOpen(false);
-                      }
-                    }}
-                    placeholder="Cari jenis pelanggaran..."
-                    aria-label="Cari jenis pelanggaran"
-                  />
+                <div className="violation-feedback-copy">
+                  <strong>{formFeedback.title}</strong>
+                  <p>{formFeedback.message}</p>
                 </div>
-                <div className="category-picker-list">
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={isCustomKategori}
-                    className={`category-picker-option ${isCustomKategori ? 'is-selected' : ''}`}
-                    style={{ background: 'rgba(15, 110, 86, 0.08)', borderBottom: '1px dashed var(--garis)' }}
-                    onClick={() => {
-                      handleKategoriChange('0');
-                      setKategoriSearch('');
-                      setIsKategoriOpen(false);
-                    }}
-                  >
-                    <span className="category-option-copy">
-                      <strong style={{ color: 'var(--aksen)', fontWeight: 600 }}>+ Lainnya / Input Manual (Tidak ada di panduan)</strong>
-                    </span>
-                    <span className="category-option-points">Input Baru</span>
-                  </button>
+                <button
+                  type="button"
+                  className="violation-feedback-dismiss"
+                  onClick={() => setFormFeedback(null)}
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
 
-                  {filteredKategoriList.length > 0 ? filteredKategoriList.map((kat, index) => (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={String(kat.kategori_pelanggaran_id) === kategoriId}
-                      className={`category-picker-option ${String(kat.kategori_pelanggaran_id) === kategoriId ? 'is-selected' : ''} ${index === activeKategoriIndex ? 'is-active' : ''}`}
-                      key={kat.kategori_pelanggaran_id}
-                      onMouseEnter={() => setActiveKategoriIndex(index)}
-                      onClick={() => selectKategori(kat)}
-                    >
-                      <span className="category-option-copy">
-                        <span className="category-option-title">{kat.uraian_pelanggaran}</span>
-                        <span className={getSeverityClass(kat.kategori)}>{kat.kategori}</span>
-                      </span>
-                      <span className="category-option-points">{kat.poin_maks} Poin</span>
-                    </button>
-                  )) : (
-                    <div className="category-picker-empty">Jenis pelanggaran tidak ditemukan.</div>
+            <form onSubmit={handleSubmit} noValidate className="violation-form">
+              <section className="form-section-block" aria-labelledby="section-santri-title">
+                <div className="form-section-header">
+                  <div>
+                    <h3 id="section-santri-title" className="form-section-title">Identitas Santri</h3>
+                    <p className="form-section-desc">Cari dan pastikan data santri yang akan dicatat agar riwayat tidak tertukar.</p>
+                  </div>
+                </div>
+
+                {selectedSantri ? (
+                  <div className="selected-santri-card">
+                    <div className="selected-santri-header">
+                      <div className="selected-santri-main">
+                        <div className="selected-santri-avatar" aria-hidden="true">
+                          {selectedSantri.nama ? selectedSantri.nama.charAt(0).toUpperCase() : 'S'}
+                        </div>
+                        <div className="selected-santri-info">
+                          <h4 className="selected-santri-name">{selectedSantri.nama}</h4>
+                          <div className="santri-chips">
+                            <span className="santri-chip">NIS: {selectedSantri.nis || '-'}</span>
+                            <span className="santri-chip">Kamar: {selectedSantri.nama_kamar || '-'}</span>
+                            <span className="santri-chip">Unit: {selectedSantri.nama_unit || '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSantri}
+                        className="btn-change-santri"
+                        aria-label="Ganti santri terpilih"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        <span>Ganti Santri</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="student-search-field" ref={dropdownRef}>
+                    <label htmlFor="student-search">Cari Santri (Nama / NIS)</label>
+                    <div className="student-search-input-wrap">
+                      <input
+                        id="student-search"
+                        type="text"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-controls="student-search-results"
+                        aria-expanded={shouldShowSantriDropdown}
+                        placeholder="Ketik nama atau NIS santri..."
+                        value={searchTerm}
+                        onChange={event => {
+                          clearResolvedSuccess();
+                          clearFieldError('santri');
+                          setSearchTerm(event.target.value);
+                        }}
+                        onFocus={() => {
+                          if (searchTerm.trim().length >= 2) {
+                            setShowDropdown(true);
+                          }
+                        }}
+                        onKeyDown={handleSantriKeyDown}
+                        style={{ paddingRight: '48px' }}
+                        aria-activedescendant={
+                          shouldShowSantriResults && searchResults[activeSantriIndex]
+                            ? `santri-option-${searchResults[activeSantriIndex].santri_id}`
+                            : undefined
+                        }
+                        aria-invalid={Boolean(fieldErrors.santri)}
+                        aria-describedby={fieldErrors.santri ? 'student-search-error' : undefined}
+                      />
+                      {searchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearResolvedSuccess();
+                            clearFieldError('santri');
+                            setSearchTerm('');
+                            setSearchResults([]);
+                            setSantriSearchStatus('idle');
+                            setShowDropdown(false);
+                            setActiveSantriIndex(0);
+                          }}
+                          className="btn-clear-input"
+                          aria-label="Hapus teks pencarian"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {fieldErrors.santri && <small id="student-search-error" className="field-error" role="alert">{fieldErrors.santri}</small>}
+
+                    {shouldShowSantriDropdown && (
+                      <div
+                        id="student-search-results"
+                        className={`student-search-dropdown ${shouldShowSantriLoadingState ? 'is-loading' : ''}`}
+                        role={shouldShowSantriResults ? 'listbox' : undefined}
+                        aria-label={shouldShowSantriResults ? 'Hasil pencarian santri' : undefined}
+                        aria-live={shouldShowSantriResults ? undefined : 'polite'}
+                        aria-busy={shouldShowSantriLoadingState}
+                      >
+                        {shouldShowSantriLoadingState && (
+                          <div className="student-search-state" role="status">
+                            <div className="student-search-state-copy">
+                              <strong>Mencari santri...</strong>
+                              <span>Menyesuaikan nama dan NIS yang paling dekat dengan kata kunci Anda.</span>
+                            </div>
+                            <div className="student-search-skeleton-list" aria-hidden="true">
+                              {Array.from({ length: 3 }, (_, index) => (
+                                <div key={index} className="student-search-skeleton-item">
+                                  <div
+                                    className="skeleton-bar"
+                                    style={{ width: `${68 - (index * 6)}%`, height: 12 }}
+                                  />
+                                  <div
+                                    className="skeleton-bar"
+                                    style={{ width: `${90 - (index * 7)}%`, height: 10 }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {shouldShowSantriResults && searchResults.map((santri, index) => (
+                          <button
+                            id={`santri-option-${santri.santri_id}`}
+                            className={`student-search-result ${activeSantriIndex === index ? 'is-active' : ''}`}
+                            type="button"
+                            role="option"
+                            aria-selected={activeSantriIndex === index}
+                            key={santri.santri_id ?? index}
+                            onMouseEnter={() => setActiveSantriIndex(index)}
+                            onClick={() => handleSelectSantri(santri)}
+                          >
+                            <span className="search-result-name">{santri.nama}</span>
+                            <span className="search-result-meta">NIS: {santri.nis || '-'} • {santri.nama_kamar || 'Kamar -'} • {santri.nama_unit || 'Unit -'}</span>
+                          </button>
+                        ))}
+
+                        {shouldShowSantriEmptyState && (
+                          <div className="student-search-state student-search-state-empty" role="status">
+                            <div className="student-search-state-copy">
+                              <strong>Nama tidak ditemukan</strong>
+                              <span>Periksa ejaan nama atau coba cari menggunakan NIS santri.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {shouldShowSantriErrorState && (
+                          <div className="student-search-state student-search-state-error" role="status">
+                            <div className="student-search-state-copy">
+                              <strong>Pencarian belum bisa dimuat</strong>
+                              <span>Coba ulang beberapa saat lagi atau ketik ulang kata kunci pencarian.</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              <section className="form-section-block" aria-labelledby="section-violation-title">
+                <div className="form-section-header">
+                  <div>
+                    <h3 id="section-violation-title" className="form-section-title">Detail Pelanggaran</h3>
+                    <p className="form-section-desc">Pilih kategori lebih dulu, lalu cek tanggal kejadian dan poin yang akan dicatat.</p>
+                  </div>
+                </div>
+
+                <div ref={categoryDropdownRef} className="category-picker-field">
+                  <label htmlFor="violation-category">Kategori Pelanggaran</label>
+                  <div className="category-picker-input-wrap">
+                    <input
+                      ref={categoryInputRef}
+                      id="violation-category"
+                      type="text"
+                      role="combobox"
+                      aria-expanded={isKategoriOpen}
+                      aria-controls="violation-category-menu"
+                      aria-autocomplete="list"
+                      className={`category-picker-input ${isKategoriOpen ? 'is-open' : ''}`}
+                      value={kategoriSearch}
+                      onChange={event => {
+                        clearResolvedSuccess();
+                        clearFieldError('kategori');
+                        setKategoriSearch(event.target.value);
+                        if (kategoriId) {
+                          setKategoriId('');
+                          setPoin('');
+                        }
+                        setIsKategoriOpen(true);
+                        setActiveKategoriIndex(0);
+                      }}
+                      onFocus={event => {
+                        setIsKategoriOpen(true);
+                        event.target.select();
+                      }}
+                      onKeyDown={handleKategoriKeyDown}
+                      placeholder={isLoadingKategori ? 'Memuat kategori pelanggaran...' : 'Cari jenis pelanggaran...'}
+                      autoComplete="off"
+                      aria-invalid={Boolean(fieldErrors.kategori)}
+                      aria-describedby={fieldErrors.kategori ? 'violation-category-error' : undefined}
+                    />
+                    <div className="category-picker-actions">
+                      {(kategoriSearch || selectedKategori) && (
+                        <button
+                          type="button"
+                          className="btn-clear-input"
+                          aria-label="Hapus pilihan jenis pelanggaran"
+                          onClick={() => {
+                            clearResolvedSuccess();
+                            clearFieldError('kategori');
+                            clearFieldError('poin');
+                            setKategoriId('');
+                            setPoin('');
+                            setKategoriSearch('');
+                            setActiveKategoriIndex(0);
+                            setIsKategoriOpen(true);
+                            categoryInputRef.current?.focus();
+                          }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="category-picker-toggle-btn"
+                        aria-label={isKategoriOpen ? 'Tutup pilihan jenis pelanggaran' : 'Buka pilihan jenis pelanggaran'}
+                        tabIndex={-1}
+                        onClick={() => {
+                          setIsKategoriOpen(open => !open);
+                          categoryInputRef.current?.focus();
+                        }}
+                      >
+                        <span className={`category-picker-chevron ${isKategoriOpen ? 'open' : ''}`} aria-hidden="true">
+                          ⌄
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                  {fieldErrors.kategori && <small id="violation-category-error" className="field-error" role="alert">{fieldErrors.kategori}</small>}
+                  {!selectedKategori && !fieldErrors.kategori && (
+                    <small className="field-hint">Kategori yang tampil sudah mengikuti akses jabatan {user?.jabatan || 'petugas'}.</small>
+                  )}
+
+                  {isKategoriOpen && (
+                    <div id="violation-category-menu" className="category-picker-menu" role="listbox" aria-label="Daftar jenis pelanggaran">
+                      <div id="category-options-list" className="category-picker-list">
+                        {filteredKategoriList.length > 0 ? (
+                          filteredKategoriList.map((kategori, index) => (
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={String(kategori.kategori_pelanggaran_id) === kategoriId}
+                              className={`category-picker-option ${String(kategori.kategori_pelanggaran_id) === kategoriId ? 'is-selected' : ''} ${index === activeKategoriIndex ? 'is-active' : ''}`}
+                              key={kategori.kategori_pelanggaran_id}
+                              onMouseEnter={() => setActiveKategoriIndex(index)}
+                              onClick={() => selectKategori(kategori)}
+                            >
+                              <span className="category-option-copy">
+                                <span className="category-option-title">{kategori.uraian_pelanggaran}</span>
+                                <span className={getSeverityClass(kategori.kategori)}>{kategori.kategori}</span>
+                              </span>
+                              <span className="category-option-points">{kategori.poin_maks} Poin</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="category-picker-empty">Jenis pelanggaran "{kategoriSearch}" tidak ditemukan.</div>
+                        )}
+                      </div>
+                      <div className="category-picker-hint">↑↓ navigasi · Enter pilih · Esc tutup</div>
+                    </div>
                   )}
                 </div>
-                <div className="category-picker-hint">↑↓ pilih · Enter konfirmasi · Esc tutup</div>
+
+                {selectedKategori && (
+                  <div className="violation-selection-note" role="status">
+                    <div className="violation-selection-note-top">
+                      <strong>{selectedKategori.uraian_pelanggaran}</strong>
+                      <span className="violation-selection-note-points">{selectedKategori.poin_maks} poin panduan</span>
+                    </div>
+                    <div className="violation-selection-note-meta">
+                      <span className={getSeverityClass(selectedKategori.kategori)}>{selectedKategori.kategori}</span>
+                      <p>Poin awal mengikuti batas kategori. Sesuaikan bila hasil pembinaan menetapkan nilai yang lebih rendah, tetapi jangan melebihi batas panduan.</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-row-2col">
+                  <div className="violation-field-stack">
+                    <label htmlFor="violation-date">Tanggal Kejadian</label>
+                    <input
+                      id="violation-date"
+                      className="violation-field-tabular"
+                      type="date"
+                      value={tanggal}
+                      onChange={event => {
+                        clearResolvedSuccess();
+                        clearFieldError('tanggal');
+                        setTanggal(event.target.value);
+                      }}
+                      required
+                      aria-invalid={Boolean(fieldErrors.tanggal)}
+                      aria-describedby={fieldErrors.tanggal ? 'violation-date-error' : undefined}
+                    />
+                    {fieldErrors.tanggal && <small id="violation-date-error" className="field-error" role="alert">{fieldErrors.tanggal}</small>}
+                  </div>
+
+                  <div className="violation-field-stack">
+                    <label htmlFor="violation-points">
+                      Jumlah Poin
+                      {poinMaks !== null ? ` (Maks. ${poinMaks} poin)` : ''}
+                    </label>
+                    <input
+                      id="violation-points"
+                      className="violation-field-tabular"
+                      type="number"
+                      min="1"
+                      max={poinMaks ?? undefined}
+                      step="1"
+                      value={poin}
+                      onChange={event => {
+                        clearResolvedSuccess();
+                        clearFieldError('poin');
+                        setPoin(event.target.value);
+                      }}
+                      placeholder={poinMaks !== null ? `1 - ${poinMaks}` : 'Pilih kategori lebih dulu'}
+                      disabled={poinMaks === null}
+                      aria-invalid={Boolean(fieldErrors.poin)}
+                      aria-describedby={fieldErrors.poin ? 'violation-points-error' : undefined}
+                    />
+                    {!fieldErrors.poin && poinMaks !== null && (
+                      <small className="field-hint">
+                        Poin awal terisi dari kategori dan masih bisa disesuaikan selama tidak melebihi batas panduan.
+                      </small>
+                    )}
+                    {fieldErrors.poin && <small id="violation-points-error" className="field-error" role="alert">{fieldErrors.poin}</small>}
+                  </div>
+                </div>
+              </section>
+
+              <section className="form-section-block" aria-labelledby="section-evidence-title">
+                <div className="form-section-header">
+                  <div>
+                    <h3 id="section-evidence-title" className="form-section-title">Bukti & Keterangan</h3>
+                    <p className="form-section-desc">Tambahkan foto bila ada, lalu tulis kronologi singkat agar petugas lain bisa meninjau dengan cepat.</p>
+                  </div>
+                </div>
+
+                <div className="violation-field-stack">
+                  <label htmlFor="violation-photo">Bukti Foto (Kamera HP / File)</label>
+                  <small className="field-hint violation-photo-hint">Foto pendukung dianjurkan bila ada konteks insiden atau barang bukti. Jika tidak ada foto, pastikan catatan kronologi cukup jelas.</small>
+                  <div className="file-dropzone-custom">
+                    {fotoPreview ? (
+                      <div className="photo-preview-container">
+                        <img src={fotoPreview} alt="Bukti foto pelanggaran" className="photo-preview-img" />
+                        <div className="photo-preview-actions">
+                          <span className="photo-filename">{foto?.name}</span>
+                          <button
+                            type="button"
+                            onClick={handleRemoveFoto}
+                            className="btn-remove-photo"
+                            aria-label="Hapus atau ganti foto"
+                            title="Hapus atau ganti foto"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label htmlFor="violation-photo" className="photo-dropzone-label">
+                        <div className="photo-dropzone-icon">
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                          </svg>
+                        </div>
+                        <div className="photo-dropzone-text">
+                          <strong>Tambahkan Foto Pendukung</strong>
+                          <span>JPG, PNG, atau WEBP. Maksimal 5 MB.</span>
+                        </div>
+                        <input
+                          id="violation-photo"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleFotoChange}
+                          ref={photoInputRef}
+                          className="photo-input-hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  {fieldErrors.file && <small className="field-error" role="alert">{fieldErrors.file}</small>}
+                </div>
+
+                <div className="violation-field-stack">
+                  <label htmlFor="violation-notes">Catatan Tambahan (Opsional)</label>
+                  <textarea
+                    id="violation-notes"
+                    placeholder="Tuliskan kronologi singkat atau konteks tambahan kejadian..."
+                    value={catatan}
+                    onChange={event => {
+                      clearResolvedSuccess();
+                      clearFieldError('catatan');
+                      setCatatan(event.target.value);
+                    }}
+                  />
+                </div>
+              </section>
+
+              <div className="violation-form-actions">
+                <Link to="/pelanggaran/semua" className="btn-cancel-form">
+                  Batal
+                </Link>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="violation-submit"
+                >
+                  {isSubmitting ? (foto ? 'Menyimpan Data & Foto...' : 'Menyimpan Data...') : 'Simpan Pelanggaran'}
+                </button>
               </div>
+            </form>
+
+            {poinAccumulated !== null && (
+              <section className="violation-success-summary" aria-labelledby="violation-success-title">
+                <div className="violation-success-header">
+                  <span className="violation-success-check" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h2 id="violation-success-title">Pelanggaran berhasil dicatat</h2>
+                    <p>Data baru sudah masuk ke riwayat {selectedSantri?.nama || 'santri'}.</p>
+                  </div>
+                </div>
+                <div className="violation-success-content">
+                  <div>
+                    <span className="violation-success-label">Akumulasi poin saat ini</span>
+                    <strong className="violation-success-points">{poinAccumulated}<small> poin</small></strong>
+                  </div>
+                  <span className="violation-success-note">Tinjau kembali bila perlu sebelum menambah catatan berikutnya.</span>
+                </div>
+                <div className="violation-success-actions">
+                  <Link to={`/pelanggaran/semua?santri_id=${selectedSantri?.santri_id}`} className="violation-history-link">
+                    Lihat riwayat pelanggaran <span aria-hidden="true">→</span>
+                  </Link>
+                  <button type="button" className="violation-new-entry" onClick={handleStartAnotherEntry}>
+                    Input lagi
+                  </button>
+                </div>
+              </section>
             )}
           </div>
 
-          {/* Custom Input Fields (Jika memilih "Lainnya / Input Manual") */}
-          {isCustomKategori && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', backgroundColor: 'rgba(15, 110, 86, 0.05)', borderRadius: '8px', border: '1px solid var(--garis)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <label htmlFor="custom-uraian" style={{ fontWeight: 600, color: 'var(--tinta)', marginBottom: '6px' }}>Nama / Uraian Pelanggaran Baru *</label>
-                <input
-                  id="custom-uraian"
-                  type="text"
-                  value={uraianPelanggaranCustom}
-                  onChange={(e) => setUraianPelanggaranCustom(e.target.value)}
-                  placeholder="Ketik nama pelanggaran (mis. Menggunakan HP di luar jadwal)..."
-                  required
-                  aria-invalid={Boolean(fieldErrors.uraian)}
-                  aria-describedby={fieldErrors.uraian ? 'custom-uraian-error' : undefined}
-                />
-                {fieldErrors.uraian && <small id="custom-uraian-error" className="field-error" role="alert">{fieldErrors.uraian}</small>}
-              </div>
-
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column' }}>
-                  <label htmlFor="custom-kategori" style={{ fontWeight: 600, color: 'var(--tinta)', marginBottom: '6px' }}>Tingkat Kategori Pelanggaran *</label>
-                  <select
-                    id="custom-kategori"
-                    value={kategoriCustom}
-                    onChange={(e) => setKategoriCustom(e.target.value as any)}
-                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--garis)', backgroundColor: 'var(--kertas)' }}
-                  >
-                    <option value="Ringan">Ringan</option>
-                    <option value="Sedang">Sedang</option>
-                    <option value="Berat">Berat</option>
-                    <option value="Kewajiban">Kewajiban</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label htmlFor="violation-points">
-              Jumlah Poin {poinMaks !== null ? `(Maksimal ${poinMaks} poin)` : ''}
-            </label>
-            <input
-              id="violation-points"
-              type="number"
-              min="1"
-              max={poinMaks ?? undefined}
-              step="1"
-              value={poin}
-              onChange={(e) => setPoin(e.target.value)}
-              placeholder={poinMaks !== null ? `Masukkan 1 - ${poinMaks}` : 'Pilih kategori terlebih dahulu'}
-              disabled={poinMaks === null}
-              aria-invalid={Boolean(fieldErrors.poin)}
-              aria-describedby={fieldErrors.poin ? 'violation-points-error' : undefined}
-            />
-            {poinMaks !== null && <small className="field-hint">Masukkan poin aktual, maksimal sesuai poin kategori yang dipilih.</small>}
-            {fieldErrors.poin && <small id="violation-points-error" className="field-error" role="alert">{fieldErrors.poin}</small>}
-          </div>
-
-          {/* Custom File Dropzone & Camera Input with Real-time Preview */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label htmlFor="violation-photo">Bukti Foto (Kamera HP / File)</label>
-            <div className="file-dropzone-custom">
-              {fotoPreview ? (
-                <div className="photo-preview-container">
-                  <img src={fotoPreview} alt="Bukti Foto Pelanggaran" className="photo-preview-img" />
-                  <div className="photo-preview-actions">
-                    <span className="photo-filename">{foto?.name}</span>
-                    <button
-                      type="button"
-                      onClick={handleRemoveFoto}
-                      className="btn-remove-photo"
-                      aria-label="Hapus atau ganti foto"
-                      title="Hapus atau ganti foto"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <label htmlFor="violation-photo" className="photo-dropzone-label">
-                  <div className="photo-dropzone-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                      <circle cx="12" cy="13" r="4"/>
-                    </svg>
-                  </div>
-                  <div className="photo-dropzone-text">
-                    <strong>Ambil Foto Kejadian atau Pilih File</strong>
-                    <span>Format JPG, PNG, atau WEBP. Maksimal 5 MB.</span>
-                  </div>
-                  <input
-                    id="violation-photo"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handleFotoChange}
-                    ref={photoInputRef}
-                    className="photo-input-hidden"
-                  />
-                </label>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label htmlFor="violation-notes">Catatan Tambahan (Opsional)</label>
-            <textarea
-              id="violation-notes"
-              placeholder="Tuliskan keterangan tambahan mengenai kejadian pelanggaran..."
-              value={catatan}
-              onChange={(e) => setCatatan(e.target.value)}
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={isSubmitting}
-            className="violation-submit"
-          >
-            {isSubmitting ? (foto ? 'Menyimpan Data & Foto...' : 'Menyimpan Data...') : 'Simpan Pelanggaran'}
-          </button>
-
-        </form>
-
-        {poinAccumulated !== null && (
-          <section className="violation-success-summary" aria-labelledby="violation-success-title">
-            <div className="violation-success-header">
-              <span className="violation-success-check" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-              </span>
+          <section className="master-section violation-history-section" aria-labelledby="violation-history-title">
+            <div className="section-heading violation-history-heading">
               <div>
-                <h2 id="violation-success-title">Pelanggaran berhasil dicatat</h2>
-                <p>Data baru sudah masuk ke riwayat {selectedSantri?.nama || 'santri'}.</p>
+                <h2 id="violation-history-title">Riwayat input terbaru</h2>
+                <p className="violation-history-intro">{historyDescription}</p>
+              </div>
+              <div className="violation-history-heading-actions">
+                <Link to="/pelanggaran/semua" className="secondary-button" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                  Buka daftar pelanggaran
+                </Link>
               </div>
             </div>
-            <div className="violation-success-content">
-              <div>
-                <span className="violation-success-label">Akumulasi poin saat ini</span>
-                <strong className="violation-success-points">{poinAccumulated}<small> poin</small></strong>
+
+            {isInputHistoryLoading ? (
+              <div className="table-scroll">
+                <table className="master-table violation-history-table" aria-label="Riwayat input terbaru">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Tanggal</th>
+                      <th>Nama Santri</th>
+                      <th>Kategori</th>
+                      <th>Uraian Pelanggaran</th>
+                      <th>Poin</th>
+                      <th>Catatan / Tindakan</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <tr key={`history-skeleton-${index}`} className="table-skeleton-row">
+                        <td><span className="table-skeleton-line line-1" /></td>
+                        <td><span className="table-skeleton-line line-2" /></td>
+                        <td><span className="table-skeleton-line" /></td>
+                        <td><span className="table-skeleton-line line-1" /></td>
+                        <td><span className="table-skeleton-line" /></td>
+                        <td><span className="table-skeleton-line line-1" /></td>
+                        <td><span className="table-skeleton-line" /></td>
+                        <td><span className="table-skeleton-line line-2" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <span className="violation-success-note">Pastikan poin ditinjau kembali bila diperlukan.</span>
-            </div>
-            <div className="violation-success-actions">
-              <Link to={`/pelanggaran/semua?santri_id=${selectedSantri?.santri_id}`} className="violation-history-link">
-                Lihat riwayat pelanggaran <span aria-hidden="true">→</span>
-              </Link>
-              <button type="button" className="violation-new-entry" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                Input lagi
-              </button>
-            </div>
+            ) : inputHistoryError ? (
+              <div className="error-box violation-history-error">
+                <span>{inputHistoryError}</span>
+                <button type="button" className="secondary-button" onClick={() => void loadInputHistory()}>
+                  Coba lagi
+                </button>
+              </div>
+            ) : visibleInputHistory.length > 0 ? (
+              <>
+                <p className="account-result-count">
+                  Menampilkan {visibleInputHistory.length} dari {inputHistory.length} input terbaru Anda.
+                </p>
+                <div className="table-scroll">
+                  <table className="master-table violation-history-table" aria-label="Riwayat input terbaru">
+                    <thead>
+                      <tr>
+                        <th>No</th>
+                        <th>Tanggal</th>
+                        <th>Nama Santri</th>
+                        <th>Kategori</th>
+                        <th>Uraian Pelanggaran</th>
+                        <th>Poin</th>
+                        <th>Catatan / Tindakan</th>
+                        <th>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleInputHistory.map((item, index) => (
+                        <tr key={item.pelanggaran_id}>
+                          <td>{index + 1}</td>
+                          <td><strong>{item.tanggal}</strong></td>
+                          <td><strong>{item.nama_santri}</strong></td>
+                          <td><span className={getSeverityClass(item.kategori)}>{item.kategori || 'Ringan'}</span></td>
+                          <td>{item.uraian_pelanggaran}</td>
+                          <td>
+                            <strong className="violation-history-points">
+                              +{item.poin || item.poin_maks}
+                            </strong>
+                          </td>
+                          <td>{item.keterangan || item.catatan || item.tindakan_sanksi || '—'}</td>
+                          <td>
+                            <Link
+                              to={`/pelanggaran/semua?santri_id=${item.santri_id}`}
+                              className="table-detail-link"
+                              title={`Lihat semua pelanggaran ${item.nama_santri}`}
+                            >
+                              Lihat detail
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state violation-history-empty">
+                Belum ada riwayat input dari akun ini. Setelah menyimpan pelanggaran, catatan terbaru akan muncul otomatis di tabel.
+              </div>
+            )}
           </section>
-        )}
+        </div>
       </div>
     </div>
   );

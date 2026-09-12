@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
+import { AppToast } from '../components/AppToast';
 import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -20,6 +21,7 @@ interface RaportData {
   santri: {
     santri_id: number;
     nis: string | null;
+    no_id_induk?: string | null;
     nama: string;
     nama_kamar: string | null;
     nama_kelas: string | null;
@@ -45,6 +47,7 @@ interface RoomOption {
 interface RosterSantri {
   santri_id: number;
   nis: string | null;
+  no_id_induk?: string | null;
   nama: string;
   raport_ubudiyah_id: number | null;
 }
@@ -109,10 +112,16 @@ export function UbudiyahViewPage() {
   const [downloadingBulk, setDownloadingBulk] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState('');
+  const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' } | null>(null);
+
+  const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   usePageMeta({
-    title: 'Lihat Laporan Ubudiyah',
-    description: 'Pencarian dan pratinjau lembar Laporan Ubudiyah Yaumiyah santri per kamar atau nama.',
+    title: 'Lihat Raport Pembinaan',
+    description: 'Pencarian dan pratinjau lembar Raport Pembinaan santri per kamar atau nama.',
   });
 
   // 1. Fetch Room Options (assigned to the logged-in staff)
@@ -122,12 +131,19 @@ export function UbudiyahViewPage() {
     enabled: !!user,
   });
 
-  // Set default room if rooms exist and no room is selected
+  const isAdmin = user?.jabatan === 'Admin';
+  const isPembina = !isAdmin;
+  const isKamarDisabled = isPembina && rooms.length <= 1;
+  const allowedRoomIds = useMemo(() => new Set(rooms.map(r => r.target_id)), [rooms]);
+
+  // Set default room if rooms exist, and prevent non-admin from viewing unassigned rooms via URL
   useEffect(() => {
-    if (rooms.length > 0 && !selectedKamarId) {
-      setSelectedKamarId(rooms[0].target_id);
+    if (rooms.length > 0) {
+      if (!selectedKamarId || (!isAdmin && !allowedRoomIds.has(selectedKamarId))) {
+        setSelectedKamarId(rooms[0].target_id);
+      }
     }
-  }, [rooms, selectedKamarId]);
+  }, [rooms, selectedKamarId, isAdmin, allowedRoomIds]);
 
   // 2. Fetch Room Roster list (when mode = 'kamar')
   const sessionEnabled = mode === 'kamar' && !!selectedKamarId;
@@ -145,7 +161,8 @@ export function UbudiyahViewPage() {
       const delayDebounceFn = setTimeout(() => {
         setIsSearchingSantri(true);
         api.get(`/api/santri?q=${encodeURIComponent(searchTerm.trim())}`).then(res => {
-          setSearchResults(res.data);
+          const results = isAdmin ? res.data : res.data.filter((s: any) => allowedRoomIds.has(s.kamar_id));
+          setSearchResults(results);
           setShowDropdown(true);
         }).catch(console.error).finally(() => setIsSearchingSantri(false));
       }, 300);
@@ -153,7 +170,7 @@ export function UbudiyahViewPage() {
     } else {
       setShowDropdown(false);
     }
-  }, [searchTerm, selectedSantri]);
+  }, [searchTerm, selectedSantri, isAdmin, allowedRoomIds]);
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -177,12 +194,17 @@ export function UbudiyahViewPage() {
       api.get(`/api/santri?q=`).then(res => {
         const found = res.data.find((s: any) => s.santri_id === numericId);
         if (found) {
+          if (!isAdmin && !allowedRoomIds.has(found.kamar_id)) {
+            setSelectedSantri(null);
+            setSelectedSantriId(null);
+            return;
+          }
           setSelectedSantri(found);
           setSearchTerm(found.nama);
         }
       }).catch(console.error);
     }
-  }, [searchParams]);
+  }, [searchParams, isAdmin, allowedRoomIds, selectedSantriId]);
 
   // 4. Fetch Individual Raport Preview
   const raportEnabled = !!selectedSantriId;
@@ -192,6 +214,19 @@ export function UbudiyahViewPage() {
     enabled: raportEnabled,
     retry: false,
   });
+
+  useEffect(() => {
+    if (raportError && selectedSantriId) {
+      const is403 = (raportError as any)?.response?.status === 403;
+      showToast(
+        is403
+          ? 'Santri berada di luar penugasan Anda.'
+          : `Raport belum diisi untuk santri ini pada periode ${BULAN_NAMA[bulan]} ${tahun}.`,
+        is403 ? 'error' : 'info'
+      );
+    }
+  }, [raportError, selectedSantriId, bulan, tahun]);
+
   const { data: archives = [] } = useQuery<ArchiveDocument[]>({
     queryKey: ['ubudiyah-archives', selectedSantriId],
     queryFn: async () => (await api.get(`/api/ubudiyah/${selectedSantriId}/history`)).data,
@@ -199,7 +234,12 @@ export function UbudiyahViewPage() {
   });
 
   const handleSelectSantri = (santri: any) => {
+    if (!isAdmin && !allowedRoomIds.has(santri.kamar_id)) {
+      alert('Anda hanya dapat melihat raport santri di kamar yang Anda bina.');
+      return;
+    }
     setSelectedSantri(santri);
+    setSelectedSantriId(santri.santri_id);
     setSearchTerm(santri.nama);
     setSelectedSantriId(santri.santri_id);
     setSearchResults([]);
@@ -278,10 +318,32 @@ export function UbudiyahViewPage() {
 
   return (
     <section className="app-container raport-view-page">
+      <div style={{ marginBottom: '14px' }}>
+        <Link
+          to="/ubudiyah"
+          className="santri-back-link"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#0f766e',
+            textDecoration: 'none',
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Kembali ke Raport Pembinaan</span>
+        </Link>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div className="page-heading" style={{ marginBottom: 0 }}>
           <span className="page-eyebrow">Evaluasi Pembinaan</span>
-          <h1>Pratinjau Laporan Ubudiyah</h1>
+          <h1>Pratinjau Raport Pembinaan</h1>
         </div>
 
         {/* Mode switcher tabs */}
@@ -338,9 +400,15 @@ export function UbudiyahViewPage() {
                 label="Kamar"
                 value={selectedKamarId ? String(selectedKamarId) : ''}
                 placeholder="— Pilih Kamar —"
+                disabled={isKamarDisabled}
                 options={rooms.map(room => ({ value: String(room.target_id), label: room.nama_target }))}
                 onChange={value => { setSelectedKamarId(Number(value) || null); setSelectedSantriId(null); }}
               />
+              {isKamarDisabled && rooms.length > 0 && (
+                <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                  Kamar binaan Anda ({rooms[0]?.nama_target})
+                </small>
+              )}
             </div>
 
             <div className="raport-field">
@@ -454,7 +522,7 @@ export function UbudiyahViewPage() {
             </button>
           </div>
 
-          <div className="raport-table-wrapper" style={{ boxShadow: 'none', border: '1px solid var(--garis)', borderRadius: '8px' }}>
+          <div className="raport-table-wrapper" style={{ boxShadow: 'none', border: '1px solid var(--garis)', borderRadius: '8px', maxHeight: 'none', overflowY: 'visible' }}>
             <table className="raport-input-table ubudiyah-input-table">
               <thead>
                 <tr>
@@ -473,7 +541,11 @@ export function UbudiyahViewPage() {
                       <td className="no-cell" style={{ textAlign: 'center', fontWeight: 600 }}>{i + 1}</td>
                       <td className="aspek-cell" style={{ textAlign: 'left', paddingLeft: '10px' }}>
                         <div style={{ fontWeight: 600 }}>{s.nama}</div>
-                        {s.nis && <div style={{ fontSize: '11px', color: 'var(--tinta-pudar)' }}>{s.nis}</div>}
+                        {s.no_id_induk ? (
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>NIP: {s.no_id_induk}</div>
+                        ) : (
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>NIP: —</div>
+                        )}
                       </td>
                       <td data-label="Status Laporan" style={{ textAlign: 'center' }}>
                         {sudahDiisi ? (
@@ -492,7 +564,14 @@ export function UbudiyahViewPage() {
                             backgroundColor: isSelected ? 'var(--aksen)' : 'var(--kertas-kartu)',
                             color: isSelected ? '#fff' : 'var(--aksen)'
                           }}
-                          onClick={() => { setSelectedSantriId(s.santri_id); setSelectedSantri(s); setSearchTerm(s.nama); }}
+                          onClick={() => {
+                            setSelectedSantriId(s.santri_id);
+                            setSelectedSantri(s);
+                            setSearchTerm(s.nama);
+                            if (!sudahDiisi) {
+                              showToast(`Raport belum diisi untuk santri ini pada periode ${BULAN_NAMA[bulan]} ${tahun}.`, 'info');
+                            }
+                          }}
                         >
                           {isSelected ? 'Terpilih' : 'Lihat Laporan'}
                         </button>
@@ -512,7 +591,7 @@ export function UbudiyahViewPage() {
       {sessionError && mode === 'kamar' && (
         <div className="error-box" role="alert">
           {(sessionError as any)?.response?.status === 503
-            ? 'Modul Ubudiyah belum siap. Hubungi Admin untuk menyiapkan database.'
+            ? 'Modul Raport Pembinaan belum siap. Hubungi Admin untuk menyiapkan database.'
             : 'Data laporan kamar gagal dimuat. Periksa koneksi atau akses kamar Anda, lalu coba lagi.'}
           <button type="button" className="secondary-button" onClick={() => void refetchSession()}>Coba lagi</button>
         </div>
@@ -523,15 +602,7 @@ export function UbudiyahViewPage() {
       {loadingRaport && raportEnabled && <ContentSkeleton rows={6} />}
 
       {!selectedSantriId && mode === 'nama' && (
-        <div className="empty-state" style={{ marginTop: '20px' }}>Cari dan pilih nama santri di atas untuk memuat pratinjau Laporan Ubudiyah.</div>
-      )}
-
-      {!selectedSantriId && mode === 'kamar' && session && (
-        <div className="empty-state" style={{ marginTop: '20px' }}>Klik tombol "Lihat Laporan" pada daftar santri kamar di atas untuk memuat pratinjau raport.</div>
-      )}
-
-      {raportError && selectedSantriId && (
-        <div className="empty-state" style={{ marginTop: '20px' }}>Laporan Ubudiyah Yaumiyah belum diisi untuk santri ini pada periode {BULAN_NAMA[bulan]} {tahun}.</div>
+        <div className="empty-state" style={{ marginTop: '20px' }}>Cari dan pilih nama santri di atas untuk memuat pratinjau Raport Pembinaan.</div>
       )}
 
       {/* Raport Sheet Preview Card */}
@@ -575,7 +646,7 @@ export function UbudiyahViewPage() {
 
             {/* Document Title */}
             <h2 style={{ textAlign: 'center', fontSize: '15px', fontWeight: 'bold', textDecoration: 'underline', marginBottom: '20px' }}>
-              LAPORAN UBUDIYAH YAUMIYAH
+              RAPORT PEMBINAAN
             </h2>
 
             {/* Student Info Bar */}
@@ -589,9 +660,9 @@ export function UbudiyahViewPage() {
                       <td style={{ fontWeight: 600 }}>{raport.tahun_pelajaran}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '3px 0' }}>Nomor Induk (NIS)</td>
+                      <td style={{ padding: '3px 0' }}>Nomor Induk Pondok</td>
                       <td>:</td>
-                      <td>{raport.santri.nis || '-'}</td>
+                      <td>{raport.santri.no_id_induk || raport.santri.nis || '-'}</td>
                     </tr>
                     <tr>
                       <td style={{ padding: '3px 0' }}>Nama Santri</td>
@@ -688,6 +759,15 @@ export function UbudiyahViewPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification Standar Kanan Atas */}
+      {toast && (
+        <AppToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </section>
   );

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Absensi;
 use App\Support\KamarName;
+use App\Support\MediaUrl;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,7 +26,7 @@ class AbsensiController extends Controller
         ],
         'kamar' => [
             'kode' => 'KAMAR',
-            'nama' => 'Kamar',
+            'nama' => 'Absensi Kamar Malam',
             'sumber' => 'Database Santri Kamar',
             'tipe_target' => 'Kamar',
             'santri_column' => 'kamar_id',
@@ -35,7 +36,7 @@ class AbsensiController extends Controller
         ],
         'keberangkatan' => [
             'kode' => 'KAMAR',
-            'nama' => 'Keberangkatan Kelas',
+            'nama' => 'Absensi Kamar Pagi',
             'sumber' => 'Kamar pada sesi pagi',
             'tipe_target' => 'Kamar',
             'santri_column' => 'kamar_id',
@@ -299,12 +300,20 @@ class AbsensiController extends Controller
                 'santri.nis',
                 'santri.no_id_induk',
                 'santri.nama',
+                'santri.foto_path',
+                'santri.foto_uploaded_at',
                 'absensi.absensi_id',
                 'absensi.status',
                 'absensi.menit_terlambat',
                 'absensi.keterangan',
                 'absensi.waktu_input',
             ]);
+
+        $santri->transform(function ($s) {
+            $s->foto_url = $s->foto_path ? MediaUrl::santriPhoto((int) $s->santri_id, $s->foto_uploaded_at) : null;
+            unset($s->foto_path, $s->foto_uploaded_at);
+            return $s;
+        });
 
         $namaPenanggungJawab = null;
         if ($config['tipe_target'] === 'KelasFormal' && $target->wali_kelas_id) {
@@ -338,11 +347,12 @@ class AbsensiController extends Controller
             ->join('jadwal_kegiatan as jadwal', 'jadwal.jadwal_id', '=', 'absensi.jadwal_id')
             ->leftJoin('unit_pendidikan as unit', 'unit.unit_id', '=', 'santri.unit_id')
             ->leftJoin('kamar', 'kamar.kamar_id', '=', 'santri.kamar_id')
+            ->leftJoin('kelas_formal as kf', 'kf.kelas_formal_id', '=', 'santri.kelas_formal_id')
             ->select([
                 'absensi.absensi_id', 'absensi.tanggal', 'jk.kode as jenis_kegiatan', 'jk.nama as nama_kegiatan',
-                'jadwal.nama_jadwal', 'santri.santri_id', 'santri.nama as nama_santri', 'unit.kode as unit',
-                'kamar.nama as kamar', 'absensi.status', 'absensi.menit_terlambat', 'absensi.keterangan',
-                'absensi.waktu_input', 'absensi.diinput_oleh',
+                'jadwal.nama_jadwal', 'santri.santri_id', 'santri.nama as nama_santri', 'santri.no_id_induk', 'santri.nis',
+                'unit.kode as unit', 'kamar.nama as kamar', 'kf.nama_kelas as kelas_formal', 'absensi.status',
+                'absensi.menit_terlambat', 'absensi.keterangan', 'absensi.waktu_input', 'absensi.diinput_oleh',
             ])
             ->orderByDesc('absensi.tanggal')
             ->orderBy('santri.nama');
@@ -378,6 +388,30 @@ class AbsensiController extends Controller
         if ($request->filled('sampai')) $query->whereDate('absensi.tanggal', '<=', $request->date('sampai'));
         if ($request->filled('santri')) $query->where('santri.nama', 'like', '%'.$request->string('santri').'%');
         if ($request->filled('kamar_id')) $query->where('santri.kamar_id', $request->integer('kamar_id'));
+        if ($request->filled('target_id')) {
+            $targetId = $request->integer('target_id');
+            $query->where(function ($q) use ($targetId) {
+                $q->where('santri.kamar_id', $targetId)
+                  ->orWhere('santri.kelas_formal_id', $targetId)
+                  ->orWhere('santri.kelompok_pbs_id', $targetId)
+                  ->orWhere('santri.kelompok_madin_id', $targetId)
+                  ->orWhere('santri.kelompok_pbm_id', $targetId);
+            });
+        }
+        if ($request->filled('target_ids')) {
+            $rawIds = $request->input('target_ids');
+            $ids = is_array($rawIds) ? $rawIds : explode(',', (string) $rawIds);
+            $ids = array_filter(array_map('intval', $ids));
+            if (!empty($ids)) {
+                $query->where(function ($q) use ($ids) {
+                    $q->whereIn('santri.kamar_id', $ids)
+                      ->orWhereIn('santri.kelas_formal_id', $ids)
+                      ->orWhereIn('santri.kelompok_pbs_id', $ids)
+                      ->orWhereIn('santri.kelompok_madin_id', $ids)
+                      ->orWhereIn('santri.kelompok_pbm_id', $ids);
+                });
+            }
+        }
 
         return response()->json($query->limit(500)->get());
     }
@@ -582,6 +616,88 @@ class AbsensiController extends Controller
         });
 
         return response()->json(['message' => 'Absensi berhasil diubah']);
+    }
+
+    public function getJadwal()
+    {
+        $jadwalList = DB::table('jadwal_kegiatan')
+            ->join('jenis_kegiatan', 'jadwal_kegiatan.jenis_kegiatan_id', '=', 'jenis_kegiatan.jenis_kegiatan_id')
+            ->select([
+                'jadwal_kegiatan.jadwal_id',
+                'jadwal_kegiatan.jenis_kegiatan_id',
+                'jenis_kegiatan.kode as kode_kegiatan',
+                'jenis_kegiatan.nama as nama_kegiatan_modul',
+                'jadwal_kegiatan.nama_jadwal',
+                'jadwal_kegiatan.konteks_operasional',
+                'jadwal_kegiatan.jam_mulai',
+                'jadwal_kegiatan.jam_selesai',
+                'jadwal_kegiatan.toleransi_menit',
+                'jadwal_kegiatan.status_aktif',
+            ])
+            ->orderBy('jadwal_kegiatan.jam_mulai', 'asc')
+            ->get();
+
+        $mapped = $jadwalList->map(function ($item) {
+            $penanggungJawab = match ($item->kode_kegiatan) {
+                'KAMAR' => 'Pembina kamar',
+                'SEKOLAH' => 'Wali kelas',
+                'PBS', 'PBM', 'DINIYAH' => 'Piket Pengajian',
+                default => 'Petugas',
+            };
+
+            $jamMulai = substr((string) $item->jam_mulai, 0, 5);
+            $jamSelesai = substr((string) $item->jam_selesai, 0, 5);
+
+            return [
+                'jadwal_id' => $item->jadwal_id,
+                'jenis_kegiatan_id' => $item->jenis_kegiatan_id,
+                'kode_kegiatan' => $item->kode_kegiatan,
+                'nama_jadwal' => $item->nama_jadwal,
+                'nama_kegiatan_modul' => $item->nama_kegiatan_modul,
+                'konteks_operasional' => $item->konteks_operasional,
+                'jam_mulai' => $jamMulai,
+                'jam_selesai' => $jamSelesai,
+                'waktu_pelaksanaan' => $jamMulai . '-' . $jamSelesai,
+                'penanggung_jawab' => $penanggungJawab,
+                'toleransi_menit' => (int) $item->toleransi_menit,
+                'status_aktif' => (bool) $item->status_aktif,
+            ];
+        });
+
+        return response()->json($mapped);
+    }
+
+    public function updateJadwal(Request $request, int $id)
+    {
+        $jadwal = DB::table('jadwal_kegiatan')->where('jadwal_id', $id)->first();
+        if (!$jadwal) {
+            return response()->json(['message' => 'Jadwal absensi tidak ditemukan'], 404);
+        }
+
+        $validated = $request->validate([
+            'nama_jadwal' => 'required|string|max:100',
+            'jam_mulai' => 'required|string|regex:/^\d{2}:\d{2}$/',
+            'jam_selesai' => 'required|string|regex:/^\d{2}:\d{2}$/',
+            'toleransi_menit' => 'nullable|integer|min:0|max:240',
+            'status_aktif' => 'nullable|boolean',
+        ]);
+
+        $updateData = [
+            'nama_jadwal' => $validated['nama_jadwal'],
+            'jam_mulai' => $validated['jam_mulai'] . ':00',
+            'jam_selesai' => $validated['jam_selesai'] . ':00',
+            'toleransi_menit' => $validated['toleransi_menit'] ?? 0,
+        ];
+        if (array_key_exists('status_aktif', $validated)) {
+            $updateData['status_aktif'] = $validated['status_aktif'] ? 1 : 0;
+        }
+
+        DB::table('jadwal_kegiatan')->where('jadwal_id', $id)->update($updateData);
+
+        return response()->json([
+            'message' => 'Waktu pelaksanaan absensi berhasil diperbarui',
+            'jadwal_id' => $id,
+        ]);
     }
 
     private function resolveJenis(string $jenis): array

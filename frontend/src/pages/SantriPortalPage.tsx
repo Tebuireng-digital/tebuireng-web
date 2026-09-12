@@ -173,7 +173,7 @@ function PortalDashboardPage({ user, logout, mobileOpen, setMobileOpen, navigate
           <button onClick={() => navigate('kehadiran')}><PortalIcon type="calendar"/><span>Kehadiran</span></button>
           <button onClick={() => navigate('pelanggaran')}><PortalIcon type="warning"/><span>Pelanggaran</span></button>
           <button onClick={() => navigate('perizinan')}><PortalIcon type="permit"/><span>Perizinan</span></button>
-          <button onClick={() => navigate('rapor')}><PortalIcon type="report"/><span>Rapor Pengajian</span></button>
+          <button onClick={() => navigate('rapor')}><PortalIcon type="report"/><span>Rapor Santri</span></button>
           <button onClick={() => navigate('prestasi')}><PortalIcon type="award"/><span>Prestasi</span></button>
           <button onClick={() => navigate('password')}><PortalIcon type="lock"/><span>Ganti Password</span></button>
         </nav>
@@ -235,21 +235,144 @@ function PortalSectionShell({ user, logout, mobileOpen, setMobileOpen, navigate,
 }
 
 function PortalWorkspace() {
-  const { user, logout } = useSantriPortalAuth(); const [section, setSection] = useState<PortalSection>('beranda'); const [mobileOpen, setMobileOpen] = useState(false);
-  const [attendance, setAttendance] = useState<PortalRecord[]>([]); const [violations, setViolations] = useState<PortalRecord[]>([]); const [permits, setPermits] = useState<PortalRecord[]>([]); const [achievements, setAchievements] = useState<PortalRecord[]>([]); const [loading, setLoading] = useState(true); const [raporYear, setRaporYear] = useState('2026/2027'); const [raporSemester, setRaporSemester] = useState<'Gasal' | 'Genap'>('Gasal'); const [reports, setReports] = useState<PortalRecord[]>([]); const [raporLoading, setRaporLoading] = useState(false);
+  const { user, logout } = useSantriPortalAuth();
+  const [section, setSection] = useState<PortalSection>('beranda');
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [attendance, setAttendance] = useState<PortalRecord[]>([]);
+  const [violations, setViolations] = useState<PortalRecord[]>([]);
+  const [permits, setPermits] = useState<PortalRecord[]>([]);
+  const [achievements, setAchievements] = useState<PortalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [portalError, setPortalError] = useState('');
-  usePageMeta({ title: section === 'beranda' ? 'Beranda Portal Wali Santri' : section === 'rapor' ? 'Rapor Pengajian Anak' : section[0].toUpperCase() + section.slice(1), description: 'Portal wali santri Pondok Pesantren Tebuireng untuk memantau data anak.' });
-  useEffect(() => { Promise.all([api.get('/api/santri-portal/kehadiran'), api.get('/api/santri-portal/pelanggaran'), api.get('/api/santri-portal/perizinan'), api.get('/api/santri-portal/prestasi')]).then(([a, v, p, pr]) => { setAttendance(a.data); setViolations(v.data); setPermits(p.data); setAchievements(pr.data); }).catch(() => setPortalError('Data anak belum dapat dimuat. Periksa koneksi lalu coba muat ulang halaman.')).finally(() => setLoading(false)); }, []);
-  useEffect(() => { if (section !== 'rapor') return; setRaporLoading(true); api.get('/api/santri-portal/rapor-pengajian', { params: { tahun_pelajaran: raporYear, semester: raporSemester } }).then(response => setReports(response.data.reports)).catch(() => setReports([])).finally(() => setRaporLoading(false)); }, [section, raporYear, raporSemester]);
-  const attendanceCount = useMemo(() => attendance.reduce<Record<string, number>>((result, row) => { result[row.status] = (result[row.status] || 0) + 1; return result; }, {}), [attendance]);
-  const navigate = (next: PortalSection) => { setSection(next); setMobileOpen(false); };
-  const downloadRapor = async () => { const response = await api.get('/api/santri-portal/rapor-pengajian/pdf', { params: { tahun_pelajaran: raporYear, semester: raporSemester }, responseType: 'blob' }); const url = URL.createObjectURL(response.data); const link = document.createElement('a'); link.href = url; link.download = `Rapor_Pengajian_${raporYear}_${raporSemester}.pdf`; link.click(); URL.revokeObjectURL(url); };
-  const menu: Array<[PortalSection, string, Parameters<typeof PortalIcon>[0]['type']]> = [['beranda', 'Beranda', 'home'], ['profil', 'Data Anak', 'profile'], ['kehadiran', 'Kehadiran', 'calendar'], ['pelanggaran', 'Pelanggaran', 'warning'], ['perizinan', 'Perizinan', 'permit'], ['rapor', 'Rapor Pengajian', 'report'], ['prestasi', 'Prestasi', 'award']];
+
+  usePageMeta({
+    title: section === 'beranda' ? 'Beranda Portal Wali Santri' : section === 'rapor' ? 'Rapor Santri' : section[0].toUpperCase() + section.slice(1),
+    description: 'Portal wali santri Pondok Pesantren Tebuireng untuk memantau data anak.'
+  });
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/santri-portal/kehadiran'),
+      api.get('/api/santri-portal/pelanggaran'),
+      api.get('/api/santri-portal/perizinan'),
+      api.get('/api/santri-portal/prestasi')
+    ]).then(([a, v, p, pr]) => {
+      setAttendance(a.data);
+      setViolations(v.data);
+      setPermits(p.data);
+      setAchievements(pr.data);
+    }).catch(() => {
+      setPortalError('Data anak belum dapat dimuat. Periksa koneksi lalu coba muat ulang halaman.');
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const attendanceCount = useMemo(() => attendance.reduce<Record<string, number>>((result, row) => {
+    result[row.status] = (result[row.status] || 0) + 1;
+    return result;
+  }, {}), [attendance]);
+
+  const navigate = (next: PortalSection) => {
+    setSection(next);
+    setMobileOpen(false);
+  };
+
+  const menu: Array<[PortalSection, string, Parameters<typeof PortalIcon>[0]['type']]> = [
+    ['beranda', 'Beranda', 'home'],
+    ['profil', 'Data Anak', 'profile'],
+    ['kehadiran', 'Kehadiran', 'calendar'],
+    ['pelanggaran', 'Pelanggaran', 'warning'],
+    ['perizinan', 'Perizinan', 'permit'],
+    ['rapor', 'Rapor Santri', 'report'],
+    ['prestasi', 'Prestasi', 'award']
+  ];
+
   if (!user) return null;
   const activeSection = section;
   if (activeSection === 'beranda') return <PortalDashboardPage user={user} logout={logout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} navigate={navigate} attendance={attendance} violations={violations} permits={permits}/>;
   if (activeSection === 'prestasi') return <PortalSectionShell user={user} logout={logout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} navigate={navigate} menu={menu}><RecordTable title="Prestasi Anak" records={achievements} loading={loading} columns={['tanggal', 'nama_prestasi', 'peringkat', 'tingkat', 'keterangan']}/></PortalSectionShell>;
-  return <div className="portal-layout"><header className="portal-topbar"><button className="portal-menu-button" aria-label="Buka menu" onClick={() => setMobileOpen(true)}><PortalIcon type="more"/></button><div className="portal-top-brand"><img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB"/><span>Portal Wali Santri</span></div><div className="portal-top-user"><span>{user.nama_wali || 'Wali Santri'}</span><button onClick={() => void logout()} aria-label="Keluar"><PortalIcon type="logout"/></button></div></header><aside className={`portal-sidebar ${mobileOpen ? 'is-open' : ''}`}><div className="portal-sidebar-heading"><div><p className="eyebrow">SIMANTEB</p><strong>Portal Wali Santri</strong></div><button className="portal-close-button" onClick={() => setMobileOpen(false)} aria-label="Tutup menu">×</button></div><nav aria-label="Navigasi portal wali santri">{menu.map(([key, label, icon]) => <button key={key} className={section === key ? 'is-active' : ''} onClick={() => navigate(key)}><PortalIcon type={icon}/><span>{label}</span></button>)}<button onClick={() => navigate('password')}><PortalIcon type="lock"/><span>Ganti Password</span></button></nav><button className="portal-sidebar-logout" onClick={() => void logout()}><PortalIcon type="logout"/><span>Keluar</span></button></aside>{mobileOpen && <button className="portal-overlay" aria-label="Tutup menu" onClick={() => setMobileOpen(false)}/>}<main className="portal-main"><div className="portal-content">{portalError && <div className="portal-alert" role="alert">{portalError}</div>}{section === 'password' && <ChangePassword onDone={() => { navigate('beranda'); window.location.reload(); }}/>} {section === 'beranda' && <><div className="portal-page-heading"><p className="eyebrow">Data anak</p><h1>Assalamu’alaikum, {user.nama_wali || 'Wali Santri'}</h1><p>Berikut ringkasan data anak Anda di SIMANTEB.</p></div><div className="portal-summary-grid"><Summary label="Hadir" value={attendanceCount.Hadir || 0} tone="is-positive"/><Summary label="Izin" value={attendanceCount.Izin || 0} tone="is-warning"/><Summary label="Bolos/Alpha" value={attendanceCount.Alpha || 0} tone="is-danger"/><Summary label="Pelanggaran" value={violations.length} tone="is-neutral"/></div><section className="portal-panel"><div className="portal-panel-heading"><div><p className="eyebrow">Pantauan anak</p><h2>{user.nama}</h2></div></div><div className="portal-quick-links">{menu.slice(2).map(([key, label, icon]) => <button key={key} onClick={() => navigate(key)}><PortalIcon type={icon}/><span>{label}</span></button>)}</div></section></>}{section === 'profil' && <Profile user={user}/>} {section === 'kehadiran' && <RecordTable title="Kehadiran Anak" records={attendance} loading={loading} columns={['tanggal', 'nama_kegiatan', 'status', 'keterangan']}/>} {section === 'pelanggaran' && <RecordTable title="Pelanggaran Anak" records={violations} loading={loading} columns={['tanggal', 'kategori', 'poin', 'keterangan']}/>} {section === 'perizinan' && <RecordTable title="Perizinan Anak" records={permits} loading={loading} columns={['tanggal_mulai', 'jenis_izin_nama', 'status', 'keperluan']}/>} {section === 'rapor' && <RaporSection year={raporYear} semester={raporSemester} onYear={setRaporYear} onSemester={setRaporSemester} reports={reports} loading={raporLoading} onDownload={() => void downloadRapor()}/>}{section === 'notifikasi' && <PortalNotifications/>} {section === 'pengaturan' && <PortalSettings navigate={navigate} logout={logout}/>} </div><PortalMobileNav activeSection={section} navigate={navigate}/></main></div>;
+
+  return (
+    <div className="portal-layout">
+      <header className="portal-topbar">
+        <button className="portal-menu-button" aria-label="Buka menu" onClick={() => setMobileOpen(true)}>
+          <PortalIcon type="more"/>
+        </button>
+        <div className="portal-top-brand">
+          <img src="/simanteb-logo-transparent.png" alt="Logo SIMANTEB"/>
+          <span>Portal Wali Santri</span>
+        </div>
+        <div className="portal-top-user">
+          <span>{user.nama_wali || 'Wali Santri'}</span>
+          <button onClick={() => void logout()} aria-label="Keluar"><PortalIcon type="logout"/></button>
+        </div>
+      </header>
+      <aside className={`portal-sidebar ${mobileOpen ? 'is-open' : ''}`}>
+        <div className="portal-sidebar-heading">
+          <div><p className="eyebrow">SIMANTEB</p><strong>Portal Wali Santri</strong></div>
+          <button className="portal-close-button" onClick={() => setMobileOpen(false)} aria-label="Tutup menu">×</button>
+        </div>
+        <nav aria-label="Navigasi portal wali santri">
+          {menu.map(([key, label, icon]) => (
+            <button key={key} className={section === key ? 'is-active' : ''} onClick={() => navigate(key)}>
+              <PortalIcon type={icon}/>
+              <span>{label}</span>
+            </button>
+          ))}
+          <button onClick={() => navigate('password')}>
+            <PortalIcon type="lock"/>
+            <span>Ganti Password</span>
+          </button>
+        </nav>
+        <button className="portal-sidebar-logout" onClick={() => void logout()}>
+          <PortalIcon type="logout"/>
+          <span>Keluar</span>
+        </button>
+      </aside>
+      {mobileOpen && <button className="portal-overlay" aria-label="Tutup menu" onClick={() => setMobileOpen(false)}/>}
+      <main className="portal-main">
+        <div className="portal-content">
+          {portalError && <div className="portal-alert" role="alert">{portalError}</div>}
+          {section === 'password' && <ChangePassword onDone={() => { navigate('beranda'); window.location.reload(); }}/>}
+          {section === 'beranda' && (
+            <>
+              <div className="portal-page-heading">
+                <p className="eyebrow">Data anak</p>
+                <h1>Assalamu’alaikum, {user.nama_wali || 'Wali Santri'}</h1>
+                <p>Berikut ringkasan data anak Anda di SIMANTEB.</p>
+              </div>
+              <div className="portal-summary-grid">
+                <Summary label="Hadir" value={attendanceCount.Hadir || 0} tone="is-positive"/>
+                <Summary label="Izin" value={attendanceCount.Izin || 0} tone="is-warning"/>
+                <Summary label="Bolos/Alpha" value={attendanceCount.Alpha || 0} tone="is-danger"/>
+                <Summary label="Pelanggaran" value={violations.length} tone="is-neutral"/>
+              </div>
+              <section className="portal-panel">
+                <div className="portal-panel-heading">
+                  <div><p className="eyebrow">Pantauan anak</p><h2>{user.nama}</h2></div>
+                </div>
+                <div className="portal-quick-links">
+                  {menu.slice(2).map(([key, label, icon]) => (
+                    <button key={key} onClick={() => navigate(key)}>
+                      <PortalIcon type={icon}/>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+          {section === 'profil' && <Profile user={user}/>}
+          {section === 'kehadiran' && <RecordTable title="Kehadiran Anak" records={attendance} loading={loading} columns={['tanggal', 'nama_kegiatan', 'status', 'keterangan']}/>}
+          {section === 'pelanggaran' && <RecordTable title="Pelanggaran Anak" records={violations} loading={loading} columns={['tanggal', 'kategori', 'poin', 'keterangan']}/>}
+          {section === 'perizinan' && <RecordTable title="Perizinan Anak" records={permits} loading={loading} columns={['tanggal_mulai', 'jenis_izin_nama', 'status', 'keperluan']}/>}
+          {section === 'rapor' && <RaporSection />}
+          {section === 'notifikasi' && <PortalNotifications/>}
+          {section === 'pengaturan' && <PortalSettings navigate={navigate} logout={logout}/>}
+        </div>
+        <PortalMobileNav activeSection={section} navigate={navigate}/>
+      </main>
+    </div>
+  );
 }
 
 function Profile({ user }: { user: SantriUser }) {
@@ -270,7 +393,297 @@ function ProfileSection({ title, details }: { title: string; details: Array<[str
 function portalColumnLabel(column: string) { return column.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
 function recordContext(title: string) { if (title.includes('Kehadiran')) return 'Aktivitas harian'; if (title.includes('Pelanggaran')) return 'Catatan pembinaan'; if (title.includes('Perizinan')) return 'Pengajuan izin'; return 'Pencapaian anak'; }
 function RecordTable({ title, records, loading, columns }: { title: string; records: PortalRecord[]; loading: boolean; columns: string[] }) { return <section className="portal-feature-page"><header className="portal-page-heading"><p className="eyebrow">{recordContext(title)}</p><h1>{title}</h1><p>Riwayat yang tercatat untuk anak Anda di SIMANTEB.</p></header><section className="portal-panel portal-data-panel"><div className="portal-panel-heading"><div><p className="eyebrow">Riwayat</p><h2>Daftar catatan</h2></div><span className="portal-count">{records.length} catatan</span></div>{loading ? <p className="portal-muted">Memuat data...</p> : records.length === 0 ? <p className="portal-empty">Belum ada data untuk ditampilkan.</p> : <div className="portal-table-wrap"><table className="portal-table"><thead><tr>{columns.map(column => <th key={column}>{portalColumnLabel(column)}</th>)}</tr></thead><tbody>{records.map((record, index) => <tr key={record.absensi_id || record.pelanggaran_id || record.perizinan_id || record.prestasi_id || index}>{columns.map(column => <td key={column}>{record[column] ?? '-'}</td>)}</tr>)}</tbody></table></div>}</section></section>; }
-function RaporSection({ year, semester, onYear, onSemester, reports, loading, onDownload }: { year: string; semester: 'Gasal' | 'Genap'; onYear: (value: string) => void; onSemester: (value: 'Gasal' | 'Genap') => void; reports: PortalRecord[]; loading: boolean; onDownload: () => void }) { const historyQuery = useQuery<PortalRecord[]>({ queryKey: ['portal-raport-history'], queryFn: async () => (await api.get('/api/santri-portal/rapor-pengajian/history')).data }); const downloadDocument = async (id: number, version: number) => { const response = await api.get(`/api/santri-portal/rapor-pengajian/${id}/pdf`, { responseType: 'blob' }); const url = URL.createObjectURL(response.data); const link = document.createElement('a'); link.href = url; link.download = `Rapor_Pengajian_arsip_v${version}.pdf`; link.click(); URL.revokeObjectURL(url); }; return <section className="portal-feature-page"><header className="portal-page-heading"><p className="eyebrow">Nilai pengajian</p><h1>Rapor Pengajian</h1><p>Pilih tahun ajaran dan semester untuk melihat rapor anak.</p></header><section className="portal-panel portal-data-panel"><div className="portal-filter-grid"><label>Tahun Ajaran<input value={year} onChange={e => onYear(e.target.value)} placeholder="2026/2027"/></label><label>Semester<select value={semester} onChange={e => onSemester(e.target.value as 'Gasal' | 'Genap')}><option value="Gasal">GASAL</option><option value="Genap">GENAP</option></select></label></div>{loading ? <p className="portal-muted">Memuat rapor...</p> : reports.length === 0 ? <div className="portal-empty"><strong>Rapor Pengajian belum tersedia.</strong><span>Periksa tahun ajaran atau semester lain. Jika tetap belum tampil, hubungi pengelola pesantren.</span></div> : <><div className="portal-report-list">{reports.map(report => <article key={report.raport_id}><strong>{report.bulan}/{report.tahun}</strong><span>{report.predikat_umum || 'Nilai tersedia'}</span></article>)}</div><button className="portal-primary-button portal-download-button" onClick={onDownload}>Cetak Rapor Pengajian</button></>} </section><section className="portal-panel portal-data-panel"><div className="portal-panel-heading"><div><p className="eyebrow">Arsip resmi</p><h2>Riwayat penerbitan</h2></div><span className="portal-count">{historyQuery.data?.length ?? 0} dokumen</span></div>{historyQuery.isLoading ? <p className="portal-muted">Memuat arsip...</p> : historyQuery.data?.length ? <div className="portal-report-list">{historyQuery.data.map(document => <article key={document.document_id}><span>{document.tahun_pelajaran} · {document.semester} · Versi {document.versi}</span><button className="secondary-button" onClick={() => void downloadDocument(Number(document.document_id), Number(document.versi))}>Unduh arsip</button></article>)}</div> : <p className="portal-empty">Belum ada raport yang diterbitkan sebagai arsip.</p>}</section></section>; }
+
+function RaporSection() {
+  const [activeTab, setActiveTab] = useState<'pengajian' | 'pembinaan'>('pengajian');
+  const [year, setYear] = useState('2026/2027');
+  const [semester, setSemester] = useState<'Gasal' | 'Genap'>('Gasal');
+  const [reports, setReports] = useState<PortalRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const historyQuery = useQuery<PortalRecord[]>({
+    queryKey: ['portal-raport-history'],
+    queryFn: async () => (await api.get('/api/santri-portal/rapor-pengajian/history')).data,
+    enabled: activeTab === 'pengajian',
+  });
+
+  useEffect(() => {
+    setLoading(true);
+    const endpoint = activeTab === 'pengajian'
+      ? '/api/santri-portal/rapor-pengajian'
+      : '/api/santri-portal/rapor-pembinaan';
+
+    api.get(endpoint, { params: { tahun_pelajaran: year, semester } })
+      .then(response => {
+        setReports(response.data.reports || []);
+      })
+      .catch(() => {
+        setReports([]);
+      })
+      .finally(() => setLoading(false));
+  }, [activeTab, year, semester]);
+
+  const handleDownload = async () => {
+    try {
+      setDownloading(true);
+      const endpoint = activeTab === 'pengajian'
+        ? '/api/santri-portal/rapor-pengajian/pdf'
+        : '/api/santri-portal/rapor-pembinaan/pdf';
+
+      const response = await api.get(endpoint, {
+        params: { tahun_pelajaran: year, semester },
+        responseType: 'blob'
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeTab === 'pengajian' ? 'Rapor_Pengajian' : 'Raport_Pembinaan'}_${year.replace('/', '-')}_${semester}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Gagal mengunduh berkas PDF rapor.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const downloadDocument = async (id: number, version: number) => {
+    const response = await api.get(`/api/santri-portal/rapor-pengajian/${id}/pdf`, { responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Rapor_Pengajian_arsip_v${version}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <section className="portal-feature-page">
+      <header className="portal-page-heading">
+        <p className="eyebrow">Evaluasi santri</p>
+        <h1>Rapor Anak</h1>
+        <p>Akses evaluasi resmi berkala pengajian dan pembinaan santri.</p>
+      </header>
+
+      {/* Sub-tab switcher: Rapor Pengajian vs Raport Pembinaan */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--garis, #e2e8f0)', paddingBottom: '12px' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('pengajian')}
+          style={{
+            padding: '8px 18px',
+            fontSize: '13px',
+            fontWeight: activeTab === 'pengajian' ? 700 : 500,
+            borderRadius: '6px',
+            border: '1px solid',
+            borderColor: activeTab === 'pengajian' ? '#0f6e56' : '#e2e8f0',
+            background: activeTab === 'pengajian' ? '#0f6e56' : '#fff',
+            color: activeTab === 'pengajian' ? '#fff' : '#475569',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Rapor Pengajian
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('pembinaan')}
+          style={{
+            padding: '8px 18px',
+            fontSize: '13px',
+            fontWeight: activeTab === 'pembinaan' ? 700 : 500,
+            borderRadius: '6px',
+            border: '1px solid',
+            borderColor: activeTab === 'pembinaan' ? '#0f6e56' : '#e2e8f0',
+            background: activeTab === 'pembinaan' ? '#0f6e56' : '#fff',
+            color: activeTab === 'pembinaan' ? '#fff' : '#475569',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Raport Pembinaan
+        </button>
+      </div>
+
+      <section className="portal-panel portal-data-panel">
+        <div className="portal-filter-grid">
+          <label>
+            Tahun Ajaran
+            <input value={year} onChange={e => setYear(e.target.value)} placeholder="2026/2027"/>
+          </label>
+          <label>
+            Semester
+            <select value={semester} onChange={e => setSemester(e.target.value as 'Gasal' | 'Genap')}>
+              <option value="Gasal">GASAL</option>
+              <option value="Genap">GENAP</option>
+            </select>
+          </label>
+        </div>
+
+        {loading ? (
+          <p className="portal-muted">Memuat rapor...</p>
+        ) : reports.length === 0 ? (
+          /* User requirement: Wali santri diberi informasi jika masih belum ada nilai, dan tabel nilai untuk periode bulan itu tidak usah ditampilkan */
+          <div
+            className="portal-empty"
+            style={{
+              padding: '32px 24px',
+              textAlign: 'center',
+              background: '#f8fafc',
+              borderRadius: '8px',
+              border: '1px solid var(--garis, #e2e8f0)',
+              margin: '12px 0'
+            }}
+          >
+            <strong style={{ display: 'block', fontSize: '15px', color: '#1e293b', marginBottom: '8px' }}>
+              {activeTab === 'pengajian' ? 'Rapor Pengajian' : 'Raport Pembinaan'} Belum Tersedia
+            </strong>
+            <span style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6, maxWidth: '520px', display: 'inline-block' }}>
+              Nilai untuk Tahun Ajaran <strong>{year}</strong> Semester <strong>{semester}</strong> sedang dalam proses penilaian oleh ustadz/pembina dan belum dipublikasikan. Nilai akan otomatis dapat diakses setelah dikunci oleh pihak pesantren.
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="portal-report-list" style={{ display: 'grid', gap: '16px' }}>
+              {reports.map((report) => (
+                <article
+                  key={report.raport_id || report.raport_ubudiyah_id || `${report.bulan}-${report.tahun}`}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '16px',
+                    border: '1px solid var(--garis, #e2e8f0)',
+                    borderRadius: '8px',
+                    background: '#fff',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <strong style={{ fontSize: '15px', color: 'var(--tinta, #0f172a)' }}>
+                        Periode Bulan {report.bulan} {report.tahun}
+                      </strong>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                        {activeTab === 'pengajian' ? 'Pengajian Santri' : `Pembina: ${report.nama_pembina || 'Pembina Kamar'}`}
+                        {report.peringkat && report.dari ? ` • Peringkat ${report.peringkat} dari ${report.dari} santri` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {report.predikat_umum && (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          background: '#ecfdf5',
+                          color: '#065f46',
+                          border: '1px solid #a7f3d0',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '12px'
+                        }}>
+                          {report.predikat_umum}
+                        </span>
+                      )}
+                      {report.rata_rata !== undefined && report.rata_rata !== null && (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          background: '#f1f5f9',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '12px'
+                        }}>
+                          Rata-rata: {report.rata_rata}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {Array.isArray(report.nilai) && report.nilai.length > 0 && (
+                    <div className="portal-table-wrap" style={{ marginTop: '6px' }}>
+                      <table className="portal-table">
+                        <thead>
+                          <tr>
+                            <th>Aspek Penilaian</th>
+                            <th style={{ textAlign: 'center', width: '90px' }}>Nilai</th>
+                            <th style={{ textAlign: 'center', width: '90px' }}>Huruf</th>
+                            <th style={{ width: '130px' }}>Predikat</th>
+                            {activeTab === 'pembinaan' && <th>Catatan</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.nilai.map((n: Record<string, any>, idx: number) => (
+                            <tr key={idx}>
+                              <td>
+                                <strong>{n.aspek}</strong>
+                                {n.jenis_pengajian ? <small style={{ display: 'block', color: '#64748b', fontSize: '11px' }}>{n.jenis_pengajian}</small> : null}
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 600 }}>{n.nilai_angka ?? '-'}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 600 }}>{n.nilai_huruf ?? '-'}</td>
+                              <td>{n.predikat ?? '-'}</td>
+                              {activeTab === 'pembinaan' && <td style={{ color: '#475569', fontSize: '12px' }}>{n.catatan || '-'}</td>}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {report.catatan_ustadz && (
+                    <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', border: '1px solid #e2e8f0', color: '#334155' }}>
+                      <strong style={{ display: 'block', marginBottom: '2px', color: '#1e293b' }}>Catatan Ustadz:</strong>
+                      {report.catatan_ustadz}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="portal-primary-button portal-download-button"
+                onClick={() => void handleDownload()}
+                disabled={downloading}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                <PortalIcon type="report"/>
+                <span>{downloading ? 'Mengunduh PDF...' : `Cetak Rapor ${activeTab === 'pengajian' ? 'Pengajian' : 'Pembinaan'}`}</span>
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {activeTab === 'pengajian' && (
+        <section className="portal-panel portal-data-panel">
+          <div className="portal-panel-heading">
+            <div><p className="eyebrow">Arsip resmi</p><h2>Riwayat penerbitan</h2></div>
+            <span className="portal-count">{historyQuery.data?.length ?? 0} dokumen</span>
+          </div>
+          {historyQuery.isLoading ? (
+            <p className="portal-muted">Memuat arsip...</p>
+          ) : historyQuery.data?.length ? (
+            <div className="portal-report-list">
+              {historyQuery.data.map(document => (
+                <article key={document.document_id}>
+                  <span>{document.tahun_pelajaran} · {document.semester} · Versi {document.versi}</span>
+                  <button className="secondary-button" onClick={() => void downloadDocument(Number(document.document_id), Number(document.versi))}>
+                    Unduh arsip
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="portal-empty">Belum ada raport yang diterbitkan sebagai arsip.</p>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
 
 function PortalRouter() { const { user, loading, login } = useSantriPortalAuth(); if (loading) return <div className="portal-loading">Memuat portal...</div>; if (!user) return <PortalLogin onLogin={login}/>; return <PortalWorkspace/>; }
 export function SantriPortalPage() { return <SantriPortalAuthProvider><PortalRouter/></SantriPortalAuthProvider>; }

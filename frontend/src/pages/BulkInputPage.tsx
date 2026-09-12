@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, resolveApiAssetUrl } from '../api';
+import { AppToast } from '../components/AppToast';
 import { PageSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -9,9 +10,11 @@ export type StatusAbsensi = 'Hadir' | 'Terlambat' | 'Izin' | 'Sakit' | 'Alpha';
 
 interface SantriAbsensi {
   santri_id: number;
+  absensi_id?: number | null;
   nis: string | null;
   no_id_induk?: string | null;
   nama: string;
+  foto_url?: string | null;
   status: StatusAbsensi | null;
   menit_terlambat: number | null;
   keterangan: string | null;
@@ -37,8 +40,8 @@ const STATUS_OPTIONS: StatusAbsensi[] = ['Hadir', 'Terlambat', 'Izin', 'Sakit', 
 
 const SUBMENU_MAP: Record<string, { nama: string; route: string }> = {
   sekolah: { nama: 'Absensi Kelas Formal', route: '/absensi-kegiatan/sekolah' },
-  keberangkatan: { nama: 'Keberangkatan Kelas', route: '/absensi-kegiatan/keberangkatan' },
-  kamar: { nama: 'Absensi Kamar', route: '/absensi-kegiatan/kamar' },
+  keberangkatan: { nama: 'Absensi Kamar Pagi', route: '/absensi-kegiatan/keberangkatan' },
+  kamar: { nama: 'Absensi Kamar Malam', route: '/absensi-kegiatan/kamar' },
   pbs: { nama: "Al-Qur'an Subuh", route: '/absensi-kegiatan/pbs' },
   diniyah: { nama: 'Kelas Madin', route: '/absensi-kegiatan/diniyah' },
   pbm: { nama: 'Takhasus Maghrib', route: '/absensi-kegiatan/pbm' },
@@ -113,14 +116,49 @@ export function BulkInputPage() {
   const navigate = useNavigate();
 
   const [syncState, setSyncState] = useState<'tersinkron' | 'menyinkronkan' | 'error'>('tersinkron');
-  const [syncError, setSyncError] = useState('');
   const [drafts, setDrafts] = useState<Record<number, DraftItem>>({});
   const [saveModal, setSaveModal] = useState<SaveModal | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(current => (current?.message === message ? null : current));
+    }, 4000);
+  };
 
   const draftStorageKey = `simanteb_attendance_draft_${jenis}_${targetId}_${jadwalId}_${tanggal}`;
 
-  // Restore draft if user previously clicked Mulai Absensi and left the page
+  const sessionQuery = useQuery<SesiAbsensi>({
+    queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal],
+    enabled: Boolean(jenis && targetId && jadwalId),
+    queryFn: async () => (await api.get(`/api/absensi/${jenis}/session`, {
+      params: { target_id: targetId, jadwal_id: jadwalId, tanggal },
+    })).data,
+  });
+
+  const sessionData = sessionQuery.data;
+
+  // Sesi dianggap sudah tersimpan jika data santri sudah memiliki absensi_id atau status dari server
+  const isAlreadyRecorded = useMemo(() => {
+    if (!sessionData?.santri || sessionData.santri.length === 0) return false;
+    return sessionData.santri.some(s => Boolean(s.absensi_id !== null || s.status !== null));
+  }, [sessionData]);
+
+  // Jika sesi sudah tercatat di server, bersihkan draft lokal dan nonaktifkan mode edit
   useEffect(() => {
+    if (isAlreadyRecorded) {
+      try {
+        localStorage.removeItem(draftStorageKey);
+      } catch {}
+      setDrafts({});
+      setIsAbsensiStarted(false);
+    }
+  }, [isAlreadyRecorded, draftStorageKey]);
+
+  // Restore draft if user previously clicked Mulai Absensi and left the page (only if not already recorded)
+  useEffect(() => {
+    if (isAlreadyRecorded) return;
     try {
       const raw = localStorage.getItem(draftStorageKey);
       if (raw) {
@@ -135,21 +173,31 @@ export function BulkInputPage() {
         }
       }
     } catch {}
-  }, [draftStorageKey]);
+  }, [draftStorageKey, isAlreadyRecorded]);
 
-  const sessionQuery = useQuery<SesiAbsensi>({
-    queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal],
-    enabled: Boolean(jenis && targetId && jadwalId),
-    queryFn: async () => (await api.get(`/api/absensi/${jenis}/session`, {
-      params: { target_id: targetId, jadwal_id: jadwalId, tanggal },
-    })).data,
-  });
-
-  const sessionData = sessionQuery.data;
+  // Pre-fill all santri with default status when attendance has started (and not already recorded)
+  useEffect(() => {
+    if (!isAbsensiStarted || !sessionData?.santri || isAlreadyRecorded) return;
+    setDrafts(prev => {
+      let changed = false;
+      const next = { ...prev };
+      sessionData.santri.forEach(s => {
+        if (!next[s.santri_id]) {
+          next[s.santri_id] = {
+            status: s.status ?? 'Hadir',
+            keterangan: s.keterangan ?? '',
+          };
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [isAbsensiStarted, sessionData, isAlreadyRecorded]);
 
   // Silently auto-save draft in background when absensi is in progress
   useEffect(() => {
-    if (!isAbsensiStarted || !sessionData) return;
+    if (!isAbsensiStarted || !sessionData || isAlreadyRecorded) return;
+    if (Object.keys(drafts).length === 0) return;
     try {
       const totalFilled = Object.keys(drafts).length;
       const payload = {
@@ -167,7 +215,7 @@ export function BulkInputPage() {
       };
       localStorage.setItem(draftStorageKey, JSON.stringify(payload));
     } catch {}
-  }, [drafts, isAbsensiStarted, sessionData, jenis, targetId, jadwalId, tanggal, tanggalLabel, draftStorageKey]);
+  }, [drafts, isAbsensiStarted, sessionData, isAlreadyRecorded, jenis, targetId, jadwalId, tanggal, tanggalLabel, draftStorageKey]);
 
   usePageMeta({
     title: sessionData ? `Absensi ${sessionData.nama_kegiatan} - ${sessionData.target.nama_target}` : 'Input Absensi Santri',
@@ -179,7 +227,7 @@ export function BulkInputPage() {
   const subMenuInfo = SUBMENU_MAP[jenis] || { nama: sessionData?.nama_kegiatan || 'Menu Absensi', route: `/absensi-kegiatan/${jenis}` };
 
   const handleSelectStatus = (santri: SantriAbsensi, status: StatusAbsensi) => {
-    if (!isAbsensiStarted) return;
+    if (!isAbsensiStarted || isAlreadyRecorded) return;
     setDrafts(current => ({
       ...current,
       [santri.santri_id]: {
@@ -190,7 +238,7 @@ export function BulkInputPage() {
   };
 
   const handleNoteChange = (santri: SantriAbsensi, note: string) => {
-    if (!isAbsensiStarted) return;
+    if (!isAbsensiStarted || isAlreadyRecorded) return;
     setDrafts(current => ({
       ...current,
       [santri.santri_id]: {
@@ -198,6 +246,25 @@ export function BulkInputPage() {
         keterangan: note,
       },
     }));
+  };
+
+  const handleStartAttendance = () => {
+    if (isAlreadyRecorded) return;
+    setIsAbsensiStarted(true);
+    if (sessionData?.santri) {
+      setDrafts(prev => {
+        const next = { ...prev };
+        sessionData.santri.forEach(s => {
+          if (!next[s.santri_id]) {
+            next[s.santri_id] = {
+              status: s.status ?? 'Hadir',
+              keterangan: s.keterangan ?? '',
+            };
+          }
+        });
+        return next;
+      });
+    }
   };
 
   const handleCancelAttendance = () => {
@@ -214,19 +281,18 @@ export function BulkInputPage() {
 
     // Validasi: Status Hadir - Alpha wajib terisi untuk seluruh santri
     const unselectedSantri = sessionQuery.data.santri.filter(s => {
-      const current = drafts[s.santri_id]?.status ?? s.status;
+      const current = drafts[s.santri_id]?.status ?? s.status ?? 'Hadir';
       return !current;
     });
 
     if (unselectedSantri.length > 0) {
-      setSyncError(`Ada ${unselectedSantri.length} santri yang belum dipilih status absensinya. Status Hadir s/d Alpha wajib diisi.`);
       setSyncState('error');
+      showToast(`Ada ${unselectedSantri.length} santri yang belum dipilih status absensinya. Status Hadir s/d Alpha wajib diisi.`, 'error');
       return;
     }
 
     try {
       setSyncState('menyinkronkan');
-      setSyncError('');
       await api.post(`/api/absensi/${jenis}/bulk`, {
         target_id: targetId,
         jadwal_id: jadwalId,
@@ -242,23 +308,23 @@ export function BulkInputPage() {
           };
         }),
       });
+
+      // Nonaktifkan mode edit dan bersihkan draft secara mutlak
+      setIsAbsensiStarted(false);
       setDrafts({});
       try {
         localStorage.removeItem(draftStorageKey);
       } catch {}
+
       setSyncState('tersinkron');
       await queryClient.invalidateQueries({ queryKey: ['absensi-session', jenis, targetId, jadwalId, tanggal] });
+      showToast('Seluruh data absensi berhasil disimpan ke server pusat.', 'success');
       setSaveModal({ type: 'success', title: 'Absensi Berhasil Disimpan', message: 'Seluruh data absensi telah tersinkronisasi ke server pusat.' });
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
         || 'Server tidak dapat menyimpan absensi. Periksa koneksi lalu coba lagi.';
-      setSyncError(message);
       setSyncState('error');
-      setSaveModal({
-        type: 'error',
-        title: 'Gagal Menyimpan Absensi',
-        message,
-      });
+      showToast(message, 'error');
     }
   };
 
@@ -346,8 +412,6 @@ export function BulkInputPage() {
         </div>
       </header>
 
-      {syncState === 'error' && <div className="error-box" role="alert">{syncError}</div>}
-
       {/* Search Toolbar */}
       <div className="attendance-toolbar focus-toolbar">
         <div className="attendance-search-box">
@@ -371,47 +435,88 @@ export function BulkInputPage() {
             Menampilkan <strong>{filteredSantri.length}</strong> dari <strong>{session.santri.length}</strong> santri
           </div>
 
-          {!isAbsensiStarted ? (
-            <button
-              type="button"
-              className="attendance-toggle-mode-btn is-start"
-              onClick={() => setIsAbsensiStarted(true)}
-              title="Buka akses pengisian absensi"
-            >
-              Mulai Absensi
-            </button>
+          {isAlreadyRecorded ? (
+            <>
+              <div className="attendance-status-badge is-saved" title="Absensi untuk jadwal hari ini sudah tersimpan di server">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Sudah Diabsen</span>
+              </div>
+              <Link
+                to={`/absensi-histori?jenis=${jenis}&dari=${tanggal}&sampai=${tanggal}`}
+                className="attendance-rekap-link-btn"
+                title="Buka rekap & histori absensi untuk melihat catatan atau mengajukan koreksi"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 8v4l3 3" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+                <span>Rekap Absensi</span>
+              </Link>
+            </>
           ) : (
-            <button
-              type="button"
-              className="attendance-toggle-mode-btn is-cancel"
-              onClick={handleCancelAttendance}
-              title="Batalkan pengisian dan buang draft"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-              Batal Absen
-            </button>
-          )}
+            <>
+              {!isAbsensiStarted ? (
+                <button
+                  type="button"
+                  className="attendance-toggle-mode-btn is-start"
+                  onClick={handleStartAttendance}
+                  title="Buka akses pengisian absensi"
+                >
+                  Mulai Absensi
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="attendance-toggle-mode-btn is-cancel"
+                  onClick={handleCancelAttendance}
+                  title="Batalkan pengisian dan buang draft"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  Batal Absen
+                </button>
+              )}
 
-          <button
-            type="button"
-            disabled={!isAbsensiStarted || session.santri.length === 0 || syncState === 'menyinkronkan'}
-            className="attendance-save-btn"
-            onClick={() => void handleSave()}
-            title={isAbsensiStarted ? "Simpan data absensi ke server pusat" : "Klik 'Mulai Absensi' terlebih dahulu"}
-          >
-            {syncState === 'menyinkronkan' ? (
-              <>
-                <span className="spinner-inline" /> Menyimpan…
-              </>
-            ) : (
-              'Simpan Absensi'
-            )}
-          </button>
+              <button
+                type="button"
+                disabled={!isAbsensiStarted || session.santri.length === 0 || syncState === 'menyinkronkan'}
+                className="attendance-save-btn"
+                onClick={() => void handleSave()}
+                title={isAbsensiStarted ? "Simpan data absensi ke server pusat" : "Klik 'Mulai Absensi' terlebih dahulu"}
+              >
+                {syncState === 'menyinkronkan' ? (
+                  <>
+                    <span className="spinner-inline" /> Menyimpan…
+                  </>
+                ) : (
+                  'Simpan Absensi'
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Informative Notice when Session is Already Recorded */}
+      {isAlreadyRecorded && (
+        <div className="attendance-saved-notice" role="status">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span>
+            Absensi sesi ini telah tersimpan (idempoten). Untuk peninjauan riwayat atau koreksi data santri, silakan buka menu{' '}
+            <Link to={`/absensi-histori?jenis=${jenis}&dari=${tanggal}&sampai=${tanggal}`} className="ui-link">
+              Rekap Absensi
+            </Link>.
+          </span>
+        </div>
+      )}
 
       {/* Main Attendance Table */}
       {session.santri.length === 0 ? (
@@ -465,16 +570,42 @@ export function BulkInputPage() {
                   const currentStatus: StatusAbsensi = draft?.status ?? santri.status ?? 'Hadir';
                   const currentNote = draft?.keterangan !== undefined ? draft.keterangan : (santri.keterangan ?? '');
                   const nomorInduk = santri.no_id_induk || santri.nis || '—';
+                  const isRowInteractive = isAbsensiStarted && !isAlreadyRecorded;
 
                   return (
-                    <tr key={santri.santri_id} className={`attendance-row ${currentStatus ? `status-${currentStatus.toLowerCase()}` : ''} ${!isAbsensiStarted ? 'is-locked-row' : ''}`}>
+                    <tr key={santri.santri_id} className={`attendance-row ${currentStatus ? `status-${currentStatus.toLowerCase()}` : ''} ${!isRowInteractive ? 'is-locked-row' : ''}`}>
                       <td className="cell-nomor">{index + 1}</td>
                       <td className="cell-nama">
-                        <div className="santri-name-stack">
-                          <span className="santri-name-text">{santri.nama}</span>
-                          <span className="santri-nip-text">
-                            NIP: {nomorInduk}
-                          </span>
+                        <div className="santri-cell-with-photo">
+                          <div className="santri-photo-slot">
+                            {santri.foto_url ? (
+                              <img
+                                src={resolveApiAssetUrl(santri.foto_url) || ''}
+                                alt={santri.nama}
+                                className="santri-table-avatar"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                  const fallback = e.currentTarget.parentElement?.querySelector('.santri-table-avatar-placeholder') as HTMLElement | null;
+                                  if (fallback) {
+                                    fallback.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className="santri-table-avatar-placeholder"
+                              style={{ display: santri.foto_url ? 'none' : 'flex' }}
+                              aria-hidden="true"
+                            >
+                              {santri.nama ? santri.nama.charAt(0).toUpperCase() : '?'}
+                            </div>
+                          </div>
+                          <div className="santri-name-stack">
+                            <span className="santri-name-text">{santri.nama}</span>
+                            <span className="santri-nip-text">
+                              NIP: {nomorInduk}
+                            </span>
+                          </div>
                         </div>
                       </td>
 
@@ -484,14 +615,14 @@ export function BulkInputPage() {
                         return (
                           <td
                             key={status}
-                            className={`cell-checkbox cell-${status.toLowerCase()} ${isChecked ? 'is-selected' : ''} ${!isAbsensiStarted ? 'is-disabled-cell' : ''}`}
-                            onClick={() => handleSelectStatus(santri, status)}
+                            className={`cell-checkbox cell-${status.toLowerCase()} ${isChecked ? 'is-selected' : ''} ${!isRowInteractive ? 'is-disabled-cell' : ''}`}
+                            onClick={() => isRowInteractive && handleSelectStatus(santri, status)}
                           >
                             <div className="checkbox-center-wrap">
                               <BlueCheckbox
                                 checked={isChecked}
-                                disabled={!isAbsensiStarted}
-                                onClick={() => handleSelectStatus(santri, status)}
+                                disabled={!isRowInteractive}
+                                onClick={() => isRowInteractive && handleSelectStatus(santri, status)}
                                 ariaLabel={`${status} untuk ${santri.nama}`}
                               />
                             </div>
@@ -501,12 +632,20 @@ export function BulkInputPage() {
 
                       {/* Optional Notes Column (Progressive Disclosure) */}
                       <td className="cell-catatan">
-                        {currentNote.trim() || activeNoteEditingId === santri.santri_id ? (
+                        {!isRowInteractive ? (
+                          currentNote.trim() ? (
+                            <span className="attendance-note-badge" title={currentNote}>
+                              {currentNote}
+                            </span>
+                          ) : (
+                            <span className="attendance-no-note">—</span>
+                          )
+                        ) : (currentNote.trim() || activeNoteEditingId === santri.santri_id ? (
                           <div className="attendance-note-active-wrap">
                             <input
                               type="text"
                               autoFocus={activeNoteEditingId === santri.santri_id}
-                              disabled={!isAbsensiStarted}
+                              disabled={!isRowInteractive}
                               className="attendance-note-input is-active"
                               placeholder="Isi catatan disini"
                               value={currentNote}
@@ -521,7 +660,7 @@ export function BulkInputPage() {
                               }}
                               aria-label={`Catatan untuk ${santri.nama}`}
                             />
-                            {isAbsensiStarted && currentNote.trim() && (
+                            {currentNote.trim() && (
                               <button
                                 type="button"
                                 className="clear-note-inline-btn"
@@ -538,14 +677,11 @@ export function BulkInputPage() {
                         ) : (
                           <button
                             type="button"
-                            disabled={!isAbsensiStarted}
-                            className={`add-note-inline-btn ${!isAbsensiStarted ? 'is-disabled' : ''}`}
+                            className="add-note-inline-btn"
                             onClick={() => {
-                              if (isAbsensiStarted) {
-                                setActiveNoteEditingId(santri.santri_id);
-                              }
+                              setActiveNoteEditingId(santri.santri_id);
                             }}
-                            title={isAbsensiStarted ? `Tambah catatan untuk ${santri.nama}` : "Mulai absensi terlebih dahulu"}
+                            title={`Tambah catatan untuk ${santri.nama}`}
                           >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -553,25 +689,12 @@ export function BulkInputPage() {
                             </svg>
                             <span>Catatan</span>
                           </button>
-                        )}
+                        ))}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot>
-                <tr className="attendance-footer-summary-row">
-                  <td colSpan={2} className="footer-summary-label">
-                    Total: <strong>{session.santri.length}</strong> Santri
-                  </td>
-                  <td className="footer-summary-cell cell-hadir">({statusCounts.Hadir})</td>
-                  <td className="footer-summary-cell cell-terlambat">({statusCounts.Terlambat})</td>
-                  <td className="footer-summary-cell cell-izin">({statusCounts.Izin})</td>
-                  <td className="footer-summary-cell cell-sakit">({statusCounts.Sakit})</td>
-                  <td className="footer-summary-cell cell-alpha">({statusCounts.Alpha})</td>
-                  <td className="footer-summary-cell"></td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         </div>
@@ -612,6 +735,15 @@ export function BulkInputPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification Standar Kanan Atas */}
+      {toast && (
+        <AppToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

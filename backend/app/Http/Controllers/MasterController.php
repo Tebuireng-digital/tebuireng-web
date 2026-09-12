@@ -512,6 +512,7 @@ class MasterController extends Controller
     {
         $perPage = min(max($request->integer('per_page', 50), 10), 100);
         $missing = $request->query('missing');
+        $search = trim((string) $request->query('search', $request->query('q', '')));
 
         $query = DB::table('santri')
             ->leftJoin('unit_pendidikan', 'santri.unit_id', '=', 'unit_pendidikan.unit_id')
@@ -521,36 +522,60 @@ class MasterController extends Controller
                 $query->whereNull('santri.status_siswa_sumber')->orWhere('santri.status_siswa_sumber', '!=', 'legacy_noncanonical');
             });
 
-        if ($missing === 'kamar') {
-            $query->whereNull('santri.kamar_id');
-        } elseif ($missing === 'kelas_formal') {
-            $query->whereNull('santri.kelas_formal_id');
-        } elseif ($missing === 'kelompok_madin') {
-            $query->whereNull('santri.kelompok_madin_id');
-        } elseif ($missing === 'kelompok_pbs') {
-            $query->whereNull('santri.kelompok_pbs_id');
-        } elseif ($missing === 'kelompok_pbm') {
-            $query->whereNull('santri.kelompok_pbm_id');
-        } elseif ($missing === 'no_hp_wali') {
-            $query->where(function ($q) { $q->whereNull('santri.no_hp_wali')->orWhere('santri.no_hp_wali', ''); });
-        } elseif ($missing === 'nik_siswa') {
-            $query->where(function ($q) { $q->whereNull('santri.nik_siswa')->orWhere('santri.nik_siswa', ''); });
-        } elseif ($missing === 'tanpa_no_id') {
-            $query->where(function ($q) {
-                $q->whereNull('santri.no_id_induk')
-                    ->orWhere('santri.no_id_induk', '')
-                    ->orWhere('santri.no_id_induk', 'like', '2699%')
-                    ->orWhere('santri.catatan_import', 'SANTRI_BARU_2026')
-                    ->orWhere('santri.status_siswa_sumber', 'santri_baru_2026');
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('santri.nama', 'like', "%{$search}%")
+                  ->orWhere('santri.no_id_induk', 'like', "%{$search}%");
             });
-        } elseif ($missing === 'orda') {
-            $query->whereNotExists(function ($subquery) {
-                $subquery->selectRaw('1')
-                    ->from('santri_organisasi_daerah as sod')
-                    ->whereColumn('sod.santri_id', 'santri.santri_id')
-                    ->where('sod.status', 'aktif')
-                    ->whereNull('sod.tanggal_selesai');
-            });
+        }
+
+        if ($missing !== null && $missing !== '') {
+            $missingKeys = is_array($missing) ? $missing : array_filter(explode(',', (string) $missing));
+            foreach ($missingKeys as $key) {
+                if ($key === 'kamar') {
+                    $query->whereNull('santri.kamar_id');
+                } elseif ($key === 'kelas_formal') {
+                    $query->whereNull('santri.kelas_formal_id');
+                } elseif ($key === 'kelompok_madin') {
+                    $query->whereNull('santri.kelompok_madin_id');
+                } elseif ($key === 'kelompok_pbs') {
+                    $query->whereNull('santri.kelompok_pbs_id');
+                } elseif ($key === 'kelompok_pbm') {
+                    $query->whereNull('santri.kelompok_pbm_id');
+                } elseif ($key === 'roster_inkomplit') {
+                    $query->where(function ($q) {
+                        $q->whereNull('santri.kelompok_madin_id')
+                          ->orWhereNull('santri.kelompok_pbs_id')
+                          ->orWhereNull('santri.kelompok_pbm_id');
+                    });
+                } elseif ($key === 'kegiatan_kosong' || $key === 'profil_blank') {
+                    $query->whereNull('santri.kamar_id')
+                        ->whereNull('santri.kelas_formal_id')
+                        ->whereNull('santri.kelompok_madin_id')
+                        ->whereNull('santri.kelompok_pbs_id')
+                        ->whereNull('santri.kelompok_pbm_id');
+                } elseif ($key === 'no_hp_wali') {
+                    $query->where(function ($q) { $q->whereNull('santri.no_hp_wali')->orWhere('santri.no_hp_wali', ''); });
+                } elseif ($key === 'nik_siswa') {
+                    $query->where(function ($q) { $q->whereNull('santri.nik_siswa')->orWhere('santri.nik_siswa', ''); });
+                } elseif ($key === 'tanpa_no_id') {
+                    $query->where(function ($q) {
+                        $q->whereNull('santri.no_id_induk')
+                            ->orWhere('santri.no_id_induk', '')
+                            ->orWhere('santri.no_id_induk', 'like', '2699%')
+                            ->orWhere('santri.catatan_import', 'SANTRI_BARU_2026')
+                            ->orWhere('santri.status_siswa_sumber', 'santri_baru_2026');
+                    });
+                } elseif ($key === 'orda') {
+                    $query->whereNotExists(function ($subquery) {
+                        $subquery->selectRaw('1')
+                            ->from('santri_organisasi_daerah as sod')
+                            ->whereColumn('sod.santri_id', 'santri.santri_id')
+                            ->where('sod.status', 'aktif')
+                            ->whereNull('sod.tanggal_selesai');
+                    });
+                }
+            }
         } else {
             $query->where(function ($query) {
                 $query->whereNull('santri.kamar_id')

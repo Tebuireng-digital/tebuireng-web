@@ -216,9 +216,9 @@
             <td class="info-val">{{ $data['semester'] }}</td>
         </tr>
         <tr>
-            <td class="info-label">Nomor Induk</td>
+            <td class="info-label">Nomor Induk Pondok</td>
             <td class="info-sep">:</td>
-            <td class="info-val">{{ $data['santri']['nis'] ?? '-' }}</td>
+            <td class="info-val">{{ $data['santri']['no_id_induk'] ?? ($data['santri']['nis'] ?? '-') }}</td>
             <td class="info-label">Kelas Formal</td>
             <td class="info-sep">:</td>
             <td class="info-val">{{ $data['santri']['tingkat'] ? $data['santri']['tingkat'] . ' ' . ($data['santri']['nama_kelas'] ?? '') : '-' }}</td>

@@ -162,4 +162,43 @@ class RaportPengajianFeatureTest extends TestCase
         $history->assertOk()->assertJsonCount(2);
         $this->assertSame(2, DB::table('report_documents')->where('santri_id', $this->santriId)->count());
     }
+
+    public function test_pengajian_lock_and_unlock_flow(): void
+    {
+        $payload = [
+            'jenis' => 'AL_QURAN', 'target_id' => $this->kelompokPbsId, 'bulan' => 9, 'tahun' => 2026,
+            'tahun_pelajaran' => '2026-2027', 'semester' => 'Ganjil',
+            'entries' => [[
+                'santri_id' => $this->santriId,
+                'nilai' => ['Fashohah' => 85, 'Tajwid' => 80, 'Kelancaran' => 90, 'Hafalan' => 78],
+                'kepribadian' => ['Kelakuan' => 'A', 'Kedisiplinan' => 'A', 'Kerajinan' => 'B'],
+                'keputusan' => 'Naik', 'predikat_umum' => 'Memuaskan',
+            ]],
+        ];
+        $this->actingAs($this->ustadz)->postJson('/api/raport-pengajian/bulk', $payload)->assertOk();
+
+        // Lock
+        $lockRes = $this->actingAs($this->ustadz)->postJson('/api/raport-pengajian/lock', [
+            'jenis' => 'AL_QURAN',
+            'target_id' => $this->kelompokPbsId,
+            'bulan' => 9,
+            'tahun' => 2026,
+        ]);
+        $lockRes->assertOk()->assertJsonPath('lock_status.is_locked', true);
+
+        // Edit blocked for non-admin
+        $editRes = $this->actingAs($this->ustadz)->postJson('/api/raport-pengajian/bulk', $payload);
+        $editRes->assertStatus(422);
+
+        // Unlock
+        $unlockRes = $this->actingAs($this->ustadz)->postJson('/api/raport-pengajian/unlock', [
+            'jenis' => 'AL_QURAN',
+            'target_id' => $this->kelompokPbsId,
+            'bulan' => 9,
+            'tahun' => 2026,
+            'alasan' => 'Revisi nilai kelancaran',
+        ]);
+        $unlockRes->assertOk()->assertJsonPath('lock_status.is_locked', false);
+    }
 }
+

@@ -116,7 +116,8 @@ class AbsensiFeatureTest extends TestCase
         $this->getJson('/api/absensi/kamar/session?target_id='.$this->kamarId.'&jadwal_id='.$this->jadwalId.'&tanggal='.now()->toDateString())
             ->assertOk()
             ->assertJsonPath('santri.0.santri_id', $this->santriId)
-            ->assertJsonPath('santri.0.nama', 'Santri Test');
+            ->assertJsonPath('santri.0.nama', 'Santri Test')
+            ->assertJsonPath('santri.0.foto_url', null);
     }
 
     public function test_form_teacher_cannot_access_a_different_class_roster(): void

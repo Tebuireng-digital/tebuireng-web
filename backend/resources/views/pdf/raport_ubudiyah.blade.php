@@ -4,7 +4,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Laporan Ubudiyah Yaumiyah - {{ $data['santri']['nama'] }}</title>
+    <title>Raport Pembinaan - {{ $data['santri']['nama'] }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -175,7 +175,7 @@
 
     {{-- TITLE --}}
     <div class="section-title">
-        LAPORAN UBUDIYAH YAUMIYAH
+        RAPORT PEMBINAAN
     </div>
 
     {{-- INFO SANTRI --}}
@@ -189,9 +189,9 @@
             <td class="info-val">{{ $data['semester'] }}</td>
         </tr>
         <tr>
-            <td class="info-label">Nomor Induk</td>
+            <td class="info-label">Nomor Induk Pondok</td>
             <td class="info-sep">:</td>
-            <td class="info-val">{{ $data['santri']['nis'] ?? '-' }}</td>
+            <td class="info-val">{{ $data['santri']['no_id_induk'] ?? ($data['santri']['nis'] ?? '-') }}</td>
             <td class="info-label">Kelas Formal</td>
             <td class="info-sep">:</td>
             <td class="info-val">{{ $data['santri']['tingkat'] ? $data['santri']['tingkat'] . ' ' . ($data['santri']['nama_kelas'] ?? '') : '-' }}</td>

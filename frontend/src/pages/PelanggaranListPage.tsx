@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, resolveApiAssetUrl } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
 import { PageSkeleton } from '../components/LoadingSkeleton';
@@ -10,6 +10,7 @@ interface PelanggaranRecord {
   pelanggaran_id: number;
   santri_id: number;
   nama_santri: string;
+  foto_url?: string | null;
   kategori_pelanggaran_id: number;
   uraian_pelanggaran: string;
   kategori: string;
@@ -130,7 +131,32 @@ export function PelanggaranListPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const santriName = pelanggaran[0]?.nama_santri;
+  const [santriInfo, setSantriInfo] = useState<{ nama: string; foto_url?: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!selectedSantriId) {
+      setSantriInfo(null);
+      return;
+    }
+
+    let isMounted = true;
+    api.get('/api/santri', { params: { santri_id: selectedSantriId } })
+      .then(res => {
+        if (!isMounted) return;
+        const found = Array.isArray(res.data) ? res.data[0] : res.data;
+        if (found) {
+          setSantriInfo({ nama: found.nama, foto_url: found.foto_url });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSantriId]);
+
+  const santriName = santriInfo?.nama || pelanggaran[0]?.nama_santri;
+  const santriFotoUrl = santriInfo?.foto_url ?? pelanggaran[0]?.foto_url;
   usePageMeta({
     title: selectedSantriId && santriName ? `Detail Pelanggaran ${santriName}` : 'Daftar Pelanggaran Santri',
     description: selectedSantriId && santriName
@@ -370,7 +396,24 @@ export function PelanggaranListPage() {
           <header className="santri-detail-header-card">
             <div className="santri-detail-profile">
               <div className="santri-detail-avatar" aria-hidden="true">
-                {(santriName || 'S').slice(0, 2).toUpperCase()}
+                {santriFotoUrl ? (
+                  <img
+                    src={resolveApiAssetUrl(santriFotoUrl) || ''}
+                    alt={santriName || 'Foto Santri'}
+                    className="santri-detail-avatar-img"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                      const fallback = e.currentTarget.parentElement?.querySelector('.santri-detail-avatar-fallback') as HTMLElement | null;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <span
+                  className="santri-detail-avatar-fallback"
+                  style={{ display: santriFotoUrl ? 'none' : 'flex' }}
+                >
+                  {(santriName || 'S').slice(0, 2).toUpperCase()}
+                </span>
               </div>
               <div className="santri-detail-info">
                 <h1>{santriName || 'Detail Pelanggaran Santri'}</h1>

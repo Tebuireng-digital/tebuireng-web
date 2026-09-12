@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
+import { AppToast } from '../components/AppToast';
 import { ContentSkeleton } from '../components/LoadingSkeleton';
 import { usePageMeta } from '../hooks/usePageMeta';
 
@@ -11,6 +12,8 @@ interface Target {
   target_id: number;
   nama_target: string;
   kategori?: string;
+  nama_roster?: string;
+  santri_count?: number;
 }
 
 interface OptionGroup {
@@ -66,12 +69,14 @@ interface RaportData {
 interface SantriOption {
   santri_id: number;
   nis: string | null;
+  no_id_induk?: string | null;
   nama: string;
 }
 
 interface SessionSantri {
   santri_id: number;
   nis: string | null;
+  no_id_induk?: string | null;
   nama: string;
   nilai: Record<string, number | null>;
   keputusan: string | null;
@@ -169,6 +174,7 @@ export function RaportViewPage() {
 
   const [mode, setMode] = useState<'kelompok' | 'nama'>(urlKelompok ? 'kelompok' : 'kelompok');
   const [selectedJenis, setSelectedJenis] = useState(urlJenis);
+  const [selectedKategori, setSelectedKategori] = useState('');
   const [selectedTargetId, setSelectedTargetId] = useState<number | null>(urlKelompok);
   const [searchName, setSearchName] = useState('');
   const [selectedSantriId, setSelectedSantriId] = useState<number | null>(null);
@@ -177,6 +183,12 @@ export function RaportViewPage() {
   const [downloading, setDownloading] = useState(false);
   const [downloadingBulk, setDownloadingBulk] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' } | null>(null);
+
+  const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   usePageMeta({
     title: 'Lihat Raport Pengajian',
@@ -189,6 +201,68 @@ export function RaportViewPage() {
     queryFn: async () => (await api.get('/api/raport-pengajian/options')).data,
     enabled: !!user,
   });
+
+  const isAdmin = user?.jabatan === 'Admin';
+  const isNonAdmin = !isAdmin;
+
+  const currentOption = options.find(o => o.jenis === selectedJenis);
+  const availableKategori = useMemo(() => Array.from(
+    new Set((currentOption?.targets ?? []).map(t => t.kategori).filter(Boolean))
+  ) as string[], [currentOption]);
+
+  const currentTarget = (currentOption?.targets ?? []).find(t => t.target_id === selectedTargetId);
+  const activeKategori = selectedKategori || (currentTarget?.kategori ?? '');
+
+  const availableRosters = useMemo(() => (currentOption?.targets ?? []).filter(
+    t => !activeKategori || t.kategori === activeKategori
+  ), [currentOption, activeKategori]);
+
+  const allTargets = useMemo(() => options.flatMap(o => o.targets), [options]);
+  const allowedTargetIds = useMemo(() => new Set(allTargets.map(t => t.target_id)), [allTargets]);
+
+  const isJenisDisabled = isNonAdmin && options.length <= 1;
+  const isKategoriDisabled = !selectedJenis || (isNonAdmin && availableKategori.length <= 1);
+  const isRosterDisabled = !activeKategori || (isNonAdmin && availableRosters.length <= 1);
+
+  // Auto-selection and snap for non-admin
+  useEffect(() => {
+    if (options.length === 0) return;
+
+    let curJenis = selectedJenis;
+    if (!curJenis || !options.some(o => o.jenis === curJenis)) {
+      curJenis = options[0].jenis;
+      setSelectedJenis(curJenis);
+      setSelectedKategori('');
+      setSelectedTargetId(null);
+    }
+
+    const opt = options.find(o => o.jenis === curJenis);
+    if (!opt) return;
+
+    const katList = Array.from(new Set(opt.targets.map(t => t.kategori).filter(Boolean))) as string[];
+    let curKat = selectedKategori;
+    if (selectedTargetId && (!curKat || !katList.includes(curKat))) {
+      const matchTarget = opt.targets.find(t => t.target_id === selectedTargetId);
+      if (matchTarget?.kategori) {
+        curKat = matchTarget.kategori;
+        setSelectedKategori(curKat);
+      }
+    }
+    if (katList.length > 0) {
+      if (!curKat || !katList.includes(curKat)) {
+        curKat = katList[0];
+        setSelectedKategori(curKat);
+        setSelectedTargetId(null);
+      }
+    }
+
+    const rosters = opt.targets.filter(t => !curKat || t.kategori === curKat);
+    if (rosters.length > 0) {
+      if (!selectedTargetId || (!isAdmin && !allowedTargetIds.has(selectedTargetId)) || !rosters.some(r => r.target_id === selectedTargetId)) {
+        setSelectedTargetId(rosters[0].target_id);
+      }
+    }
+  }, [options, selectedJenis, selectedKategori, selectedTargetId, isAdmin, allowedTargetIds]);
 
   // Session data when mode = 'kelompok'
   const sessionEnabled = mode === 'kelompok' && !!selectedJenis && !!selectedTargetId;
@@ -217,6 +291,19 @@ export function RaportViewPage() {
     enabled: raportEnabled,
     retry: false,
   });
+
+  useEffect(() => {
+    if (error && selectedSantriId) {
+      const is403 = (error as any)?.response?.status === 403;
+      showToast(
+        is403
+          ? 'Santri berada di luar penugasan Anda.'
+          : `Raport belum diisi untuk santri ini pada periode ${BULAN_NAMA[bulan]} ${tahun}.`,
+        is403 ? 'error' : 'info'
+      );
+    }
+  }, [error, selectedSantriId, bulan, tahun]);
+
   const { data: archives = [] } = useQuery<ArchiveDocument[]>({
     queryKey: ['raport-archives', selectedSantriId],
     queryFn: async () => (await api.get(`/api/raport-pengajian/${selectedSantriId}/history`)).data,
@@ -282,10 +369,30 @@ export function RaportViewPage() {
     }
   };
 
-  const currentOption = options.find(o => o.jenis === selectedJenis);
-
   return (
     <section className="app-container raport-page">
+      <div style={{ marginBottom: '14px' }}>
+        <Link
+          to="/raport"
+          className="santri-back-link"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#0f766e',
+            textDecoration: 'none',
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Kembali ke Raport Pengajian</span>
+        </Link>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 className="ui-text-title">Lihat Raport Pengajian</h1>
 
@@ -315,7 +422,6 @@ export function RaportViewPage() {
         </div>
       )}
 
-      {/* Selectors Panel */}
       <div className="raport-selectors" aria-busy={loadingOptions}>
         {loadingOptions ? <ContentSkeleton rows={3} /> : mode === 'kelompok' ? (
           <div className="raport-selector-row">
@@ -325,8 +431,14 @@ export function RaportViewPage() {
                 label="Jenis Pengajian"
                 value={selectedJenis}
                 placeholder="— Pilih jenis —"
+                disabled={isJenisDisabled}
                 options={options.map(option => ({ value: option.jenis, label: option.nama }))}
-                onChange={value => { setSelectedJenis(value); setSelectedTargetId(null); setSelectedSantriId(null); }}
+                onChange={value => {
+                  setSelectedJenis(value);
+                  setSelectedKategori('');
+                  setSelectedTargetId(null);
+                  setSelectedSantriId(null);
+                }}
               />
             </div>
 
@@ -334,12 +446,41 @@ export function RaportViewPage() {
               <AppDropdown
                 id="raport-view-kelompok"
                 label="Kelompok"
-                value={selectedTargetId ? String(selectedTargetId) : ''}
-                options={(currentOption?.targets ?? []).map(target => ({ value: String(target.target_id), label: `${target.kategori ? `${target.kategori} — ` : ''}${target.nama_target}` }))}
+                value={activeKategori}
+                options={availableKategori.map(cat => ({ value: cat, label: cat }))}
                 placeholder="— Pilih kelompok —"
-                disabled={!selectedJenis}
-                onChange={value => { setSelectedTargetId(Number(value) || null); setSelectedSantriId(null); }}
+                disabled={isKategoriDisabled}
+                onChange={value => {
+                  setSelectedKategori(value);
+                  setSelectedTargetId(null);
+                  setSelectedSantriId(null);
+                }}
               />
+            </div>
+
+            <div className="raport-field">
+              <AppDropdown
+                id="raport-view-roster"
+                label="Roster"
+                value={selectedTargetId ? String(selectedTargetId) : ''}
+                options={availableRosters.map(target => ({
+                  value: String(target.target_id),
+                  label: `${target.nama_roster || target.nama_target}${typeof target.santri_count === 'number' ? ` (${target.santri_count} santri)` : ''}`,
+                }))}
+                placeholder="— Pilih roster —"
+                disabled={isRosterDisabled}
+                searchable
+                searchPlaceholder="Cari nama roster..."
+                onChange={value => {
+                  setSelectedTargetId(Number(value) || null);
+                  setSelectedSantriId(null);
+                }}
+              />
+              {isRosterDisabled && availableRosters.length > 0 && isNonAdmin && (
+                <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                  Roster tugas Anda ({availableRosters[0]?.nama_roster || availableRosters[0]?.nama_target})
+                </small>
+              )}
             </div>
 
             <div className="raport-field">
@@ -424,7 +565,7 @@ export function RaportViewPage() {
         <div style={{ background: 'var(--kertas-kartu)', border: '1px solid var(--garis)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '16px' }}>Daftar Santri — {session.nama_kelompok}</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Daftar Santri — {session.nama_kelompok}</h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--tinta-pudar)' }}>Periode: {BULAN_NAMA[bulan]} {tahun} ({session.santri.length} santri)</p>
             </div>
             <button
@@ -437,12 +578,12 @@ export function RaportViewPage() {
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table className="raport-input-table">
+          <div className="raport-table-wrapper" style={{ boxShadow: 'none', border: '1px solid var(--garis)', borderRadius: '8px', maxHeight: 'none', overflowY: 'visible' }}>
+            <table className="raport-input-table ubudiyah-input-table">
               <thead>
                 <tr>
                   <th style={{ width: '40px' }}>No</th>
-                  <th style={{ textAlign: 'left', paddingLeft: '10px' }}>Nama Santri</th>
+                  <th style={{ textAlign: 'center' }}>Nama Santri</th>
                   <th>Status Raport</th>
                   <th style={{ width: '180px' }}>Aksi</th>
                 </tr>
@@ -455,8 +596,16 @@ export function RaportViewPage() {
                     <tr key={s.santri_id} style={{ background: isSelected ? 'rgba(15, 110, 86, 0.08)' : undefined }}>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{i + 1}</td>
                       <td style={{ textAlign: 'left', paddingLeft: '10px' }}>
-                        <div style={{ fontWeight: 600 }}>{s.nama}</div>
-                        {s.nis && <div style={{ fontSize: '11px', color: 'var(--tinta-pudar)' }}>{s.nis}</div>}
+                        <div style={{ fontWeight: 600, wordBreak: 'break-word' }}>{s.nama}</div>
+                        {s.no_id_induk ? (
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                            NIP: {s.no_id_induk}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                            NIP: —
+                          </div>
+                        )}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {sudahDiisi ? (
@@ -467,9 +616,23 @@ export function RaportViewPage() {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <button
+                          type="button"
                           className="secondary-button"
-                          style={{ padding: '6px 12px', fontSize: '12px' }}
-                          onClick={() => setSelectedSantriId(s.santri_id)}
+                          style={{
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            backgroundColor: isSelected ? '#0f766e' : '#ffffff',
+                            color: isSelected ? '#ffffff' : '#0f766e',
+                            borderColor: '#0f766e',
+                          }}
+                          onClick={() => {
+                            setSelectedSantriId(s.santri_id);
+                            if (!sudahDiisi) {
+                              showToast(`Raport belum diisi untuk santri ini pada periode ${BULAN_NAMA[bulan]} ${tahun}.`, 'info');
+                            }
+                          }}
                         >
                           {isSelected ? 'Terpilih' : 'Lihat Raport'}
                         </button>
@@ -486,10 +649,7 @@ export function RaportViewPage() {
       {/* Loading states */}
       {loadingSession && mode === 'kelompok' && <ContentSkeleton rows={3} />}
       {loadingRaport && raportEnabled && <ContentSkeleton rows={6} />}
-      {error && raportEnabled && <div className="empty-state">Raport belum diisi untuk santri ini pada periode {BULAN_NAMA[bulan]} {tahun}.</div>}
-
       {!selectedSantriId && mode === 'nama' && <div className="empty-state">Cari dan pilih nama santri untuk melihat detail raport.</div>}
-      {!selectedSantriId && mode === 'kelompok' && session && <div className="empty-state">Klik tombol "Lihat Raport" pada salah satu santri di atas untuk melihat detail lengkapnya.</div>}
 
       {/* Raport View Card */}
       {raport && (
@@ -587,6 +747,15 @@ export function RaportViewPage() {
             {archives.length === 0 ? <p className="muted">Belum ada arsip untuk santri ini.</p> : <div className="master-category-list">{archives.map(archive => <div className="master-category-row" key={archive.document_id}><div><strong>{archive.tahun_pelajaran} · {archive.semester} · Versi {archive.versi}</strong><span>Diterbitkan {new Date(archive.diterbitkan_pada).toLocaleString('id-ID')}</span></div><a className="secondary-button" href={`/api/raport-pengajian/${selectedSantriId}/documents/${archive.document_id}/pdf`}>Unduh arsip</a></div>)}</div>}
           </section>
         </div>
+      )}
+
+      {/* Toast Notification Standar Kanan Atas */}
+      {toast && (
+        <AppToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </section>
   );

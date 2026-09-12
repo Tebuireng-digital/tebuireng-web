@@ -18,16 +18,20 @@ const CatatGerbangPage = lazy(() => import('./pages/CatatGerbangPage').then(modu
 const DataMasterPage = lazy(() => import('./pages/DataMasterPage').then(module => ({ default: module.DataMasterPage })));
 const LaporanPage = lazy(() => import('./pages/LaporanPage').then(module => ({ default: module.LaporanPage })));
 const GantiPasswordPage = lazy(() => import('./pages/GantiPasswordPage').then(module => ({ default: module.GantiPasswordPage })));
+const RaportLandingPage = lazy(() => import('./pages/RaportLandingPage').then(module => ({ default: module.RaportLandingPage })));
 const RaportInputPage = lazy(() => import('./pages/RaportInputPage').then(module => ({ default: module.RaportInputPage })));
 const RaportViewPage = lazy(() => import('./pages/RaportViewPage').then(module => ({ default: module.RaportViewPage })));
+const UbudiyahLandingPage = lazy(() => import('./pages/UbudiyahLandingPage').then(module => ({ default: module.UbudiyahLandingPage })));
 const UbudiyahFormPage = lazy(() => import('./pages/UbudiyahFormPage').then(module => ({ default: module.UbudiyahFormPage })));
 const UbudiyahViewPage = lazy(() => import('./pages/UbudiyahViewPage').then(module => ({ default: module.UbudiyahViewPage })));
 const UbudiyahMasterPage = lazy(() => import('./pages/UbudiyahMasterPage').then(module => ({ default: module.UbudiyahMasterPage })));
 const PeriodeAkademikPage = lazy(() => import('./pages/PeriodeAkademikPage').then(module => ({ default: module.PeriodeAkademikPage })));
 const AbsensiHistoryPage = lazy(() => import('./pages/AbsensiHistoryPage').then(module => ({ default: module.AbsensiHistoryPage })));
 const PelanggaranMasterPage = lazy(() => import('./pages/PelanggaranMasterPage').then(module => ({ default: module.PelanggaranMasterPage })));
+const RaportMasterPage = lazy(() => import('./pages/RaportMasterPage').then(module => ({ default: module.RaportMasterPage })));
+const JadwalAbsensiMasterPage = lazy(() => import('./pages/JadwalAbsensiMasterPage').then(module => ({ default: module.JadwalAbsensiMasterPage })));
 
-type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'verify' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport' | 'ubudiyah';
+type IconName = 'home' | 'school' | 'room' | 'quran' | 'madin' | 'takhasus' | 'warning' | 'verify' | 'gate' | 'database' | 'report' | 'lock' | 'menu' | 'logout' | 'more' | 'raport' | 'ubudiyah' | 'management';
 
 interface OpsiAbsensiItem {
   jenis: string;
@@ -42,8 +46,8 @@ interface VerificationAttention {
 
 const ABSENSI_CONFIG: Record<string, { nama: string; icon: IconName }> = {
   sekolah: { nama: 'Absensi Kelas Formal', icon: 'school' },
-  keberangkatan: { nama: 'Keberangkatan Kelas', icon: 'school' },
-  kamar: { nama: 'Absensi Kamar', icon: 'room' },
+  keberangkatan: { nama: 'Absensi Kamar Pagi', icon: 'room' },
+  kamar: { nama: 'Absensi Kamar Malam', icon: 'room' },
   pbs: { nama: 'Absensi Al-Qur\'an Subuh', icon: 'quran' },
   diniyah: { nama: 'Absensi Kelas Madin', icon: 'madin' },
   pbm: { nama: 'Absensi Takhasus Maghrib', icon: 'takhasus' },
@@ -90,7 +94,11 @@ function NavIcon({ name }: { name: IconName }) {
       />
     ),
     ubudiyah: (
-      <path d="M24,4.5 C24.6,4.5 25.1,4.9 25.4,5.5 L30.3,16.5 C30.6,17.2 31.3,17.7 32,17.8 L44,19.3 C45.3,19.5 45.8,21.1 44.8,22 L36,29.9 C35.4,30.4 35.2,31.2 35.4,32 L37.7,43.9 C38,45.2 36.6,46.2 35.5,45.5 L24.9,39.6 C24.3,39.3 23.7,39.3 23.1,39.6 L12.5,45.5 C11.4,46.2 10,45.2 10.3,43.9 L12.6,32 C12.8,31.2 12.6,30.4 12,29.9 L3.2,22 C2.2,21.1 2.7,19.5 4,19.3 L16,17.8 C16.7,17.7 17.4,17.2 17.7,16.5 L22.6,5.5 C22.9,4.9 23.4,4.5 24,4.5 Z" />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M18,4 C16.3,4 15,5.3 15,7 L12,7 C9.8,7 8,8.8 8,11 L8,40 C8,42.2 9.8,44 12,44 L36,44 C38.2,44 40,42.2 40,40 L40,11 C40,8.8 38.2,7 36,7 L33,7 C33,5.3 31.7,4 30,4 L18,4 Z M18,7 L30,7 L30,9 L18,9 L18,7 Z M12,10 L15,10 L15,11 C15,12.1 15.9,13 17,13 L31,13 C32.1,13 33,12.1 33,11 L33,10 L36,10 C36.6,10 37,10.4 37,11 L37,40 C37,40.6 36.6,41 36,41 L12,41 C11.4,41 11,40.6 11,40 L11,11 C11,10.4 11.4,10 12,10 Z M21.2,28.8 C20.4,28 19.1,28 18.3,28.8 C17.5,29.6 17.5,30.9 18.3,31.7 L22.3,35.7 C23.1,36.5 24.4,36.5 25.2,35.7 L33.2,27.7 C34,26.9 34,25.6 33.2,24.8 C32.4,24 31.1,24 30.3,24.8 L23.7,31.4 L21.2,28.8 Z"
+      />
     ),
     verify: (
       <path
@@ -136,6 +144,13 @@ function NavIcon({ name }: { name: IconName }) {
     ),
     more: (
       <path d="M12,24 C12,21.8 13.8,20 16,20 C18.2,20 20,21.8 20,24 C20,26.2 18.2,28 16,28 C13.8,28 12,26.2 12,24 Z M22,24 C22,21.8 23.8,20 26,20 C28.2,20 30,21.8 30,24 C30,26.2 28.2,28 26,28 C23.8,28 22,26.2 22,24 Z M32,24 C32,21.8 33.8,20 36,20 C38.2,20 40,21.8 40,24 C40,26.2 38.2,28 36,28 C33.8,28 32,26.2 32,24 Z" />
+    ),
+    management: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6,13 C6,11.9 6.9,11 8,11 L14,11 L14,7 C14,5.9 14.9,5 16,5 L20,5 C21.1,5 22,5.9 22,7 L22,11 L40,11 C41.1,11 42,11.9 42,13 C42,14.1 41.1,15 40,15 L22,15 L22,19 C22,20.1 21.1,21 20,21 L16,21 C14.9,21 14,20.1 14,19 L14,15 L8,15 C6.9,15 6,14.1 6,13 Z M6,35 C6,33.9 6.9,33 8,33 L26,33 L26,29 C26,27.9 26.9,27 28,27 L32,27 C33.1,27 34,27.9 34,29 L34,33 L40,33 C41.1,33 42,33.9 42,35 C42,36.1 41.1,37 40,37 L34,37 L34,41 C34,42.1 33.1,43 32,43 L28,43 C26.9,43 26,42.1 26,41 L26,37 L8,37 C6.9,37 6,36.1 6,35 Z"
+      />
     ),
   };
 
@@ -252,20 +267,43 @@ function Layout() {
     return () => window.removeEventListener('scroll', handleScrollHide);
   }, []);
   const [isAbsensiMenuOpen, setIsAbsensiMenuOpen] = useState(() => location.pathname.startsWith('/absensi-kegiatan') || (location.pathname === '/dashboard' && !!currentJenis));
-  const [isPelanggaranMenuOpen, setIsPelanggaranMenuOpen] = useState(() => location.pathname.startsWith('/pelanggaran'));
-  const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(() => location.pathname.startsWith('/data-master'));
+  const [isPelanggaranMenuOpen, setIsPelanggaranMenuOpen] = useState(() => location.pathname.startsWith('/pelanggaran') && location.pathname !== '/pelanggaran/master');
+  const isManagementRoute = location.pathname === '/data-master/jadwal-absensi'
+    || location.pathname === '/absensi/jadwal'
+    || location.pathname === '/pelanggaran/master'
+    || location.pathname === '/ubudiyah/master'
+    || location.pathname === '/raport/master'
+    || location.pathname === '/data-master/penugasan'
+    || location.pathname === '/data-master/akun'
+    || location.pathname === '/data-master/wa-bot'
+    || location.pathname === '/periode-akademik';
+  const isMasterRoute = location.pathname.startsWith('/data-master') && !isManagementRoute;
+  const [isMasterMenuOpen, setIsMasterMenuOpen] = useState(() => isMasterRoute);
   const [isRaportMenuOpen, setIsRaportMenuOpen] = useState(true);
   const [isVerificationMenuOpen, setIsVerificationMenuOpen] = useState(() => location.pathname.startsWith('/verifikasi-data'));
-  const [isUbudiyahMenuOpen, setIsUbudiyahMenuOpen] = useState(() => location.pathname.startsWith('/ubudiyah'));
+  const [isUbudiyahMenuOpen, setIsUbudiyahMenuOpen] = useState(() => location.pathname.startsWith('/ubudiyah') && location.pathname !== '/ubudiyah/master');
+  const [isManagementMenuOpen, setIsManagementMenuOpen] = useState(() => isManagementRoute);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (location.pathname.startsWith('/pelanggaran')) {
+    if (location.pathname.startsWith('/pelanggaran') && location.pathname !== '/pelanggaran/master') {
       setIsPelanggaranMenuOpen(true);
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (isMasterRoute) {
+      setIsMasterMenuOpen(true);
+    }
+  }, [isMasterRoute]);
+
+  useEffect(() => {
+    if (isManagementRoute) {
+      setIsManagementMenuOpen(true);
+    }
+  }, [isManagementRoute]);
 
   useEffect(() => {
     const timers = new WeakMap<EventTarget, number>();
@@ -371,6 +409,7 @@ function Layout() {
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
+        setIsManagementMenuOpen(false);
       }
       return next;
     });
@@ -383,6 +422,7 @@ function Layout() {
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
+        setIsManagementMenuOpen(false);
       }
       return next;
     });
@@ -396,6 +436,7 @@ function Layout() {
         setIsRaportMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
+        setIsManagementMenuOpen(false);
       }
       return next;
     });
@@ -409,6 +450,7 @@ function Layout() {
         setIsMasterMenuOpen(false);
         setIsVerificationMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
+        setIsManagementMenuOpen(false);
       }
       return next;
     });
@@ -421,6 +463,7 @@ function Layout() {
         setIsPelanggaranMenuOpen(false);
         setIsMasterMenuOpen(false);
         setIsUbudiyahMenuOpen(false);
+        setIsManagementMenuOpen(false);
       }
       return next;
     });
@@ -434,6 +477,21 @@ function Layout() {
         setIsMasterMenuOpen(false);
         setIsRaportMenuOpen(false);
         setIsVerificationMenuOpen(false);
+        setIsManagementMenuOpen(false);
+      }
+      return next;
+    });
+  };
+  const toggleManagementMenu = () => {
+    setIsManagementMenuOpen(open => {
+      const next = !open;
+      if (next) {
+        setIsAbsensiMenuOpen(false);
+        setIsPelanggaranMenuOpen(false);
+        setIsMasterMenuOpen(false);
+        setIsRaportMenuOpen(false);
+        setIsVerificationMenuOpen(false);
+        setIsUbudiyahMenuOpen(false);
       }
       return next;
     });
@@ -587,7 +645,7 @@ function Layout() {
                   >
                     Daftar Pelanggaran
                   </Link>
-                  {['Admin', 'Keamanan'].includes(user.jabatan) && (
+                  {user.jabatan === 'Keamanan' && (
                     <Link
                       to="/pelanggaran/master"
                       className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/master' ? 'active' : ''}`}
@@ -627,8 +685,19 @@ function Layout() {
           )}
 
 
-          {/* KELOMPOK MENU RAPORT PENGAJIAN (COLLAPSIBLE) */}
-          {Boolean(user) && (
+          {/* KELOMPOK MENU RAPORT PENGAJIAN */}
+          {user.jabatan === 'Piket Pengajian' && (
+            <Link
+              to="/raport"
+              className={`sidebar-nav-link ${location.pathname.startsWith('/raport') ? 'active' : ''}`}
+              aria-current={location.pathname.startsWith('/raport') ? 'page' : undefined}
+              onClick={closeMenu}
+            >
+              <NavIcon name="raport"/><span>Raport Pengajian</span>
+            </Link>
+          )}
+
+          {user.jabatan === 'Admin' && (
             <div className="sidebar-master-menu">
               <button
                 type="button"
@@ -643,16 +712,22 @@ function Layout() {
               </button>
               <div id="raport-subnav" className={`sidebar-subnav ${isRaportMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isRaportMenuOpen}>
                 <div className="sidebar-subnav-inner">
-                  {['Admin', 'Piket Pengajian'].includes(user.jabatan) && (
-                    <Link
-                      to="/raport/input"
-                      className={`sidebar-subnav-link ${location.pathname === '/raport/input' ? 'active' : ''}`}
-                      aria-current={location.pathname === '/raport/input' ? 'page' : undefined}
-                      onClick={closeMenu}
-                    >
-                      Input Raport
-                    </Link>
-                  )}
+                  <Link
+                    to="/raport"
+                    className={`sidebar-subnav-link ${location.pathname === '/raport' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/raport' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Raport Pengajian
+                  </Link>
+                  <Link
+                    to="/raport/input"
+                    className={`sidebar-subnav-link ${location.pathname === '/raport/input' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/raport/input' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Input Raport
+                  </Link>
                   <Link
                     to="/raport/lihat"
                     className={`sidebar-subnav-link ${location.pathname === '/raport/lihat' ? 'active' : ''}`}
@@ -666,52 +741,59 @@ function Layout() {
             </div>
           )}
 
-          {/* KELOMPOK MENU UBUDIYAH (COLLAPSIBLE) */}
-          {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
+          {/* KELOMPOK MENU RAPORT PEMBINAAN */}
+          {user.jabatan === 'Pembina Kamar' && (
+            <Link
+              to="/ubudiyah"
+              className={`sidebar-nav-link ${location.pathname.startsWith('/ubudiyah') ? 'active' : ''}`}
+              aria-current={location.pathname.startsWith('/ubudiyah') ? 'page' : undefined}
+              onClick={closeMenu}
+            >
+              <NavIcon name="ubudiyah"/><span>Raport Pembinaan</span>
+            </Link>
+          )}
+
+          {user.jabatan === 'Admin' && (
             <div className="sidebar-master-menu">
               <button
                 type="button"
-                aria-label="Buka atau tutup menu Ubudiyah"
+                aria-label="Buka atau tutup menu Raport Pembinaan"
                 aria-expanded={isUbudiyahMenuOpen}
                 aria-controls="ubudiyah-subnav"
                 className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/ubudiyah') ? 'active' : ''}`}
                 onClick={toggleUbudiyahMenu}
               >
-                <span className="nav-label"><NavIcon name="ubudiyah"/><span>Menu Ubudiyah</span></span>
+                <span className="nav-label"><NavIcon name="ubudiyah"/><span>Raport Pembinaan</span></span>
                 <ChevronIcon isOpen={isUbudiyahMenuOpen} />
               </button>
               <div id="ubudiyah-subnav" className={`sidebar-subnav ${isUbudiyahMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isUbudiyahMenuOpen}>
                 <div className="sidebar-subnav-inner">
                   {!ubudiyahReady && <p className="sidebar-subnav-notice" role="status">Modul belum siap</p>}
                   {ubudiyahReady && <>
-                    {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
-                      <Link
-                        to="/ubudiyah/input"
-                        className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/input' ? 'active' : ''}`}
-                        aria-current={location.pathname === '/ubudiyah/input' ? 'page' : undefined}
-                        onClick={closeMenu}
-                      >
-                        Input Ubudiyah
-                      </Link>
-                    )}
+                    <Link
+                      to="/ubudiyah"
+                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/ubudiyah' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Raport Pembinaan
+                    </Link>
+                    <Link
+                      to="/ubudiyah/input"
+                      className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/input' ? 'active' : ''}`}
+                      aria-current={location.pathname === '/ubudiyah/input' ? 'page' : undefined}
+                      onClick={closeMenu}
+                    >
+                      Input Raport Pembinaan
+                    </Link>
                     <Link
                       to="/ubudiyah/lihat"
                       className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/lihat' ? 'active' : ''}`}
                       aria-current={location.pathname === '/ubudiyah/lihat' ? 'page' : undefined}
                       onClick={closeMenu}
                     >
-                      Lihat Ubudiyah
+                      Lihat Raport Pembinaan
                     </Link>
-                    {['Admin', 'Pembina Kamar'].includes(user.jabatan) && (
-                      <Link
-                        to="/ubudiyah/master"
-                        className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/master' ? 'active' : ''}`}
-                        aria-current={location.pathname === '/ubudiyah/master' ? 'page' : undefined}
-                        onClick={closeMenu}
-                      >
-                        Master Kriteria
-                      </Link>
-                    )}
                   </>}
                 </div>
               </div>
@@ -740,7 +822,7 @@ function Layout() {
                 aria-label="Buka atau tutup Data Master"
                 aria-expanded={isMasterMenuOpen}
                 aria-controls="master-subnav"
-                className={`sidebar-nav-link sidebar-master-trigger ${location.pathname.startsWith('/data-master') ? 'active' : ''}`}
+                className={`sidebar-nav-link sidebar-master-trigger ${isMasterRoute ? 'active' : ''}`}
                 onClick={toggleMasterMenu}
               >
                 <span className="nav-label"><NavIcon name="database"/><span>Data Master</span></span>
@@ -753,10 +835,91 @@ function Layout() {
                   <Link to="/data-master/organisasi-daerah" className={`sidebar-subnav-link ${location.pathname === '/data-master/organisasi-daerah' ? 'active' : ''}`} onClick={closeMenu}>Data ORDA</Link>
                   <Link to="/data-master/ekstrakurikuler" className={`sidebar-subnav-link ${location.pathname === '/data-master/ekstrakurikuler' ? 'active' : ''}`} onClick={closeMenu}>Data ekstrakurikuler</Link>
                   <Link to="/data-master/wisma" className={`sidebar-subnav-link ${location.pathname === '/data-master/wisma' ? 'active' : ''}`} onClick={closeMenu}>Data wisma</Link>
-                  <Link to="/data-master/penugasan" className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`} onClick={closeMenu}>Penugasan absensi</Link>
-                  <Link to="/data-master/akun" className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`} onClick={closeMenu}>Akun petugas</Link>
-                  <Link to="/data-master/wa-bot" className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`} onClick={closeMenu}>Pengaturan Bot WA</Link>
-                  <Link to="/periode-akademik" className={`sidebar-subnav-link ${location.pathname === '/periode-akademik' ? 'active' : ''}`} onClick={closeMenu}>Periode akademik</Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* KELOMPOK MENU MANAGEMENT (KHUSUS ADMIN) */}
+          {user.jabatan === 'Admin' && (
+            <div className="sidebar-master-menu">
+              <button
+                type="button"
+                aria-label="Buka atau tutup menu Management"
+                aria-expanded={isManagementMenuOpen}
+                aria-controls="management-subnav"
+                className={`sidebar-nav-link sidebar-master-trigger ${isManagementRoute ? 'active' : ''}`}
+                onClick={toggleManagementMenu}
+              >
+                <span className="nav-label"><NavIcon name="management"/><span>Management</span></span>
+                <ChevronIcon isOpen={isManagementMenuOpen} />
+              </button>
+              <div id="management-subnav" className={`sidebar-subnav ${isManagementMenuOpen ? 'open' : 'closed'}`} aria-hidden={!isManagementMenuOpen}>
+                <div className="sidebar-subnav-inner">
+                  <Link
+                    to="/data-master/jadwal-absensi"
+                    className={`sidebar-subnav-link ${location.pathname === '/data-master/jadwal-absensi' || location.pathname === '/absensi/jadwal' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/data-master/jadwal-absensi' || location.pathname === '/absensi/jadwal' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Jadwal Absensi
+                  </Link>
+                  <Link
+                    to="/pelanggaran/master"
+                    className={`sidebar-subnav-link ${location.pathname === '/pelanggaran/master' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/pelanggaran/master' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Master Pelanggaran
+                  </Link>
+                  <Link
+                    to="/ubudiyah/master"
+                    className={`sidebar-subnav-link ${location.pathname === '/ubudiyah/master' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/ubudiyah/master' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Master Kriteria Pembinaan
+                  </Link>
+                  <Link
+                    to="/raport/master"
+                    className={`sidebar-subnav-link ${location.pathname === '/raport/master' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/raport/master' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Master Kriteria Pengajian
+                  </Link>
+                  <Link
+                    to="/data-master/penugasan"
+                    className={`sidebar-subnav-link ${location.pathname === '/data-master/penugasan' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/data-master/penugasan' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Penugasan Absensi
+                  </Link>
+                  <Link
+                    to="/data-master/akun"
+                    className={`sidebar-subnav-link ${location.pathname === '/data-master/akun' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/data-master/akun' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Akun Petugas
+                  </Link>
+                  <Link
+                    to="/data-master/wa-bot"
+                    className={`sidebar-subnav-link ${location.pathname === '/data-master/wa-bot' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/data-master/wa-bot' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Pengaturan Bot WA
+                  </Link>
+                  <Link
+                    to="/periode-akademik"
+                    className={`sidebar-subnav-link ${location.pathname === '/periode-akademik' ? 'active' : ''}`}
+                    aria-current={location.pathname === '/periode-akademik' ? 'page' : undefined}
+                    onClick={closeMenu}
+                  >
+                    Periode Akademik
+                  </Link>
                 </div>
               </div>
             </div>
@@ -800,13 +963,24 @@ function Layout() {
             <Route path="/absensi-histori" element={['Admin', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'].includes(user.jabatan) ? <AbsensiHistoryPage /> : <Navigate to="/dashboard" />} />
             <Route path="/rekap-kelas" element={<Navigate to="/absensi-histori" replace />} />
 
+            <Route path="/raport" element={
+              ['Admin', 'Piket Pengajian'].includes(user.jabatan)
+                ? <RaportLandingPage />
+                : <Navigate to="/dashboard" />
+            } />
             <Route path="/raport/input" element={
               ['Admin', 'Piket Pengajian'].includes(user.jabatan)
                 ? <RaportInputPage />
                 : <Navigate to="/dashboard" />
             } />
             <Route path="/raport/lihat" element={['Admin', 'Piket Pengajian'].includes(user.jabatan) ? <RaportViewPage /> : <Navigate to="/dashboard" />} />
+            <Route path="/raport/master" element={user.jabatan === 'Admin' ? <RaportMasterPage /> : <Navigate to="/dashboard" />} />
 
+            <Route path="/ubudiyah" element={
+              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
+                ? <UbudiyahLandingPage />
+                : <Navigate to="/dashboard" />
+            } />
             <Route path="/ubudiyah/input" element={
               ['Admin', 'Pembina Kamar'].includes(user.jabatan)
                 ? <UbudiyahFormPage />
@@ -818,8 +992,18 @@ function Layout() {
                 : <Navigate to="/dashboard" />
             } />
             <Route path="/ubudiyah/master" element={
-              ['Admin', 'Pembina Kamar'].includes(user.jabatan)
+              user.jabatan === 'Admin'
                 ? <UbudiyahMasterPage />
+                : <Navigate to="/dashboard" />
+            } />
+            <Route path="/data-master/jadwal-absensi" element={
+              ['Admin', 'admin'].includes(user.jabatan)
+                ? <JadwalAbsensiMasterPage />
+                : <Navigate to="/dashboard" />
+            } />
+            <Route path="/absensi/jadwal" element={
+              ['Admin', 'admin'].includes(user.jabatan)
+                ? <JadwalAbsensiMasterPage />
                 : <Navigate to="/dashboard" />
             } />
 

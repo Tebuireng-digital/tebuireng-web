@@ -11,6 +11,12 @@ class SantriPortalFeatureTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+    }
+
     public function test_santri_can_login_with_nomor_induk_pondok(): void
     {
         $unitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'SMP', 'nama' => 'SMP']);
@@ -87,5 +93,137 @@ class SantriPortalFeatureTest extends TestCase
         ])->assertOk();
 
         $this->getJson('/api/santri-portal/kehadiran')->assertOk();
+    }
+
+    public function test_portal_only_shows_locked_rapor_pengajian_and_hides_draft(): void
+    {
+        $unitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'SMP', 'nama' => 'SMP']);
+        $petugasId = DB::table('petugas')->insertGetId([
+            'username' => 'ustadz1',
+            'password_hash' => Hash::make('secret'),
+            'nama' => 'Ustadz Pengajar',
+            'jabatan' => 'Piket Pengajian',
+            'status_aktif' => 1,
+        ]);
+        $santriId = DB::table('santri')->insertGetId([
+            'no_id_induk' => '7206034',
+            'nama' => 'Santri Rapor Pengajian',
+            'unit_id' => $unitId,
+            'status_aktif' => 1,
+            'password_hash' => Hash::make('masuk123'),
+        ]);
+        DB::table('wali_accounts')->insert([
+            'santri_id' => $santriId,
+            'username' => '7206034',
+            'password_hash' => Hash::make('masuk123'),
+            'status_aktif' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Draft raport (bulan 8) -> should be hidden
+        DB::table('raport_pengajian')->insert([
+            'santri_id' => $santriId,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'bulan' => 8,
+            'tahun' => 2026,
+            'diisi_oleh' => $petugasId,
+            'status' => 'draft',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Locked raport (bulan 9) -> should be published
+        DB::table('raport_pengajian')->insert([
+            'santri_id' => $santriId,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'bulan' => 9,
+            'tahun' => 2026,
+            'diisi_oleh' => $petugasId,
+            'status' => 'dikunci',
+            'predikat_umum' => 'SANGAT BAIK',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/santri-portal/login', [
+            'no_id_induk' => '7206034',
+            'password' => 'masuk123',
+        ])->assertOk();
+
+        $response = $this->getJson('/api/santri-portal/rapor-pengajian?tahun_pelajaran=2026/2027&semester=Gasal');
+        $response->assertOk()
+            ->assertJsonCount(1, 'reports')
+            ->assertJsonPath('reports.0.bulan', 9)
+            ->assertJsonPath('reports.0.predikat_umum', 'SANGAT BAIK');
+    }
+
+    public function test_portal_only_shows_locked_rapor_pembinaan_and_hides_draft(): void
+    {
+        $unitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'SMP', 'nama' => 'SMP']);
+        $petugasId = DB::table('petugas')->insertGetId([
+            'username' => 'pembina1',
+            'password_hash' => Hash::make('secret'),
+            'nama' => 'Pembina Kamar Satu',
+            'jabatan' => 'Pembina Kamar',
+            'status_aktif' => 1,
+        ]);
+        $kamarId = DB::table('kamar')->insertGetId(['nama' => 'Kamar A 01']);
+        $santriId = DB::table('santri')->insertGetId([
+            'no_id_induk' => '7206035',
+            'nama' => 'Santri Rapor Pembinaan',
+            'unit_id' => $unitId,
+            'kamar_id' => $kamarId,
+            'status_aktif' => 1,
+            'password_hash' => Hash::make('masuk123'),
+        ]);
+        DB::table('wali_accounts')->insert([
+            'santri_id' => $santriId,
+            'username' => '7206035',
+            'password_hash' => Hash::make('masuk123'),
+            'status_aktif' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Draft raport pembinaan (bulan 8) -> hidden
+        DB::table('raport_ubudiyah')->insert([
+            'santri_id' => $santriId,
+            'kamar_id' => $kamarId,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'bulan' => 8,
+            'tahun' => 2026,
+            'diisi_oleh' => $petugasId,
+            'status' => 'draft',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Locked raport pembinaan (bulan 9) -> visible
+        DB::table('raport_ubudiyah')->insert([
+            'santri_id' => $santriId,
+            'kamar_id' => $kamarId,
+            'tahun_pelajaran' => '2026/2027',
+            'semester' => 'Ganjil',
+            'bulan' => 9,
+            'tahun' => 2026,
+            'diisi_oleh' => $petugasId,
+            'status' => 'dikunci',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/santri-portal/login', [
+            'no_id_induk' => '7206035',
+            'password' => 'masuk123',
+        ])->assertOk();
+
+        $response = $this->getJson('/api/santri-portal/rapor-pembinaan?tahun_pelajaran=2026/2027&semester=Gasal');
+        $response->assertOk()
+            ->assertJsonCount(1, 'reports')
+            ->assertJsonPath('reports.0.bulan', 9);
     }
 }

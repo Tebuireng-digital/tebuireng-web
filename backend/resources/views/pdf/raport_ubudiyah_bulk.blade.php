@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Laporan Ubudiyah Yaumiyah - Bulk</title>
+    <title>Raport Pembinaan - Bulk</title>
 </head>
 <body>
 @foreach($allPages as $index => $data)

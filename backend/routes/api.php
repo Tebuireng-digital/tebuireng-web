@@ -23,6 +23,9 @@ Route::prefix('santri-portal')->middleware('web')->group(function () {
         Route::get('/rapor-pengajian/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'portalSemesterPdf']);
         Route::get('/rapor-pengajian/history', [\App\Http\Controllers\RaportPengajianController::class, 'portalHistory']);
         Route::get('/rapor-pengajian/{documentId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'portalDocumentPdf']);
+
+        Route::get('/rapor-pembinaan', [\App\Http\Controllers\UbudiyahController::class, 'portalSemester']);
+        Route::get('/rapor-pembinaan/pdf', [\App\Http\Controllers\UbudiyahController::class, 'portalSemesterPdf']);
     });
 });
 
@@ -35,6 +38,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/dashboard/summary', [\App\Http\Controllers\DashboardController::class, 'summary']);
     Route::get('/absensi', [\App\Http\Controllers\AbsensiController::class, 'index']);
+    Route::get('/absensi/jadwal', [\App\Http\Controllers\AbsensiController::class, 'getJadwal']);
+    Route::put('/absensi/jadwal/{id}', [\App\Http\Controllers\AbsensiController::class, 'updateJadwal'])->middleware('role:Admin');
     Route::get('/absensi-options', [\App\Http\Controllers\AbsensiController::class, 'options']);
     Route::get('/absensi/{jenis}/session', [\App\Http\Controllers\AbsensiController::class, 'session']);
     Route::post('/absensi/{jenis}/bulk', [\App\Http\Controllers\AbsensiController::class, 'bulkUpsert'])->middleware('throttle:bulk-input');
@@ -100,7 +105,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/master/penugasan/{id}', [\App\Http\Controllers\MasterController::class, 'deletePenugasan'])->middleware('role:Admin');
     Route::post('/master/import-reviews/sync', [\App\Http\Controllers\ImportReviewController::class, 'sync'])->middleware('role:Admin');
     Route::get('/master/import-reviews', [\App\Http\Controllers\ImportReviewController::class, 'index'])->middleware('role:Admin');
+    Route::get('/master/import-reviews/candidates', [\App\Http\Controllers\ImportReviewController::class, 'candidateOptions'])->middleware('role:Admin');
     Route::post('/master/import-reviews/{id}/merge', [\App\Http\Controllers\ImportReviewController::class, 'merge'])->middleware('role:Admin');
+    Route::post('/master/import-reviews/{id}/confirm', [\App\Http\Controllers\ImportReviewController::class, 'confirmCandidate'])->middleware('role:Admin');
     Route::post('/master/import-reviews/{id}/separate', [\App\Http\Controllers\ImportReviewController::class, 'markSeparate'])->middleware('role:Admin');
     Route::get('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'mappings'])->middleware('role:Admin');
     Route::post('/master/kamar-mappings', [\App\Http\Controllers\ImportReviewController::class, 'saveMapping'])->middleware('role:Admin');
@@ -117,6 +124,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Raport Pengajian
     Route::get('/raport-pengajian/options', [\App\Http\Controllers\RaportPengajianController::class, 'options']);
+    Route::get('/raport-pengajian/summary', [\App\Http\Controllers\RaportPengajianController::class, 'summary']);
     Route::get('/raport-pengajian/session', [\App\Http\Controllers\RaportPengajianController::class, 'session']);
     Route::post('/raport-pengajian/bulk', [\App\Http\Controllers\RaportPengajianController::class, 'bulkUpsert'])->middleware('role:Admin,Piket Pengajian');
     Route::get('/raport-pengajian/rekap-semester', [\App\Http\Controllers\RaportPengajianController::class, 'rekapSemester'])->middleware('role:Admin');
@@ -124,18 +132,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/raport-pengajian/{santriId}/history', [\App\Http\Controllers\RaportPengajianController::class, 'history'])->middleware('role:Admin,Piket Pengajian');
     Route::get('/raport-pengajian/{santriId}/documents/{documentId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'documentPdf'])->middleware('role:Admin,Piket Pengajian');
     Route::get('/raport-pengajian/kelompok/{jenis}/{kelompokId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdfBulk'])->middleware('role:Admin,Piket Pengajian');
+    Route::post('/raport-pengajian/lock', [\App\Http\Controllers\RaportPengajianController::class, 'lock'])->middleware('role:Admin,Piket Pengajian');
+    Route::post('/raport-pengajian/unlock', [\App\Http\Controllers\RaportPengajianController::class, 'unlock'])->middleware('role:Admin,Piket Pengajian');
+    Route::get('/raport-pengajian/master', [\App\Http\Controllers\RaportPengajianController::class, 'masterIndex'])->middleware('role:Admin');
+    Route::post('/raport-pengajian/master', [\App\Http\Controllers\RaportPengajianController::class, 'masterStore'])->middleware('role:Admin');
+    Route::put('/raport-pengajian/master/{id}', [\App\Http\Controllers\RaportPengajianController::class, 'masterUpdate'])->middleware('role:Admin');
+    Route::delete('/raport-pengajian/master/{id}', [\App\Http\Controllers\RaportPengajianController::class, 'masterDestroy'])->middleware('role:Admin');
+    Route::patch('/raport-pengajian/master/{id}/toggle', [\App\Http\Controllers\RaportPengajianController::class, 'masterToggle'])->middleware('role:Admin');
+
+    // Master Rentang Nilai (Grading Scale CMS)
+    Route::get('/rentang-nilai/{kategori}', [\App\Http\Controllers\RaportPengajianController::class, 'getRentangNilai'])->middleware('role:Admin');
+    Route::put('/rentang-nilai/{kategori}', [\App\Http\Controllers\RaportPengajianController::class, 'saveRentangNilai'])->middleware('role:Admin');
+
     Route::get('/raport-pengajian/{santriId}', [\App\Http\Controllers\RaportPengajianController::class, 'show']);
     Route::get('/raport-pengajian/{santriId}/pdf', [\App\Http\Controllers\RaportPengajianController::class, 'downloadPdf']);
 
     // Ubudiyah Yaumiyah
     Route::get('/ubudiyah/status', [\App\Http\Controllers\UbudiyahController::class, 'status']);
     Route::get('/ubudiyah/options', [\App\Http\Controllers\UbudiyahController::class, 'options']);
+    Route::get('/ubudiyah/kamar-summary', [\App\Http\Controllers\UbudiyahController::class, 'kamarSummary']);
     Route::get('/ubudiyah/session', [\App\Http\Controllers\UbudiyahController::class, 'session']);
     Route::post('/ubudiyah/bulk', [\App\Http\Controllers\UbudiyahController::class, 'bulkUpsert'])->middleware('role:Admin,Pembina Kamar');
-    Route::get('/ubudiyah/rekap-semester', [\App\Http\Controllers\UbudiyahController::class, 'rekapSemester'])->middleware('role:Admin');
-    Route::get('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterIndex']);
-    Route::post('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterStore'])->middleware('role:Admin,Pembina Kamar');
-    Route::patch('/ubudiyah/master/{id}/toggle', [\App\Http\Controllers\UbudiyahController::class, 'masterToggle'])->middleware('role:Admin,Pembina Kamar');
+    Route::post('/ubudiyah/lock', [\App\Http\Controllers\UbudiyahController::class, 'lock'])->middleware('role:Admin,Pembina Kamar');
+    Route::post('/ubudiyah/unlock', [\App\Http\Controllers\UbudiyahController::class, 'unlock'])->middleware('role:Admin,Pembina Kamar');
+    Route::get('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterIndex'])->middleware('role:Admin');
+    Route::post('/ubudiyah/master', [\App\Http\Controllers\UbudiyahController::class, 'masterStore'])->middleware('role:Admin');
+    Route::put('/ubudiyah/master/{id}', [\App\Http\Controllers\UbudiyahController::class, 'masterUpdate'])->middleware('role:Admin');
+    Route::delete('/ubudiyah/master/{id}', [\App\Http\Controllers\UbudiyahController::class, 'masterDestroy'])->middleware('role:Admin');
+    Route::patch('/ubudiyah/master/{id}/toggle', [\App\Http\Controllers\UbudiyahController::class, 'masterToggle'])->middleware('role:Admin');
     Route::get('/ubudiyah/{santriId}', [\App\Http\Controllers\UbudiyahController::class, 'show']);
     Route::post('/ubudiyah/{santriId}/publish', [\App\Http\Controllers\UbudiyahController::class, 'publish'])->middleware('role:Admin,Pembina Kamar');
     Route::get('/ubudiyah/{santriId}/history', [\App\Http\Controllers\UbudiyahController::class, 'history'])->middleware('role:Admin,Pembina Kamar');

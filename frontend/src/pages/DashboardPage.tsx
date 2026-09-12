@@ -362,35 +362,45 @@ export function DashboardPage() {
   } | null>(null);
 
   useEffect(() => {
-    try {
-      const keys = Object.keys(localStorage);
-      const draftKeys = keys.filter(k => k.startsWith('simanteb_attendance_draft_'));
-      const nowMs = Date.now();
-      let found: any = null;
+    const refreshDraft = () => {
+      try {
+        const keys = Object.keys(localStorage);
+        const draftKeys = keys.filter(k => k.startsWith('simanteb_attendance_draft_'));
+        const nowMs = Date.now();
+        let found: any = null;
 
-      for (const key of draftKeys) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) continue;
-          const item = JSON.parse(raw);
-          if (!item || !item.expiresAt || nowMs >= item.expiresAt) {
-            localStorage.removeItem(key);
-            continue;
-          }
-          if (urlJenis) {
-            if (item.jenis === urlJenis) {
-              found = { ...item, storageKey: key };
-              break;
+        for (const key of draftKeys) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            const item = JSON.parse(raw);
+            if (!item || !item.expiresAt || nowMs >= item.expiresAt || !item.totalFilled) {
+              localStorage.removeItem(key);
+              continue;
             }
-          } else {
-            if (!found || item.updatedAt > found.updatedAt) {
-              found = { ...item, storageKey: key };
+            if (urlJenis) {
+              if (item.jenis === urlJenis) {
+                found = { ...item, storageKey: key };
+                break;
+              }
+            } else {
+              if (!found || item.updatedAt > found.updatedAt) {
+                found = { ...item, storageKey: key };
+              }
             }
-          }
-        } catch {}
-      }
-      setActiveDraft(found);
-    } catch {}
+          } catch {}
+        }
+        setActiveDraft(found);
+      } catch {}
+    };
+
+    refreshDraft();
+    window.addEventListener('focus', refreshDraft);
+    window.addEventListener('storage', refreshDraft);
+    return () => {
+      window.removeEventListener('focus', refreshDraft);
+      window.removeEventListener('storage', refreshDraft);
+    };
   }, [urlJenis]);
 
   const handleDismissDraft = (storageKey: string) => {
@@ -504,7 +514,7 @@ export function DashboardPage() {
           <div className="dashboard-duty-list">
             {data.map(kegiatan => <Link key={kegiatan.jenis} className="dashboard-duty-row" to={`/absensi-kegiatan/${kegiatan.jenis}`}>
               <span><strong>{kegiatan.nama}</strong><small>{kegiatan.targets.length} roster ditugaskan</small></span>
-              <span>{kegiatan.jadwal[0] ? `${kegiatan.jadwal[0].jam_mulai.slice(0, 5)}–${kegiatan.jadwal[0].jam_selesai.slice(0, 5)}` : 'Jadwal belum diatur'}</span>
+              <span>{kegiatan.jadwal[0] ? `${kegiatan.jadwal[0].jam_mulai.slice(0, 5)}–${kegiatan.jadwal[0].jam_selesai.slice(0, 5)} WIB` : 'Jadwal belum diatur'}</span>
             </Link>)}
           </div>
         </section>

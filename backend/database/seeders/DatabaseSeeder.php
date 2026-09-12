@@ -45,15 +45,15 @@ class DatabaseSeeder extends Seeder
 
         $kegiatanIds = DB::table('jenis_kegiatan')->pluck('jenis_kegiatan_id', 'kode');
         foreach ([
-            ['jenis_kegiatan_id' => $kegiatanIds['SEKOLAH'], 'nama_jadwal' => 'Absensi Kelas Formal', 'jam_mulai' => '07:00:00', 'jam_selesai' => '07:30:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Keberangkatan Kelas Pagi', 'konteks_operasional' => 'keberangkatan_kelas', 'jam_mulai' => '06:30:00', 'jam_selesai' => '07:00:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar Malam', 'konteks_operasional' => 'kamar', 'jam_mulai' => '20:00:00', 'jam_selesai' => '20:30:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['PBS'], 'nama_jadwal' => 'Belajar Al-Qur\'an Subuh', 'jam_mulai' => '05:00:00', 'jam_selesai' => '06:00:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['DINIYAH'], 'nama_jadwal' => 'Absensi Kelas Madin', 'jam_mulai' => '15:30:00', 'jam_selesai' => '16:00:00'],
-            ['jenis_kegiatan_id' => $kegiatanIds['PBM'], 'nama_jadwal' => 'Belajar Takhasus Maghrib', 'jam_mulai' => '18:30:00', 'jam_selesai' => '19:30:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['SEKOLAH'], 'nama_jadwal' => 'Absensi Sekolah', 'jam_mulai' => '07:30:00', 'jam_selesai' => '13:00:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar Pagi (keberangkatan kelas)', 'konteks_operasional' => 'keberangkatan_kelas', 'jam_mulai' => '06:00:00', 'jam_selesai' => '07:30:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['KAMAR'], 'nama_jadwal' => 'Absensi Kamar malam', 'konteks_operasional' => 'kamar', 'jam_mulai' => '20:00:00', 'jam_selesai' => '20:30:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['PBS'], 'nama_jadwal' => 'Absensi PBSubuh', 'jam_mulai' => '05:00:00', 'jam_selesai' => '06:00:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['DINIYAH'], 'nama_jadwal' => 'Absensi Diniyah', 'jam_mulai' => '15:30:00', 'jam_selesai' => '16:00:00'],
+            ['jenis_kegiatan_id' => $kegiatanIds['PBM'], 'nama_jadwal' => 'Absensi PBMmaghrib', 'jam_mulai' => '18:30:00', 'jam_selesai' => '19:30:00'],
         ] as $jadwal) {
             DB::table('jadwal_kegiatan')->updateOrInsert(
-                ['jenis_kegiatan_id' => $jadwal['jenis_kegiatan_id'], 'nama_jadwal' => $jadwal['nama_jadwal']],
+                ['jenis_kegiatan_id' => $jadwal['jenis_kegiatan_id'], 'konteks_operasional' => $jadwal['konteks_operasional'] ?? 'utama'],
                 $jadwal
             );
         }

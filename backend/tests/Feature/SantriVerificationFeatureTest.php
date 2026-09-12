@@ -64,4 +64,58 @@ class SantriVerificationFeatureTest extends TestCase
             ->assertOk()
             ->assertJsonPath('total', 0);
     }
+
+    public function test_verification_queue_filters_by_search_and_missing_type(): void
+    {
+        $admin = Petugas::create([
+            'nama' => 'Admin Test Filter',
+            'username' => 'admin-filter',
+            'password_hash' => Hash::make('password'),
+            'jabatan' => 'Admin',
+            'status_aktif' => 1,
+        ]);
+        $unitId = DB::table('unit_pendidikan')->insertGetId(['kode' => 'MTS', 'nama' => 'MTs']);
+
+        // Santri 1: Profil Blank & No ID
+        $santri1Id = DB::table('santri')->insertGetId([
+            'no_id_induk' => null,
+            'nama' => 'Ahmad Syauqi',
+            'unit_id' => $unitId,
+            'status_aktif' => 1,
+            'status_verifikasi' => 'perlu_verifikasi',
+        ]);
+
+        // Santri 2: Punya ID tapi Kamar Blank
+        $santri2Id = DB::table('santri')->insertGetId([
+            'no_id_induk' => '11223344',
+            'nama' => 'Badrul Kamal',
+            'unit_id' => $unitId,
+            'status_aktif' => 1,
+            'status_verifikasi' => 'perlu_verifikasi',
+        ]);
+
+        $this->actingAs($admin, 'sanctum');
+
+        // Test search name
+        $this->getJson('/api/master/santri/verifikasi?search=Syauqi')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonFragment(['santri_id' => $santri1Id]);
+
+        // Test search ID
+        $this->getJson('/api/master/santri/verifikasi?search=11223344')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonFragment(['santri_id' => $santri2Id]);
+
+        // Test missing tanpa_no_id
+        $this->getJson('/api/master/santri/verifikasi?missing=tanpa_no_id')
+            ->assertOk()
+            ->assertJsonFragment(['santri_id' => $santri1Id]);
+
+        // Test missing profil_blank
+        $this->getJson('/api/master/santri/verifikasi?missing=profil_blank')
+            ->assertOk()
+            ->assertJsonFragment(['santri_id' => $santri1Id]);
+    }
 }

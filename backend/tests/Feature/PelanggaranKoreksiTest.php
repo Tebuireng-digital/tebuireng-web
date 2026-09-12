@@ -206,4 +206,61 @@ class PelanggaranKoreksiTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['alasan_koreksi']);
     }
+
+    public function test_correction_sanitizes_text_payloads_before_saving(): void
+    {
+        $pelanggaranId = DB::table('pelanggaran')->insertGetId([
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId1,
+            'tanggal' => Carbon::today()->toDateString(),
+            'keterangan' => 'Awal',
+            'poin' => 10,
+            'petugas_pencatat_id' => $this->keamanan1->petugas_id,
+            'created_at' => Carbon::now()->subHour(),
+            'updated_at' => Carbon::now()->subHour(),
+        ]);
+
+        $response = $this->actingAs($this->keamanan1)->patchJson("/api/pelanggaran/{$pelanggaranId}", [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId2,
+            'tanggal' => Carbon::today()->toDateString(),
+            'keterangan' => "  <b>Keterangan dikoreksi</b><script>alert('x')</script> ",
+            'alasan_koreksi' => " <div>Perbaikan kategori karena salah input</div><script>alert('x')</script> ",
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.keterangan', 'Keterangan dikoreksi');
+        $response->assertJsonPath('data.alasan_koreksi', 'Perbaikan kategori karena salah input');
+
+        $this->assertDatabaseHas('pelanggaran', [
+            'pelanggaran_id' => $pelanggaranId,
+            'keterangan' => 'Keterangan dikoreksi',
+            'alasan_koreksi' => 'Perbaikan kategori karena salah input',
+        ]);
+    }
+
+    public function test_correction_rejects_reason_that_becomes_too_short_after_sanitization(): void
+    {
+        $pelanggaranId = DB::table('pelanggaran')->insertGetId([
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId1,
+            'tanggal' => Carbon::today()->toDateString(),
+            'keterangan' => 'Awal',
+            'poin' => 10,
+            'petugas_pencatat_id' => $this->keamanan1->petugas_id,
+            'created_at' => Carbon::now()->subHour(),
+            'updated_at' => Carbon::now()->subHour(),
+        ]);
+
+        $response = $this->actingAs($this->keamanan1)->patchJson("/api/pelanggaran/{$pelanggaranId}", [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId2,
+            'tanggal' => Carbon::today()->toDateString(),
+            'keterangan' => 'Tetap valid',
+            'alasan_koreksi' => " <b>tes</b> ",
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['alasan_koreksi']);
+    }
 }

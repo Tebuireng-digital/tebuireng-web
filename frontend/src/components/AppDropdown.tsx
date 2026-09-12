@@ -125,7 +125,11 @@ export function AppDropdown({
               onClick={() => chooseOption(option)}
             >
               <span>{option.label}</span>
-              {option.value === value && <span className="app-dropdown-check" aria-hidden="true" />}
+              {option.value === value && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="app-dropdown-check-icon">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
             </button>
           ))}
           {visibleOptions.length === 0 && <div className="app-dropdown-empty">Opsi tidak ditemukan.</div>}

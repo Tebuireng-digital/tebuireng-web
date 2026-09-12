@@ -7,15 +7,35 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class RaportPengajianController extends Controller
 {
-    /** Aspek penilaian fixed sesuai contoh raport. */
+    /** Aspek penilaian fixed sesuai contoh raport (sebagai default/fallback). */
     private const ASPEK_AL_QURAN = ['Fashohah', 'Tajwid', 'Kelancaran', 'Hafalan'];
-    private const ASPEK_TAKHASSUS = ['Ujian Tulis', 'Ujian Lisan', 'Nahwu', 'Shorof', 'Murod'];
+    private const ASPEK_TAKHASSUS = ['Makna', 'Pemahaman', 'Tarkib', 'Hafalan'];
     private const JENIS_KEPRIBADIAN = ['Kelakuan', 'Kedisiplinan', 'Kerajinan'];
+
+    public function getActiveAspects(string $jenis): array
+    {
+        if (Schema::hasTable('master_instrumen_pengajian')) {
+            $dbAspects = DB::table('master_instrumen_pengajian')
+                ->where('jenis_pengajian', $jenis)
+                ->where('status_aktif', 1)
+                ->orderBy('urutan')
+                ->orderBy('instrumen_id')
+                ->pluck('nama_instrumen')
+                ->toArray();
+
+            if (!empty($dbAspects)) {
+                return $dbAspects;
+            }
+        }
+
+        return $jenis === 'AL_QURAN' ? self::ASPEK_AL_QURAN : self::ASPEK_TAKHASSUS;
+    }
 
     private const PREDIKAT_MAP = [
         [90, 100, 'Sangat Memuaskan'],
@@ -42,41 +62,327 @@ class RaportPengajianController extends Controller
         $petugas = $request->user();
         $result = [];
 
+        $sortTargets = function ($collection) {
+            return $collection->sort(function ($a, $b) {
+                $catCmp = strnatcasecmp((string) $a->kategori, (string) $b->kategori);
+                if ($catCmp !== 0) {
+                    return $catCmp;
+                }
+                return strnatcasecmp((string) $a->nama_roster, (string) $b->nama_roster);
+            })->values();
+        };
+
         // PBS (Al-Qur'an)
-        $pbsQuery = DB::table('kelompok_pbs')
-            ->select('kelompok_pbs_id as target_id', 'nama_kelompok as nama_target', 'kategori');
+        $pbsQuery = DB::table('kelompok_pbs as kp')
+            ->leftJoin('santri as s', function ($join) {
+                $join->on('kp.kelompok_pbs_id', '=', 's.kelompok_pbs_id')
+                    ->where('s.status_aktif', 1);
+            })
+            ->select(
+                'kp.kelompok_pbs_id as target_id',
+                'kp.nama_kelompok as nama_target',
+                'kp.kategori',
+                DB::raw('count(s.santri_id) as santri_count')
+            )
+            ->groupBy('kp.kelompok_pbs_id', 'kp.nama_kelompok', 'kp.kategori');
+
         if ($petugas->jabatan !== 'Admin') {
             $assignedIds = $this->getAssignedIds($petugas, 'KelompokPBS');
-            $pbsQuery->whereIn('kelompok_pbs_id', $assignedIds);
+            $pbsQuery->whereIn('kp.kelompok_pbs_id', $assignedIds);
         }
-        $pbsTargets = $pbsQuery->orderBy('kategori')->orderBy('nama_kelompok')->get();
+        $pbsTargets = $sortTargets($pbsQuery->get()->map(function ($target) {
+            $category = (string) ($target->kategori ?? '');
+            $cleanRoster = trim(preg_replace('/^' . preg_quote($category, '/') . '\s*-\s*/i', '', (string) $target->nama_target));
+            $target->nama_roster = $cleanRoster !== '' ? $cleanRoster : $target->nama_target;
+            $target->santri_count = (int) $target->santri_count;
+            return $target;
+        }));
 
         if ($pbsTargets->isNotEmpty() || $petugas->jabatan === 'Admin') {
             $result[] = [
                 'jenis' => 'AL_QURAN',
                 'nama' => 'Pengajian Al-Qur\'an',
-                'aspek' => self::ASPEK_AL_QURAN,
+                'aspek' => $this->getActiveAspects('AL_QURAN'),
                 'targets' => $pbsTargets,
             ];
         }
 
         // PBM (Takhassus)
-        $pbmQuery = DB::table('kelompok_pbm')
-            ->select('kelompok_pbm_id as target_id', 'nama_kelompok as nama_target');
+        $pbmQuery = DB::table('kelompok_pbm as kp')
+            ->leftJoin('santri as s', function ($join) {
+                $join->on('kp.kelompok_pbm_id', '=', 's.kelompok_pbm_id')
+                    ->where('s.status_aktif', 1);
+            })
+            ->select(
+                'kp.kelompok_pbm_id as target_id',
+                'kp.nama_kelompok as nama_target',
+                'kp.kategori',
+                DB::raw('count(s.santri_id) as santri_count')
+            )
+            ->groupBy('kp.kelompok_pbm_id', 'kp.nama_kelompok', 'kp.kategori');
+
         if ($petugas->jabatan !== 'Admin') {
             $assignedIds = $this->getAssignedIds($petugas, 'KelompokPBM');
-            $pbmQuery->whereIn('kelompok_pbm_id', $assignedIds);
+            $pbmQuery->whereIn('kp.kelompok_pbm_id', $assignedIds);
         }
-        $pbmTargets = $pbmQuery->orderBy('nama_kelompok')->get();
+        $pbmTargets = $sortTargets($pbmQuery->get()->map(function ($target) {
+            $category = (string) ($target->kategori ?? '');
+            $cleanRoster = trim(preg_replace('/^' . preg_quote($category, '/') . '\s*-\s*/i', '', (string) $target->nama_target));
+            $target->nama_roster = $cleanRoster !== '' ? $cleanRoster : $target->nama_target;
+            $target->santri_count = (int) $target->santri_count;
+            return $target;
+        }));
 
         if ($pbmTargets->isNotEmpty() || $petugas->jabatan === 'Admin') {
             $result[] = [
                 'jenis' => 'TAKHASSUS',
                 'nama' => 'Pengajian Takhassus',
-                'aspek' => self::ASPEK_TAKHASSUS,
+                'aspek' => $this->getActiveAspects('TAKHASSUS'),
                 'targets' => $pbmTargets,
             ];
         }
+
+        return response()->json($result);
+    }
+
+    /**
+     * Ringkasan status dan kelengkapan nilai seluruh kelompok (PBS & PBM)
+     * untuk halaman landing/hub Raport Pengajian.
+     */
+    public function summary(Request $request)
+    {
+        $bulan = (int) $request->input('bulan', Carbon::now()->month);
+        $tahun = (int) $request->input('tahun', Carbon::now()->year);
+        $petugas = $request->user();
+
+        $result = [];
+
+        // 1. PBS (Pengajian Al-Qur'an)
+        $pbsQuery = DB::table('kelompok_pbs as kp')
+            ->leftJoin('petugas as p', 'kp.ustadz_id', '=', 'p.petugas_id')
+            ->select(
+                'kp.kelompok_pbs_id as target_id',
+                'kp.nama_kelompok',
+                'kp.kategori',
+                'p.nama as pengajar_nama'
+            );
+
+        if ($petugas->jabatan !== 'Admin') {
+            $assignedPbsIds = $this->getAssignedIds($petugas, 'KelompokPBS');
+            $pbsQuery->whereIn('kp.kelompok_pbs_id', $assignedPbsIds);
+        }
+
+        $pbsGroups = $pbsQuery->get();
+        if ($pbsGroups->isNotEmpty()) {
+            $pbsIds = $pbsGroups->pluck('target_id');
+
+            // Active santri count per PBS group
+            $santriCountPbs = DB::table('santri')
+                ->whereIn('kelompok_pbs_id', $pbsIds)
+                ->where('status_aktif', 1)
+                ->select('kelompok_pbs_id', DB::raw('count(*) as total'))
+                ->groupBy('kelompok_pbs_id')
+                ->pluck('total', 'kelompok_pbs_id');
+
+            // Locked raports per PBS group
+            $lockedPbs = DB::table('raport_pengajian as rp')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbs_id', $pbsIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rp.status', 'dikunci')
+                ->select('s.kelompok_pbs_id', DB::raw('max(rp.dikunci_pada) as dikunci_pada'))
+                ->groupBy('s.kelompok_pbs_id')
+                ->pluck('dikunci_pada', 'kelompok_pbs_id');
+
+            // Completed santri per PBS group (have all 4 AL_QURAN aspects filled)
+            $pbsAspects = $this->getActiveAspects('AL_QURAN');
+            $aspectsCount = count($pbsAspects);
+
+            $completedPbs = DB::table('raport_nilai as rn')
+                ->join('raport_pengajian as rp', 'rn.raport_id', '=', 'rp.raport_id')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbs_id', $pbsIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rn.jenis_pengajian', 'AL_QURAN')
+                ->whereIn('rn.aspek', $pbsAspects)
+                ->whereNotNull('rn.nilai_angka')
+                ->select('s.kelompok_pbs_id', 's.santri_id', DB::raw('count(*) as count'))
+                ->groupBy('s.kelompok_pbs_id', 's.santri_id')
+                ->having('count', '>=', $aspectsCount)
+                ->get()
+                ->groupBy('kelompok_pbs_id')
+                ->map(fn ($g) => $g->count());
+
+            // Filled scores count per PBS group
+            $filledPbs = DB::table('raport_nilai as rn')
+                ->join('raport_pengajian as rp', 'rn.raport_id', '=', 'rp.raport_id')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbs_id', $pbsIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rn.jenis_pengajian', 'AL_QURAN')
+                ->whereIn('rn.aspek', $pbsAspects)
+                ->whereNotNull('rn.nilai_angka')
+                ->select('s.kelompok_pbs_id', DB::raw('count(*) as count'))
+                ->groupBy('s.kelompok_pbs_id')
+                ->pluck('count', 'kelompok_pbs_id');
+
+            foreach ($pbsGroups as $group) {
+                $category = (string) ($group->kategori ?? '');
+                $cleanRoster = trim(preg_replace('/^' . preg_quote($category, '/') . '\s*-\s*/i', '', (string) $group->nama_kelompok));
+                $totalSantri = (int) ($santriCountPbs->get($group->target_id, 0));
+                $isLocked = $lockedPbs->has($group->target_id);
+                $completed = (int) ($completedPbs->get($group->target_id, 0));
+                $filled = (int) ($filledPbs->get($group->target_id, 0));
+                $totalExpected = $totalSantri * $aspectsCount;
+                $percentage = $totalExpected > 0 ? (int) round(($filled / $totalExpected) * 100) : 0;
+                if ($percentage > 100) $percentage = 100;
+                $hasDraft = !$isLocked && $filled > 0;
+                $status = $isLocked ? 'dikunci' : ($hasDraft ? 'draft' : 'belum_mulai');
+
+                $result[] = [
+                    'target_id' => $group->target_id,
+                    'jenis' => 'AL_QURAN',
+                    'nama_jenis' => 'Pengajian Al-Qur\'an',
+                    'nama_kelompok' => $group->nama_kelompok,
+                    'nama_roster' => $cleanRoster !== '' ? $cleanRoster : $group->nama_kelompok,
+                    'kategori' => $category,
+                    'pengajar_nama' => $group->pengajar_nama ?: 'Belum Ditugaskan',
+                    'santri_count' => $totalSantri,
+                    'aspects_count' => $aspectsCount,
+                    'completed_santri_count' => $completed,
+                    'total_expected_scores' => $totalExpected,
+                    'filled_scores_count' => $filled,
+                    'percentage' => $percentage,
+                    'status' => $status,
+                    'is_locked' => $isLocked,
+                    'dikunci_pada' => $lockedPbs->get($group->target_id),
+                ];
+            }
+        }
+
+        // 2. PBM (Pengajian Takhassus)
+        $pbmQuery = DB::table('kelompok_pbm as kp')
+            ->leftJoin('petugas as p', 'kp.ustadz_id', '=', 'p.petugas_id')
+            ->select(
+                'kp.kelompok_pbm_id as target_id',
+                'kp.nama_kelompok',
+                'kp.kategori',
+                'p.nama as pengajar_nama'
+            );
+
+        if ($petugas->jabatan !== 'Admin') {
+            $assignedPbmIds = $this->getAssignedIds($petugas, 'KelompokPBM');
+            $pbmQuery->whereIn('kp.kelompok_pbm_id', $assignedPbmIds);
+        }
+
+        $pbmGroups = $pbmQuery->get();
+        if ($pbmGroups->isNotEmpty()) {
+            $pbmIds = $pbmGroups->pluck('target_id');
+
+            // Active santri count per PBM group
+            $santriCountPbm = DB::table('santri')
+                ->whereIn('kelompok_pbm_id', $pbmIds)
+                ->where('status_aktif', 1)
+                ->select('kelompok_pbm_id', DB::raw('count(*) as total'))
+                ->groupBy('kelompok_pbm_id')
+                ->pluck('total', 'kelompok_pbm_id');
+
+            // Locked raports per PBM group
+            $lockedPbm = DB::table('raport_pengajian as rp')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbm_id', $pbmIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rp.status', 'dikunci')
+                ->select('s.kelompok_pbm_id', DB::raw('max(rp.dikunci_pada) as dikunci_pada'))
+                ->groupBy('s.kelompok_pbm_id')
+                ->pluck('dikunci_pada', 'kelompok_pbm_id');
+
+            $pbmAspects = $this->getActiveAspects('TAKHASSUS');
+            $aspectsCountPbm = count($pbmAspects);
+
+            // Completed santri per PBM group
+            $completedPbm = DB::table('raport_nilai as rn')
+                ->join('raport_pengajian as rp', 'rn.raport_id', '=', 'rp.raport_id')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbm_id', $pbmIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rn.jenis_pengajian', 'TAKHASSUS')
+                ->whereIn('rn.aspek', $pbmAspects)
+                ->whereNotNull('rn.nilai_angka')
+                ->select('s.kelompok_pbm_id', 's.santri_id', DB::raw('count(*) as count'))
+                ->groupBy('s.kelompok_pbm_id', 's.santri_id')
+                ->having('count', '>=', $aspectsCountPbm)
+                ->get()
+                ->groupBy('kelompok_pbm_id')
+                ->map(fn ($g) => $g->count());
+
+            // Filled scores count per PBM group
+            $filledPbm = DB::table('raport_nilai as rn')
+                ->join('raport_pengajian as rp', 'rn.raport_id', '=', 'rp.raport_id')
+                ->join('santri as s', 'rp.santri_id', '=', 's.santri_id')
+                ->whereIn('s.kelompok_pbm_id', $pbmIds)
+                ->where('s.status_aktif', 1)
+                ->where('rp.bulan', $bulan)
+                ->where('rp.tahun', $tahun)
+                ->where('rn.jenis_pengajian', 'TAKHASSUS')
+                ->whereIn('rn.aspek', $pbmAspects)
+                ->whereNotNull('rn.nilai_angka')
+                ->select('s.kelompok_pbm_id', DB::raw('count(*) as count'))
+                ->groupBy('s.kelompok_pbm_id')
+                ->pluck('count', 'kelompok_pbm_id');
+
+            foreach ($pbmGroups as $group) {
+                $category = (string) ($group->kategori ?? '');
+                $cleanRoster = trim(preg_replace('/^' . preg_quote($category, '/') . '\s*-\s*/i', '', (string) $group->nama_kelompok));
+                $totalSantri = (int) ($santriCountPbm->get($group->target_id, 0));
+                $isLocked = $lockedPbm->has($group->target_id);
+                $completed = (int) ($completedPbm->get($group->target_id, 0));
+                $filled = (int) ($filledPbm->get($group->target_id, 0));
+                $totalExpected = $totalSantri * $aspectsCountPbm;
+                $percentage = $totalExpected > 0 ? (int) round(($filled / $totalExpected) * 100) : 0;
+                if ($percentage > 100) $percentage = 100;
+                $hasDraft = !$isLocked && $filled > 0;
+                $status = $isLocked ? 'dikunci' : ($hasDraft ? 'draft' : 'belum_mulai');
+
+                $result[] = [
+                    'target_id' => $group->target_id,
+                    'jenis' => 'TAKHASSUS',
+                    'nama_jenis' => 'Pengajian Takhassus',
+                    'nama_kelompok' => $group->nama_kelompok,
+                    'nama_roster' => $cleanRoster !== '' ? $cleanRoster : $group->nama_kelompok,
+                    'kategori' => $category,
+                    'pengajar_nama' => $group->pengajar_nama ?: 'Belum Ditugaskan',
+                    'santri_count' => $totalSantri,
+                    'aspects_count' => $aspectsCount,
+                    'completed_santri_count' => $completed,
+                    'total_expected_scores' => $totalExpected,
+                    'filled_scores_count' => $filled,
+                    'percentage' => $percentage,
+                    'status' => $status,
+                    'is_locked' => $isLocked,
+                    'dikunci_pada' => $lockedPbm->get($group->target_id),
+                ];
+            }
+        }
+
+        // Sort results: category then roster name
+        usort($result, function ($a, $b) {
+            $catCmp = strnatcasecmp((string) $a['kategori'], (string) $b['kategori']);
+            if ($catCmp !== 0) {
+                return $catCmp;
+            }
+            return strnatcasecmp((string) $a['nama_roster'], (string) $b['nama_roster']);
+        });
 
         return response()->json($result);
     }
@@ -104,7 +410,7 @@ class RaportPengajianController extends Controller
             $targetPk = 'kelompok_pbs_id';
             $targetLabel = 'nama_kelompok';
             $raportFk = 'kelompok_pbs_id';
-            $aspekList = self::ASPEK_AL_QURAN;
+            $aspekList = $this->getActiveAspects('AL_QURAN');
         } else {
             $santriColumn = 'kelompok_pbm_id';
             $tipeTarget = 'KelompokPBM';
@@ -112,7 +418,7 @@ class RaportPengajianController extends Controller
             $targetPk = 'kelompok_pbm_id';
             $targetLabel = 'nama_kelompok';
             $raportFk = 'kelompok_pbm_id';
-            $aspekList = self::ASPEK_TAKHASSUS;
+            $aspekList = $this->getActiveAspects('TAKHASSUS');
         }
 
         // Cek akses
@@ -130,7 +436,7 @@ class RaportPengajianController extends Controller
             ->where($santriColumn, $targetId)
             ->where('status_aktif', 1)
             ->orderBy('nama')
-            ->get(['santri_id', 'nis', 'nama']);
+            ->get(['santri_id', 'nis', 'no_id_induk', 'nama']);
 
         // Load existing raport & nilai untuk bulan/tahun ini
         $existingRaports = DB::table('raport_pengajian')
@@ -173,20 +479,54 @@ class RaportPengajianController extends Controller
 
             $keputusanField = $jenis === 'AL_QURAN' ? 'keputusan_pbs' : 'keputusan_pbm';
 
+            $isLockedSantri = ($raport?->status ?? 'draft') === 'dikunci';
+
             return [
                 'santri_id' => $santri->santri_id,
                 'nis' => $santri->nis,
+                'no_id_induk' => $santri->no_id_induk,
                 'nama' => $santri->nama,
                 'nilai' => $nilai,
                 'kepribadian' => $kepribadian,
                 'keputusan' => $raport?->$keputusanField ?? null,
                 'predikat_umum' => $raport?->predikat_umum ?? null,
                 'raport_id' => $raport?->raport_id ?? null,
+                'status' => $raport?->status ?? 'draft',
+                'is_locked' => $isLockedSantri,
             ];
         });
 
+        $category = (string) ($target->kategori ?? '');
+        $cleanRoster = trim(preg_replace('/^' . preg_quote($category, '/') . '\s*-\s*/i', '', (string) $target->$targetLabel));
+
+        $lockedRaports = $existingRaports->where('status', 'dikunci');
+        $totalSantriCount = $santriList->count();
+        $lockedCount = $lockedRaports->count();
+        $isFullyLocked = $totalSantriCount > 0 && $lockedCount === $totalSantriCount;
+        $isPartiallyLocked = $lockedCount > 0 && !$isFullyLocked;
+
+        $lastLocked = $lockedRaports->sortByDesc('dikunci_pada')->first();
+        $dikunciOlehNama = null;
+        if ($lastLocked && $lastLocked->dikunci_oleh) {
+            $dikunciOlehNama = DB::table('petugas')->where('petugas_id', $lastLocked->dikunci_oleh)->value('nama');
+        }
+
+        $lockStatus = [
+            'is_locked' => $isFullyLocked,
+            'is_partially_locked' => $isPartiallyLocked,
+            'status' => $isFullyLocked ? 'dikunci' : ($isPartiallyLocked ? 'sebagian_dikunci' : 'draft'),
+            'locked_count' => $lockedCount,
+            'total_count' => $totalSantriCount,
+            'dikunci_pada' => $lastLocked?->dikunci_pada ? Carbon::parse($lastLocked->dikunci_pada)->toIso8601String() : null,
+            'dikunci_oleh_nama' => $dikunciOlehNama,
+            'alasan_buka_kunci' => $lastLocked?->alasan_buka_kunci,
+            'can_unlock' => $petugas->jabatan === 'Admin' || ($lastLocked && $petugas->petugas_id === $lastLocked->dikunci_oleh),
+        ];
+
         return response()->json([
             'jenis' => $jenis,
+            'kategori' => $target->kategori ?? null,
+            'nama_roster' => $cleanRoster !== '' ? $cleanRoster : $target->$targetLabel,
             'nama_kelompok' => $target->$targetLabel,
             'target_id' => $targetId,
             'bulan' => (int) $data['bulan'],
@@ -194,6 +534,7 @@ class RaportPengajianController extends Controller
             'aspek' => $aspekList,
             'kepribadian_jenis' => self::JENIS_KEPRIBADIAN,
             'santri' => $santriData,
+            'lock_status' => $lockStatus,
         ]);
     }
 
@@ -230,11 +571,11 @@ class RaportPengajianController extends Controller
         if ($jenis === 'AL_QURAN') {
             $tipeTarget = 'KelompokPBS';
             $raportFk = 'kelompok_pbs_id';
-            $aspekList = self::ASPEK_AL_QURAN;
+            $aspekList = $this->getActiveAspects('AL_QURAN');
         } else {
             $tipeTarget = 'KelompokPBM';
             $raportFk = 'kelompok_pbm_id';
-            $aspekList = self::ASPEK_TAKHASSUS;
+            $aspekList = $this->getActiveAspects('TAKHASSUS');
         }
 
         // Cek akses
@@ -243,6 +584,27 @@ class RaportPengajianController extends Controller
         }
 
         $keputusanField = $jenis === 'AL_QURAN' ? 'keputusan_pbs' : 'keputusan_pbm';
+        $santriCol = $jenis === 'AL_QURAN' ? 'kelompok_pbs_id' : 'kelompok_pbm_id';
+
+        $lockedSantriIds = DB::table('raport_pengajian')
+            ->where($raportFk, $targetId)
+            ->where('bulan', $data['bulan'])
+            ->where('tahun', $data['tahun'])
+            ->where('status', 'dikunci')
+            ->pluck('santri_id')
+            ->toArray();
+
+        $totalSantriInGroup = DB::table('santri')
+            ->where($santriCol, $targetId)
+            ->where('status_aktif', 1)
+            ->count();
+
+        if ($totalSantriInGroup > 0 && count($lockedSantriIds) >= $totalSantriInGroup && $petugas->jabatan !== 'Admin') {
+            return response()->json([
+                'message' => 'Seluruh raport pengajian kelompok ini untuk bulan yang dipilih telah dikunci. Pembina tidak dapat mengubah nilai yang sudah final.',
+            ], 422);
+        }
+
         $now = now();
         $periode = DB::table('periode_akademik')->where('tahun_pelajaran', $data['tahun_pelajaran'])->where('semester', $data['semester'])->first();
         if ($periode?->status === 'Ditutup' && $petugas->jabatan !== 'Admin') {
@@ -250,9 +612,14 @@ class RaportPengajianController extends Controller
         }
         $periodeId = $periode?->periode_id;
 
-        DB::transaction(function () use ($data, $jenis, $targetId, $raportFk, $aspekList, $keputusanField, $petugas, $now, $periodeId) {
+        DB::transaction(function () use ($data, $jenis, $targetId, $raportFk, $aspekList, $keputusanField, $petugas, $now, $periodeId, $lockedSantriIds) {
             foreach ($data['entries'] as $entry) {
                 $santriId = $entry['santri_id'];
+
+                // Lindungi santri yang sudah dikunci dari modifikasi oleh non-Admin
+                if (in_array($santriId, $lockedSantriIds, true) && $petugas->jabatan !== 'Admin') {
+                    continue;
+                }
 
                 // Upsert raport_pengajian
                 $existing = DB::table('raport_pengajian')
@@ -323,6 +690,204 @@ class RaportPengajianController extends Controller
     }
 
     /**
+     * Lock raport pengajian per group/month.
+     */
+    public function lock(Request $request)
+    {
+        $data = $request->validate([
+            'jenis' => 'required|in:AL_QURAN,TAKHASSUS',
+            'target_id' => 'required|integer',
+            'bulan' => 'required|integer|between:1,12',
+            'tahun' => 'required|integer|between:2020,2100',
+        ]);
+
+        $petugas = $request->user();
+        $jenis = $data['jenis'];
+        $targetId = $data['target_id'];
+
+        if ($jenis === 'AL_QURAN') {
+            $tipeTarget = 'KelompokPBS';
+            $santriCol = 'kelompok_pbs_id';
+            $raportFk = 'kelompok_pbs_id';
+            $aspekList = $this->getActiveAspects('AL_QURAN');
+        } else {
+            $tipeTarget = 'KelompokPBM';
+            $santriCol = 'kelompok_pbm_id';
+            $raportFk = 'kelompok_pbm_id';
+            $aspekList = $this->getActiveAspects('TAKHASSUS');
+        }
+
+        if ($petugas->jabatan !== 'Admin' && !$petugas->hasAccess($tipeTarget, $targetId)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kelompok ini'], 403);
+        }
+
+        $santriList = DB::table('santri')
+            ->where($santriCol, $targetId)
+            ->where('status_aktif', 1)
+            ->get(['santri_id', 'nama']);
+
+        if ($santriList->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada santri aktif di kelompok ini'], 422);
+        }
+
+        $existingRaports = DB::table('raport_pengajian')
+            ->whereIn('santri_id', $santriList->pluck('santri_id'))
+            ->where('bulan', $data['bulan'])
+            ->where('tahun', $data['tahun'])
+            ->get();
+
+        $raportIds = $existingRaports->pluck('raport_id');
+        $nilaiCounts = DB::table('raport_nilai')
+            ->whereIn('raport_id', $raportIds)
+            ->where('jenis_pengajian', $jenis)
+            ->whereIn('aspek', $aspekList)
+            ->whereNotNull('nilai_angka')
+            ->select('raport_id', DB::raw('count(*) as count'))
+            ->groupBy('raport_id')
+            ->pluck('count', 'raport_id');
+
+        $requiredCount = count($aspekList);
+        $completedRaportIds = [];
+        $incompleteSantri = [];
+        $alreadyLockedCount = 0;
+
+        foreach ($santriList as $santri) {
+            $raport = $existingRaports->firstWhere('santri_id', $santri->santri_id);
+            if (!$raport) {
+                $incompleteSantri[] = $santri->nama;
+                continue;
+            }
+            if ($raport->status === 'dikunci') {
+                $alreadyLockedCount++;
+                continue;
+            }
+            $count = $nilaiCounts->get($raport->raport_id, 0);
+            if ($count >= $requiredCount) {
+                $completedRaportIds[] = $raport->raport_id;
+            } else {
+                $incompleteSantri[] = $santri->nama;
+            }
+        }
+
+        if (empty($completedRaportIds)) {
+            if ($alreadyLockedCount > 0 && empty($incompleteSantri)) {
+                return response()->json([
+                    'message' => 'Seluruh santri dalam kelompok ini sudah dikunci sebelumnya.',
+                ], 422);
+            }
+            $sample = !empty($incompleteSantri) ? implode(', ', array_slice($incompleteSantri, 0, 3)) : '';
+            return response()->json([
+                'message' => 'Belum ada santri baru dengan nilai lengkap untuk dikunci. Pastikan minimal 1 santri telah memiliki nilai lengkap di seluruh aspek.' . ($sample ? " (Belum lengkap: {$sample})" : ''),
+            ], 422);
+        }
+
+        $now = now();
+        DB::table('raport_pengajian')
+            ->whereIn('raport_id', $completedRaportIds)
+            ->update([
+                'status' => 'dikunci',
+                'dikunci_oleh' => $petugas->petugas_id,
+                'dikunci_pada' => $now,
+                'updated_at' => $now,
+            ]);
+
+        $newlyLockedCount = count($completedRaportIds);
+        $totalLocked = $alreadyLockedCount + $newlyLockedCount;
+        $draftCount = count($incompleteSantri);
+        $isFullyLocked = $draftCount === 0;
+
+        $msg = $isFullyLocked
+            ? "Seluruh raport ({$totalLocked} santri) berhasil dikunci sebagai dokumen final."
+            : "Berhasil mengunci {$newlyLockedCount} santri yang lengkap. {$draftCount} santri lainnya tetap berstatus draft/susulan.";
+
+        return response()->json([
+            'message' => $msg,
+            'locked_count' => $totalLocked,
+            'newly_locked_count' => $newlyLockedCount,
+            'draft_count' => $draftCount,
+            'incomplete_santri' => $incompleteSantri,
+            'is_fully_locked' => $isFullyLocked,
+            'lock_status' => [
+                'is_locked' => $isFullyLocked,
+                'is_partially_locked' => !$isFullyLocked && $totalLocked > 0,
+                'status' => $isFullyLocked ? 'dikunci' : 'sebagian_dikunci',
+                'locked_count' => $totalLocked,
+                'total_count' => $santriList->count(),
+                'dikunci_pada' => $now->toIso8601String(),
+                'dikunci_oleh_nama' => $petugas->nama,
+            ],
+        ]);
+    }
+
+    /**
+     * Unlock raport pengajian per group/month.
+     */
+    public function unlock(Request $request)
+    {
+        $data = $request->validate([
+            'jenis' => 'required|in:AL_QURAN,TAKHASSUS',
+            'target_id' => 'required|integer',
+            'bulan' => 'required|integer|between:1,12',
+            'tahun' => 'required|integer|between:2020,2100',
+            'alasan' => 'required|string|min:5|max:500',
+        ]);
+
+        $petugas = $request->user();
+        $jenis = $data['jenis'];
+        $targetId = $data['target_id'];
+
+        if ($jenis === 'AL_QURAN') {
+            $tipeTarget = 'KelompokPBS';
+            $santriCol = 'kelompok_pbs_id';
+        } else {
+            $tipeTarget = 'KelompokPBM';
+            $santriCol = 'kelompok_pbm_id';
+        }
+
+        if (!in_array($petugas->jabatan, ['Admin', 'Piket Pengajian'], true)) {
+            return response()->json(['message' => 'Akses ditolak.'], 403);
+        }
+
+        if ($petugas->jabatan !== 'Admin' && !$petugas->hasAccess($tipeTarget, $targetId)) {
+            return response()->json(['message' => 'Anda tidak ditugaskan pada kelompok ini.'], 403);
+        }
+
+        $santriIds = DB::table('santri')->where($santriCol, $targetId)->pluck('santri_id');
+        $existingRaports = DB::table('raport_pengajian')
+            ->whereIn('santri_id', $santriIds)
+            ->where('bulan', $data['bulan'])
+            ->where('tahun', $data['tahun'])
+            ->where('status', 'dikunci')
+            ->get();
+
+        if ($existingRaports->isEmpty()) {
+            return response()->json(['message' => 'Raport kelompok belum dikunci atau tidak ditemukan.'], 422);
+        }
+
+        $now = now();
+        $raportIds = $existingRaports->pluck('raport_id');
+        DB::table('raport_pengajian')
+            ->whereIn('raport_id', $raportIds)
+            ->update([
+                'status' => 'draft',
+                'alasan_buka_kunci' => $data['alasan'],
+                'dibuka_oleh' => $petugas->petugas_id,
+                'dibuka_pada' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return response()->json([
+            'message' => 'Kunci raport berhasil dibuka. Anda dapat mengoreksi nilai kembali.',
+            'lock_status' => [
+                'is_locked' => false,
+                'status' => 'draft',
+                'dikunci_pada' => null,
+                'dikunci_oleh_nama' => null,
+            ],
+        ]);
+    }
+
+    /**
      * Lihat raport individual santri.
      */
     public function portalSemester(Request $request)
@@ -345,6 +910,7 @@ class RaportPengajianController extends Controller
             ->where('santri_id', $santri->santri_id)
             ->where('tahun_pelajaran', $data['tahun_pelajaran'])
             ->where('semester', $semesterDb)
+            ->where('status', 'dikunci')
             ->orderBy('tahun')
             ->orderBy('bulan')
             ->get();
@@ -375,12 +941,13 @@ class RaportPengajianController extends Controller
             ->where('santri_id', $santri->santri_id)
             ->where('tahun_pelajaran', $data['tahun_pelajaran'])
             ->where('semester', $semesterDb)
+            ->where('status', 'dikunci')
             ->orderBy('tahun')
             ->orderBy('bulan')
             ->get();
 
         if ($raports->isEmpty()) {
-            return response()->json(['message' => 'Rapor pengajian belum tersedia untuk periode ini.'], 404);
+            return response()->json(['message' => 'Rapor pengajian belum diterbitkan untuk periode ini.'], 404);
         }
 
         Carbon::setLocale('id');
@@ -435,6 +1002,11 @@ class RaportPengajianController extends Controller
 
         if (!$raport) {
             return response()->json(['message' => 'Raport belum diisi untuk periode ini'], 404);
+        }
+
+        $petugas = $request->user();
+        if ($petugas && $petugas->jabatan !== 'Admin' && !$petugas->hasAccess('KelompokPBS', (int) ($raport->kelompok_pbs_id ?? 0)) && !$petugas->hasAccess('KelompokPBM', (int) ($raport->kelompok_pbm_id ?? 0))) {
+            return response()->json(['message' => 'Raport berada di luar penugasan Anda.'], 403);
         }
 
         $result = $this->buildRaportData($raport, $santri);
@@ -504,6 +1076,11 @@ class RaportPengajianController extends Controller
 
         if (!$raport) {
             return response()->json(['message' => 'Raport belum diisi untuk periode ini'], 404);
+        }
+
+        $petugas = $request->user();
+        if ($petugas && $petugas->jabatan !== 'Admin' && !$petugas->hasAccess('KelompokPBS', (int) ($raport->kelompok_pbs_id ?? 0)) && !$petugas->hasAccess('KelompokPBM', (int) ($raport->kelompok_pbm_id ?? 0))) {
+            return response()->json(['message' => 'Raport berada di luar penugasan Anda.'], 403);
         }
 
         $raportData = $this->buildRaportData($raport, $santri);
@@ -669,7 +1246,8 @@ class RaportPengajianController extends Controller
         // --- Al-Qur'an ---
         $nilaiPbs = $nilai->where('jenis_pengajian', 'AL_QURAN');
         $pbsData = [];
-        foreach (self::ASPEK_AL_QURAN as $aspek) {
+        $activePbsAspects = $this->getActiveAspects('AL_QURAN');
+        foreach ($activePbsAspects as $aspek) {
             $row = $nilaiPbs->firstWhere('aspek', $aspek);
             $angka = $row ? $row->nilai_angka : null;
             $rataKelompok = null;
@@ -705,7 +1283,8 @@ class RaportPengajianController extends Controller
         // --- Takhassus ---
         $nilaiPbm = $nilai->where('jenis_pengajian', 'TAKHASSUS');
         $pbmData = [];
-        foreach (self::ASPEK_TAKHASSUS as $aspek) {
+        $activePbmAspects = $this->getActiveAspects('TAKHASSUS');
+        foreach ($activePbmAspects as $aspek) {
             $row = $nilaiPbm->firstWhere('aspek', $aspek);
             $angka = $row ? $row->nilai_angka : null;
             $rataKelompok = null;
@@ -775,7 +1354,8 @@ class RaportPengajianController extends Controller
             'raport_id' => $raport->raport_id,
             'santri' => [
                 'santri_id' => $santri->santri_id,
-                'nis' => $santri->nis,
+                'nis' => $santri->no_id_induk ?? $santri->nis,
+                'no_id_induk' => $santri->no_id_induk,
                 'nama' => $santri->nama,
                 'nama_kamar' => $namaKamar,
                 'nama_kelas' => $santri->nama_kelas ?? null,
@@ -810,6 +1390,19 @@ class RaportPengajianController extends Controller
 
     private function getPredikat(int $nilai): string
     {
+        if (Schema::hasTable('master_rentang_nilai')) {
+            $ranges = DB::table('master_rentang_nilai')
+                ->where('kategori', 'pengajian')
+                ->orderBy('urutan')
+                ->get();
+
+            foreach ($ranges as $r) {
+                if ($nilai >= $r->min_nilai && $nilai <= $r->max_nilai) {
+                    return $r->predikat;
+                }
+            }
+        }
+
         foreach (self::PREDIKAT_MAP as [$min, $max, $label]) {
             if ($nilai >= $min && $nilai <= $max) {
                 return $label;
@@ -864,5 +1457,237 @@ class RaportPengajianController extends Controller
         }
 
         return [$peringkat, $dari];
+    }
+
+    // =========================================================
+    // CMS MASTER INSTRUMEN PENGAJIAN & RENTANG NILAI (ADMIN)
+    // =========================================================
+
+    public function masterIndex(Request $request)
+    {
+        $jenis = $request->query('jenis');
+
+        $query = DB::table('master_instrumen_pengajian as mip')
+            ->leftJoin('petugas as p', 'mip.dibuat_oleh', '=', 'p.petugas_id')
+            ->select('mip.*', 'p.nama as pembuat_nama')
+            ->orderBy('mip.jenis_pengajian')
+            ->orderBy('mip.urutan')
+            ->orderBy('mip.instrumen_id');
+
+        if ($jenis && in_array($jenis, ['AL_QURAN', 'TAKHASSUS'], true)) {
+            $query->where('mip.jenis_pengajian', $jenis);
+        }
+
+        $items = $query->get()->map(function ($item) {
+            return [
+                'instrumen_id' => $item->instrumen_id,
+                'jenis_pengajian' => $item->jenis_pengajian,
+                'nama_instrumen' => $item->nama_instrumen,
+                'urutan' => (int) $item->urutan,
+                'status_aktif' => (bool) $item->status_aktif,
+                'pembuat' => $item->pembuat_nama ? ['nama' => $item->pembuat_nama] : null,
+                'created_at' => $item->created_at,
+            ];
+        });
+
+        return response()->json($items);
+    }
+
+    public function masterStore(Request $request)
+    {
+        $cleanNama = trim(strip_tags((string) $request->input('nama_instrumen', '')));
+        $request->merge(['nama_instrumen' => $cleanNama]);
+
+        $data = $request->validate([
+            'jenis_pengajian' => 'required|in:AL_QURAN,TAKHASSUS',
+            'nama_instrumen' => [
+                'required',
+                'string',
+                'min:2',
+                'max:150',
+                \Illuminate\Validation\Rule::unique('master_instrumen_pengajian', 'nama_instrumen')
+                    ->where('jenis_pengajian', $request->input('jenis_pengajian')),
+            ],
+        ]);
+
+        $maxUrutan = DB::table('master_instrumen_pengajian')
+            ->where('jenis_pengajian', $data['jenis_pengajian'])
+            ->max('urutan') ?? 0;
+
+        $now = now();
+        $id = DB::table('master_instrumen_pengajian')->insertGetId([
+            'jenis_pengajian' => $data['jenis_pengajian'],
+            'nama_instrumen' => $data['nama_instrumen'],
+            'urutan' => $maxUrutan + 1,
+            'status_aktif' => 1,
+            'dibuat_oleh' => $request->user()->petugas_id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return response()->json([
+            'message' => 'Kriteria pengajian berhasil ditambahkan',
+            'instrumen_id' => $id,
+        ], 201);
+    }
+
+    public function masterUpdate(Request $request, int $id)
+    {
+        $item = DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->first();
+        if (!$item) {
+            return response()->json(['message' => 'Kriteria tidak ditemukan'], 404);
+        }
+
+        $cleanNama = trim(strip_tags((string) $request->input('nama_instrumen', '')));
+        $request->merge(['nama_instrumen' => $cleanNama]);
+
+        $data = $request->validate([
+            'nama_instrumen' => [
+                'required',
+                'string',
+                'min:2',
+                'max:150',
+                \Illuminate\Validation\Rule::unique('master_instrumen_pengajian', 'nama_instrumen')
+                    ->where('jenis_pengajian', $item->jenis_pengajian)
+                    ->ignore($id, 'instrumen_id'),
+            ],
+        ]);
+
+        $oldName = $item->nama_instrumen;
+        $newName = $data['nama_instrumen'];
+
+        DB::transaction(function () use ($id, $item, $oldName, $newName) {
+            DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->update([
+                'nama_instrumen' => $newName,
+                'updated_at' => now(),
+            ]);
+
+            // Sinkronkan ke raport_nilai yang memakai nama lama
+            if ($oldName !== $newName) {
+                DB::table('raport_nilai')
+                    ->where('jenis_pengajian', $item->jenis_pengajian)
+                    ->where('aspek', $oldName)
+                    ->update(['aspek' => $newName]);
+            }
+        });
+
+        return response()->json(['message' => 'Nama kriteria berhasil diperbarui']);
+    }
+
+    public function masterToggle(Request $request, int $id)
+    {
+        $item = DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->first();
+        if (!$item) {
+            return response()->json(['message' => 'Kriteria tidak ditemukan'], 404);
+        }
+
+        $newStatus = $item->status_aktif ? 0 : 1;
+        DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->update([
+            'status_aktif' => $newStatus,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => $newStatus ? 'Kriteria berhasil diaktifkan' : 'Kriteria berhasil dinonaktifkan',
+            'status_aktif' => (bool) $newStatus,
+        ]);
+    }
+
+    public function masterDestroy(Request $request, int $id)
+    {
+        $item = DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->first();
+        if (!$item) {
+            return response()->json(['message' => 'Kriteria tidak ditemukan'], 404);
+        }
+
+        $hasNilai = DB::table('raport_nilai')
+            ->where('jenis_pengajian', $item->jenis_pengajian)
+            ->where('aspek', $item->nama_instrumen)
+            ->exists();
+
+        if ($hasNilai) {
+            return response()->json([
+                'message' => 'Kriteria ini sudah memiliki histori nilai dan tidak dapat dihapus. Silakan nonaktifkan statusnya.',
+            ], 422);
+        }
+
+        DB::table('master_instrumen_pengajian')->where('instrumen_id', $id)->delete();
+        return response()->json(['message' => 'Kriteria berhasil dihapus']);
+    }
+
+    public function getRentangNilai(Request $request, string $kategori)
+    {
+        if (!in_array($kategori, ['pembinaan', 'pengajian'], true)) {
+            return response()->json(['message' => 'Kategori rentang nilai tidak valid'], 422);
+        }
+
+        $ranges = DB::table('master_rentang_nilai')
+            ->where('kategori', $kategori)
+            ->orderBy('urutan')
+            ->get();
+
+        return response()->json($ranges);
+    }
+
+    public function saveRentangNilai(Request $request, string $kategori)
+    {
+        if (!in_array($kategori, ['pembinaan', 'pengajian'], true)) {
+            return response()->json(['message' => 'Kategori rentang nilai tidak valid'], 422);
+        }
+
+        $data = $request->validate([
+            'ranges' => 'required|array|min:1',
+            'ranges.*.huruf' => 'required|string|max:10',
+            'ranges.*.min_nilai' => 'required|integer|between:0,100',
+            'ranges.*.max_nilai' => 'required|integer|between:0,100',
+            'ranges.*.predikat' => 'required|string|max:60',
+        ]);
+
+        // 1. Validasi integritas min <= max per baris
+        foreach ($data['ranges'] as $r) {
+            if ($r['min_nilai'] > $r['max_nilai']) {
+                return response()->json([
+                    'message' => "Batas nilai untuk {$r['huruf']} tidak valid (min: {$r['min_nilai']} > max: {$r['max_nilai']})",
+                ], 422);
+            }
+        }
+
+        // 2. Validasi tidak ada tabrakan (overlap) antar rentang nilai
+        $sorted = collect($data['ranges'])->sortBy('min_nilai')->values()->all();
+        for ($i = 0; $i < count($sorted) - 1; $i++) {
+            if ($sorted[$i]['max_nilai'] >= $sorted[$i + 1]['min_nilai']) {
+                return response()->json([
+                    'message' => "Rentang nilai saling bertabrakan (overlap) antara {$sorted[$i]['huruf']} ({$sorted[$i]['min_nilai']}-{$sorted[$i]['max_nilai']}) dan {$sorted[$i + 1]['huruf']} ({$sorted[$i + 1]['min_nilai']}-{$sorted[$i + 1]['max_nilai']}).",
+                ], 422);
+            }
+        }
+
+        DB::transaction(function () use ($kategori, $data) {
+            DB::table('master_rentang_nilai')->where('kategori', $kategori)->delete();
+
+            $now = now();
+            foreach ($data['ranges'] as $idx => $r) {
+                DB::table('master_rentang_nilai')->insert([
+                    'kategori' => $kategori,
+                    'huruf' => trim($r['huruf']),
+                    'min_nilai' => (int) $r['min_nilai'],
+                    'max_nilai' => (int) $r['max_nilai'],
+                    'predikat' => trim($r['predikat']),
+                    'urutan' => $idx + 1,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+        });
+
+        $updated = DB::table('master_rentang_nilai')
+            ->where('kategori', $kategori)
+            ->orderBy('urutan')
+            ->get();
+
+        return response()->json([
+            'message' => 'Rentang nilai berhasil disimpan',
+            'data' => $updated,
+        ]);
     }
 }

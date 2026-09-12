@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { api, resolveApiAssetUrl } from '../api';
 import { useAuth } from '../AuthContext';
 import { AppDropdown } from '../components/AppDropdown';
@@ -116,8 +117,25 @@ interface ImportReviewItem {
   data_tambahan: string | null;
   santri_otomatis_id: number | null;
   kandidat_santri_id: number | null;
-  skor_kemiripan: number;
+  skor_kemiripan: number | null;
   status: 'perlu_tinjau' | 'perlu_mapping_kamar' | 'terpisah' | 'digabung';
+  status_sumber_review?: 'EXACT' | 'REVIEW' | 'UNMATCHED' | null;
+  tipe_review?: 'kandidat_workbook' | 'santri_auto_create' | 'verifikasi_manual' | null;
+  keputusan_admin?: 'belum_diputuskan' | 'terkonfirmasi' | 'digabung' | 'terpisah' | null;
+  status_tindak_lanjut?: string | null;
+  no_id_induk_kandidat_sumber?: string | null;
+  nama_kandidat_sumber?: string | null;
+  kamar_kandidat_sumber?: string | null;
+  sumber_file_excel?: string | null;
+  sumber_sheet_excel?: string | null;
+  sumber_baris_excel?: number | null;
+  review_file_excel?: string | null;
+  review_sheet_excel?: string | null;
+  review_baris_excel?: number | null;
+  status_provenance?: 'TERVERIFIKASI' | 'PERLU_VERIFIKASI' | null;
+  perlu_review_ulang?: boolean;
+  can_merge?: boolean;
+  can_confirm_candidate?: boolean;
   diputuskan_oleh?: number | null;
   diputuskan_pada?: string | null;
   catatan_keputusan?: string | null;
@@ -127,9 +145,76 @@ interface ImportReviewItem {
   kamar_kandidat?: string | null;
 }
 
+interface ReviewCandidate {
+  santri_id: number;
+  no_id_induk?: string | null;
+  nis?: string | null;
+  nama: string;
+  kode_unit?: string | null;
+  nama_kamar?: string | null;
+  status_verifikasi?: string | null;
+}
+
 type MasterTab = 'santri' | 'alumni' | 'data-orda' | 'ekstrakurikuler' | 'wisma' | 'verifikasi' | 'orda' | 'kamar' | 'review' | 'penugasan' | 'akun' | 'organisasi-daerah' | 'wa-bot';
 type AccountSortKey = 'nama' | 'username' | 'jabatan' | 'tanggung_jawab_absensi';
 type PaginationItem = number | 'ellipsis';
+
+const SANTRI_PHOTO_MAX_BYTES = 1024 * 1024;
+const SANTRI_PHOTO_ACCEPT = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp';
+const SANTRI_PHOTO_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/pjpeg', 'image/jpg', 'image/png', 'image/webp']);
+const SANTRI_PHOTO_ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+const getSantriPhotoExtension = (fileName: string) => {
+  const segments = fileName.toLowerCase().split('.');
+  return segments.length > 1 ? segments[segments.length - 1] ?? '' : '';
+};
+
+const validateSantriPhotoFile = (file: File) => {
+  const mimeType = file.type.toLowerCase();
+  const extension = getSantriPhotoExtension(file.name);
+  const hasAllowedType = mimeType
+    ? SANTRI_PHOTO_ALLOWED_MIME_TYPES.has(mimeType)
+    : SANTRI_PHOTO_ALLOWED_EXTENSIONS.has(extension);
+
+  if (!hasAllowedType) {
+    return 'Format foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
+  }
+
+  if (file.size > SANTRI_PHOTO_MAX_BYTES) {
+    return 'Ukuran foto terlalu besar. Gunakan foto dengan ukuran maksimal 1 MB.';
+  }
+
+  return null;
+};
+
+const getSantriPhotoApiErrorMessage = (error: any, fallback: string) => {
+  const responseData = error?.response?.data;
+  const validationMessage = responseData?.errors?.foto?.[0];
+  const rawMessage = String(validationMessage || responseData?.message || error?.message || '').toLowerCase();
+
+  if (validationMessage) {
+    return validationMessage;
+  }
+
+  if (rawMessage.includes('must be a file') || rawMessage.includes('berupa berkas')) {
+    return 'Foto belum terbaca. Pilih ulang file JPG, PNG, atau WEBP.';
+  }
+
+  if (
+    rawMessage.includes('mimes')
+    || rawMessage.includes('mimetypes')
+    || rawMessage.includes('must be a file of type')
+    || rawMessage.includes('berformat')
+  ) {
+    return 'Format foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
+  }
+
+  if (rawMessage.includes('greater than') || rawMessage.includes('maksimal') || rawMessage.includes('maximum')) {
+    return 'Ukuran foto terlalu besar. Gunakan foto dengan ukuran maksimal 1 MB.';
+  }
+
+  return fallback;
+};
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return hidden ? (
@@ -178,6 +263,91 @@ function AssignmentMultiDropdown({ id, label, value, options, disabled, onChange
         })}
         {options.length === 0 && <div className="app-dropdown-empty">Tidak ada target sesuai jabatan.</div>}
       </div>}
+    </div>
+  );
+}
+
+function VerificationMultiDropdown({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string[];
+  options: Array<{ key: string; label: string }>;
+  onChange: (value: string[]) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, []);
+
+  const selectedLabels = options.filter(option => value.includes(option.key)).map(option => option.label);
+  const toggleOption = (optionKey: string) => {
+    onChange(value.includes(optionKey) ? value.filter(k => k !== optionKey) : [...value, optionKey]);
+  };
+
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
+  return (
+    <div className="app-dropdown assignment-multi-dropdown" ref={dropdownRef} style={{ minWidth: 260 }}>
+      <label className="app-dropdown-label" htmlFor={id}>{label}</label>
+      <button
+        id={id}
+        type="button"
+        className={`app-dropdown-trigger${isOpen ? ' is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen(open => !open)}
+      >
+        <span className={selectedLabels.length ? 'app-dropdown-value' : 'app-dropdown-placeholder'}>
+          {selectedLabels.length ? `${selectedLabels.length} kriteria dipilih` : 'Semua Kriteria Kekosongan'}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {selectedLabels.length > 0 && (
+            <span
+              onClick={clearAll}
+              title="Bersihkan kriteria"
+              style={{ fontSize: 12, color: 'var(--tinta-pudar)', cursor: 'pointer', padding: '2px 4px' }}
+            >
+              ✕
+            </span>
+          )}
+          <span className="app-dropdown-chevron" aria-hidden="true">⌄</span>
+        </span>
+      </button>
+      {isOpen && (
+        <div className="app-dropdown-menu assignment-multi-menu" role="listbox" aria-labelledby={id} aria-multiselectable="true">
+          {options.map(option => {
+            const selected = value.includes(option.key);
+            return (
+              <button
+                key={option.key}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`app-dropdown-option assignment-multi-option${selected ? ' is-selected' : ''}`}
+                onClick={() => toggleOption(option.key)}
+              >
+                <span className={`assignment-option-check${selected ? ' is-selected' : ''}`} aria-hidden="true" />
+                <span style={{ fontWeight: selected ? 500 : 400 }}>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -273,11 +443,33 @@ export function DataMasterPage() {
   const [verificationLastPage, setVerificationLastPage] = useState(1);
   const [verificationTotal, setVerificationTotal] = useState(0);
   const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationSearch, setVerificationSearch] = useState('');
+  const [verificationTypeFilter, setVerificationTypeFilter] = useState<string[]>([]);
   const [ordaList, setOrdaList] = useState<VerificationSantri[]>([]);
   const [ordaPage, setOrdaPage] = useState(1);
   const [ordaLastPage, setOrdaLastPage] = useState(1);
   const [ordaTotal, setOrdaTotal] = useState(0);
   const [ordaLoading, setOrdaLoading] = useState(false);
+  const { data: verificationAttention = { santri: 0, orda: 0, kamar: 0, review: 0 } } = useQuery({
+    queryKey: ['verification-attention', user?.petugas_id],
+    queryFn: async () => {
+      const [santriResponse, ordaResponse, kamarResponse, reviewResponse] = await Promise.all([
+        api.get('/api/master/santri/verifikasi', { params: { per_page: 10 } }),
+        api.get('/api/master/santri/verifikasi-orda', { params: { per_page: 10 } }),
+        api.get('/api/master/kamar-mappings'),
+        api.get('/api/master/import-reviews'),
+      ]);
+      const reviewData = Array.isArray(reviewResponse.data) ? reviewResponse.data : [];
+      return {
+        santri: santriResponse.data.total ?? 0,
+        orda: ordaResponse.data.total ?? 0,
+        kamar: kamarResponse.data.filter((mapping: { nama_kamar?: string | null }) => !mapping.nama_kamar).length,
+        review: reviewData.filter((item: { status: string }) => item.status === 'perlu_tinjau' || item.status === 'perlu_mapping_kamar').length,
+      };
+    },
+    enabled: isVerificationData && user?.jabatan === 'Admin',
+    staleTime: 60_000,
+  });
   const [santriOptions, setSantriOptions] = useState<SantriOptions>({ unit_pendidikan: [], organisasi_daerah: [], kelas_formal: [], kelompok_madin: [], kelompok_pbs: [], kelompok_pbm: [] });
   const [mappings, setMappings] = useState<KamarMapping[]>([]);
   const [jenis, setJenis] = useState('sekolah');
@@ -384,7 +576,7 @@ export function DataMasterPage() {
       setSuccessToast(response.data.message || 'Foto santri berhasil diunggah.');
       await fetchData();
     } catch (error: any) {
-      setFotoError(error.response?.data?.message || 'Foto belum berhasil diunggah. Coba ulang sekali lagi.');
+      setFotoError(getSantriPhotoApiErrorMessage(error, 'Foto belum berhasil diunggah. Coba ulang sekali lagi.'));
     } finally {
       setFotoUploading(false);
     }
@@ -395,8 +587,15 @@ export function DataMasterPage() {
     e.target.value = '';
     if (!file) return;
 
+    const validationMessage = validateSantriPhotoFile(file);
+    if (validationMessage) {
+      setFotoError(validationMessage);
+      return;
+    }
+
     setSelectedFotoFile(file);
     setFotoError('');
+    replacePreviewFotoUrl(URL.createObjectURL(file));
 
     if (editingSantri.santri_id) {
       setFotoUploading(true);
@@ -408,12 +607,10 @@ export function DataMasterPage() {
         setSuccessToast(res.data.message || 'Foto santri berhasil diunggah.');
         await fetchData();
       } catch (err: any) {
-        setFotoError(err.response?.data?.message || 'Foto belum berhasil diunggah. Coba upload ulang file yang sama.');
+        setFotoError(getSantriPhotoApiErrorMessage(err, 'Foto belum berhasil diunggah. Coba upload ulang file yang sama.'));
       } finally {
         setFotoUploading(false);
       }
-    } else {
-      replacePreviewFotoUrl(URL.createObjectURL(file));
     }
   };
 
@@ -455,15 +652,14 @@ export function DataMasterPage() {
   // Review Kemiripan Tab State
   const [reviewList, setReviewList] = useState<ImportReviewItem[]>([]);
   const [reviewStatusFilter, setReviewStatusFilter] = useState<string>('');
+  const [reviewSourceStatusFilter, setReviewSourceStatusFilter] = useState<string>('');
   const [reviewSheetFilter, setReviewSheetFilter] = useState<string>('');
   const [reviewSearch, setReviewSearch] = useState<string>('');
   const [reviewPage, setReviewPage] = useState<number>(1);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewCandidates, setReviewCandidates] = useState<ReviewCandidate[]>([]);
 
-  // Filter out items without candidates (only display rows with candidate/pair)
-  const validReviewList = useMemo(() => {
-    return reviewList.filter(item => Boolean(item.kandidat_santri_id || item.santri_otomatis_id || item.nama_kandidat || item.nama_santri_otomatis));
-  }, [reviewList]);
+  const validReviewList = reviewList;
 
   const reviewItemsPerPage = 10;
   const totalReviewPages = Math.ceil(validReviewList.length / reviewItemsPerPage) || 1;
@@ -475,7 +671,7 @@ export function DataMasterPage() {
 
   useEffect(() => {
     setReviewPage(1);
-  }, [reviewSearch, reviewStatusFilter, reviewSheetFilter]);
+  }, [reviewSearch, reviewStatusFilter, reviewSourceStatusFilter, reviewSheetFilter]);
 
   // Modal Review Verification State
   const [activeReviewItem, setActiveReviewItem] = useState<ImportReviewItem | null>(null);
@@ -483,6 +679,8 @@ export function DataMasterPage() {
   const [candidateSearchText, setCandidateSearchText] = useState<string>('');
   const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState<boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
+  const [decisionNote, setDecisionNote] = useState<string>('');
+  const [separateMasterExists, setSeparateMasterExists] = useState<boolean>(false);
 
   // WA Bot State
   const [waStatus, setWaStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'offline'>('disconnected');
@@ -540,13 +738,14 @@ export function DataMasterPage() {
   });
 
   const fetchData = async () => {
-    const [petugasResponse, opsiResponse, penugasanResponse, kamarResponse, santriResponse, santriOptionsResponse] = await Promise.all([
+    const [petugasResponse, opsiResponse, penugasanResponse, kamarResponse, santriResponse, santriOptionsResponse, reviewCandidatesResponse] = await Promise.all([
       api.get('/api/master/petugas'),
       api.get('/api/absensi-options'),
       api.get('/api/master/penugasan'),
       api.get('/api/master/kamar'),
       api.get('/api/master/santri'),
       api.get('/api/master/santri/options'),
+      api.get<ReviewCandidate[]>('/api/master/import-reviews/candidates'),
     ]);
     setPetugas(petugasResponse.data);
     setOpsi(opsiResponse.data);
@@ -554,30 +753,38 @@ export function DataMasterPage() {
     setKamar(kamarResponse.data);
     setSantriList(santriResponse.data);
     setSantriOptions(santriOptionsResponse.data);
+    setReviewCandidates(reviewCandidatesResponse.data);
   };
 
   const missingFilterParam = new URLSearchParams(location.search).get('missing') || '';
 
   const getMissingFilterLabel = (key: string): string => {
     const labels: Record<string, string> = {
-      tanpa_no_id: 'Belum Memiliki Nomor Induk Pondok',
-      kamar: 'Kamar Belum Dipetakan',
-      kelas_formal: 'Kelas Formal Belum Dipetakan',
-      kelompok_madin: 'Kelas Madin Belum Dipetakan',
-      kelompok_pbs: 'Al-Qur’an Subuh Belum Dipetakan',
-      kelompok_pbm: 'Takhasus Maghrib Belum Dipetakan',
-      no_hp_wali: 'No. HP Wali Belum Terisi',
-      nik_siswa: 'NIK Siswa Belum Terisi',
-      orda: 'ORDA Belum Ditetapkan',
+      tanpa_no_id: 'Nomor Induk Pondok / Nomor ID',
+      kamar: 'Kamar / Asrama',
+      kelas_formal: 'Kelas Formal',
+      kelompok_madin: 'Kelas Madin',
+      kelompok_pbs: 'Al-Qur’an Subuh',
+      kelompok_pbm: 'Takhasus Maghrib',
+      roster_inkomplit: 'Roster Kegiatan',
+      no_hp_wali: 'Kontak Wali / Data Orang Tua',
+      kegiatan_kosong: 'Belum Terdaftar di 5 Kegiatan Absensi',
+      profil_blank: 'Belum Terdaftar di 5 Kegiatan Absensi',
+      nik_siswa: 'NIK Siswa',
+      orda: 'ORDA',
     };
     return labels[key] || key;
   };
 
-  const fetchVerification = async () => {
+  const fetchVerification = useCallback(async () => {
     setVerificationLoading(true);
     try {
       const params: Record<string, string | number> = { page: verificationPage, per_page: 50 };
-      if (missingFilterParam) params.missing = missingFilterParam;
+      const activeMissing = verificationTypeFilter.length > 0
+        ? verificationTypeFilter.join(',')
+        : missingFilterParam;
+      if (activeMissing) params.missing = activeMissing;
+      if (verificationSearch.trim()) params.search = verificationSearch.trim();
       const response = await api.get<VerificationQueueResponse>('/api/master/santri/verifikasi', { params });
       setVerificationList(response.data.data);
       setVerificationLastPage(response.data.last_page);
@@ -585,7 +792,7 @@ export function DataMasterPage() {
     } finally {
       setVerificationLoading(false);
     }
-  };
+  }, [verificationPage, verificationTypeFilter, missingFilterParam, verificationSearch]);
 
   const fetchOrdaVerification = async () => {
     setOrdaLoading(true);
@@ -640,7 +847,7 @@ export function DataMasterPage() {
     if (isVerificationData && activeTab === 'santri') {
       fetchVerification().catch(() => setMessage('Antrean verifikasi gagal dimuat.'));
     }
-  }, [activeTab, isVerificationData, verificationPage, location.search]);
+  }, [activeTab, isVerificationData, fetchVerification]);
 
   useEffect(() => {
     if (isVerificationData && activeTab === 'orda') {
@@ -654,6 +861,7 @@ export function DataMasterPage() {
       const response = await api.get<ImportReviewItem[]>('/api/master/import-reviews', {
         params: {
           status: reviewStatusFilter || undefined,
+          source_status: reviewSourceStatusFilter || undefined,
           sheet: reviewSheetFilter || undefined,
           search: reviewSearch.trim() || undefined,
         },
@@ -668,9 +876,11 @@ export function DataMasterPage() {
 
   const openReviewModal = (item: ImportReviewItem) => {
     setActiveReviewItem(item);
-    setSelectedCandidateId(item.kandidat_santri_id || item.santri_otomatis_id);
+    setSelectedCandidateId(item.kandidat_santri_id);
     setCandidateSearchText('');
     setIsCandidateSearchOpen(false);
+    setDecisionNote(item.catatan_keputusan || '');
+    setSeparateMasterExists(item.status_tindak_lanjut === 'terpisah_sudah_ada_di_master');
   };
 
   const closeReviewModal = () => {
@@ -679,14 +889,18 @@ export function DataMasterPage() {
     setSelectedCandidateId(null);
     setCandidateSearchText('');
     setIsCandidateSearchOpen(false);
+    setDecisionNote('');
+    setSeparateMasterExists(false);
   };
 
   const confirmMergeInModal = async () => {
     if (!activeReviewItem) return;
     setIsMerging(true);
     try {
-      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/merge`, {
+      const endpoint = activeReviewItem.santri_otomatis_id ? 'merge' : 'confirm';
+      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/${endpoint}`, {
         kandidat_santri_id: selectedCandidateId,
+        catatan: decisionNote.trim() || undefined,
       });
       setMessage(response.data.message);
       closeReviewModal();
@@ -703,7 +917,10 @@ export function DataMasterPage() {
     if (!activeReviewItem) return;
     setIsMerging(true);
     try {
-      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/separate`);
+      const response = await api.post(`/api/master/import-reviews/${activeReviewItem.review_id}/separate`, {
+        catatan: decisionNote.trim() || undefined,
+        sudah_ada_di_master: separateMasterExists,
+      });
       setMessage(response.data.message);
       closeReviewModal();
       await fetchReviewData();
@@ -717,7 +934,9 @@ export function DataMasterPage() {
   const handleSeparateDirect = async (item: ImportReviewItem) => {
     if (!window.confirm(`Tandai "${item.nama_sumber}" sebagai dua orang yang berbeda (terpisah)?`)) return;
     try {
-      const response = await api.post(`/api/master/import-reviews/${item.review_id}/separate`);
+      const response = await api.post(`/api/master/import-reviews/${item.review_id}/separate`, {
+        sudah_ada_di_master: false,
+      });
       setMessage(response.data.message);
       await fetchReviewData();
     } catch (error: any) {
@@ -729,7 +948,8 @@ export function DataMasterPage() {
     setReviewLoading(true);
     try {
       const response = await api.post('/api/master/import-reviews/sync');
-      setMessage(`${response.data.message} (${response.data.baru_ditambahkan} data baru).`);
+      const added = Number(response.data.baru_ditambahkan || 0);
+      setMessage(`${response.data.message} (${added} data baru).`);
       await fetchReviewData();
     } catch (error: any) {
       setMessage(error.response?.data?.message ?? 'Gagal menyinkronkan data review.');
@@ -743,7 +963,7 @@ export function DataMasterPage() {
       const timer = window.setTimeout(() => { fetchReviewData(); }, 300);
       return () => window.clearTimeout(timer);
     }
-  }, [activeTab, isVerificationData, reviewStatusFilter, reviewSheetFilter, reviewSearch]);
+  }, [activeTab, isVerificationData, reviewStatusFilter, reviewSourceStatusFilter, reviewSheetFilter, reviewSearch]);
 
   // Fetch alumni when tab is alumni or filter changes
   useEffect(() => {
@@ -904,7 +1124,7 @@ export function DataMasterPage() {
           replacePreviewFotoUrl(null);
         } catch (fErr: any) {
           setEditingSantri(current => ({ ...current, santri_id: newSantriId }));
-          setFotoError(fErr.response?.data?.message || 'Data santri tersimpan, tetapi foto belum berhasil diunggah.');
+          setFotoError(getSantriPhotoApiErrorMessage(fErr, 'Data santri tersimpan, tetapi foto belum berhasil diunggah.'));
           setErrorToast('Data santri tersimpan, tetapi foto belum berhasil diunggah. Coba unggah ulang dari form ini.');
           await fetchData();
           await fetchVerification();
@@ -1160,11 +1380,140 @@ export function DataMasterPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <div className="master-page">
-      <header className="dashboard-header page-header">
-        <h1>{isVerificationData ? 'Verifikasi Data' : 'Data Master'}</h1>
-        <p>{isVerificationData ? 'Selesaikan data yang belum tervalidasi sebelum dipakai untuk operasional absensi.' : 'Kelola data referensi santri, alumni, ORDA, ekstrakurikuler, dan wisma.'}</p>
-      </header>
+    <div className={`master-page ${isVerificationData ? 'verifikasi-page' : ''}`}>
+      {isVerificationData ? (
+        <header className="absensi-module-hero">
+          <div className="absensi-module-hero-main">
+            <span className="page-eyebrow" style={{ color: 'rgba(255, 255, 255, 0.85)', marginBottom: 4, display: 'inline-block' }}>
+              VERIFIKASI &amp; VALIDASI DATA
+            </span>
+            <h1 className="absensi-module-hero-title">
+              {activeTab === 'review'
+                ? 'Review Kemiripan Data'
+                : activeTab === 'orda'
+                  ? 'Verifikasi ORDA Santri'
+                  : activeTab === 'kamar'
+                    ? 'Mapping Kamar Santri'
+                    : 'Verifikasi Data Santri'}
+            </h1>
+            <p className="absensi-module-hero-desc">
+              {activeTab === 'review'
+                ? 'Review dan verifikasi kandidat data ambigu dari workbook canonical untuk memastikan validitas identitas santri dan pemetaan kamar.'
+                : activeTab === 'orda'
+                  ? 'Verifikasi dan lengkapi data organisasi daerah santri untuk validasi kelengkapan profil daerah.'
+                  : activeTab === 'kamar'
+                    ? 'Hubungkan singkatan dan kode kamar dari berkas sumber dengan daftar kamar resmi pesantren.'
+                    : 'Lengkapi pemetaan Nomor Induk, Kamar, Kelas Formal, Madin, Al-Qur’an Subuh, dan Takhasus Maghrib sebelum digunakan untuk absensi.'}
+            </p>
+            <div className="absensi-module-hero-meta">
+              <span className="absensi-module-pill absensi-module-pill-petugas">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                Petugas: {user?.nama || 'Petugas Admin'}
+              </span>
+              <span className="absensi-module-pill absensi-module-pill-count">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  {activeTab === 'review' ? (
+                    <>
+                      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </>
+                  ) : (
+                    <>
+                      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+                    </>
+                  )}
+                </svg>
+                {activeTab === 'santri'
+                  ? (verificationLoading ? 'Memuat antrean...' : `${(verificationTotal || verificationAttention.santri || 0).toLocaleString('id')} Santri Perlu Verifikasi`)
+                  : activeTab === 'review'
+                    ? (reviewLoading ? 'Memuat review...' : `${(validReviewList.length || verificationAttention.review || 0).toLocaleString('id')} Kandidat Perlu Ditinjau`)
+                    : activeTab === 'orda'
+                      ? `${(ordaTotal || verificationAttention.orda || 0).toLocaleString('id')} Perlu ORDA`
+                      : `${mappings.length} Kode Pemetaan`}
+              </span>
+              {activeTab === 'santri' && verificationAttention.review > 0 && (
+                <span className="absensi-module-pill absensi-module-pill-schedule">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  </svg>
+                  {verificationAttention.review} Kemiripan Perlu Ditinjau
+                </span>
+              )}
+              {activeTab === 'review' && verificationAttention.santri > 0 && (
+                <span className="absensi-module-pill absensi-module-pill-schedule">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  {verificationAttention.santri} Santri Menunggu Pemetaan
+                </span>
+              )}
+              <span className="absensi-module-pill absensi-module-pill-period">
+                T.A. 2026/2027
+              </span>
+            </div>
+          </div>
+
+          <div className="absensi-module-hero-actions">
+            {activeTab === 'santri' ? (
+              <>
+                <button
+                  type="button"
+                  className="absensi-module-action-btn secondary"
+                  onClick={() => void fetchVerification()}
+                  disabled={verificationLoading}
+                  title="Segarkan daftar antrean verifikasi"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                  <span>{verificationLoading ? 'Memuat...' : 'Segarkan'}</span>
+                </button>
+                <Link to="/verifikasi-data/review" className="absensi-module-action-btn green" title="Buka Review Kemiripan Data">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  </svg>
+                  <span>Review Kemiripan Data</span>
+                </Link>
+              </>
+            ) : activeTab === 'review' ? (
+              <>
+                <Link to="/verifikasi-data/santri" className="absensi-module-action-btn green" title="Kembali ke Antrean Verifikasi Santri">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  <span>Verifikasi Data Santri</span>
+                </Link>
+                <button
+                  type="button"
+                  className="absensi-module-action-btn secondary"
+                  onClick={() => void handleSyncReview()}
+                  disabled={reviewLoading}
+                  title="Sinkronkan data review dari workbook"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                  <span>{reviewLoading ? 'Menyinkronkan...' : 'Sinkronkan Data'}</span>
+                </button>
+              </>
+            ) : (
+              <Link to="/verifikasi-data/santri" className="absensi-module-action-btn green">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                </svg>
+                <span>Verifikasi Data Santri</span>
+              </Link>
+            )}
+          </div>
+          <div className="dashboard-mosque-dark" aria-hidden="true"></div>
+        </header>
+      ) : (
+        <header className="dashboard-header page-header">
+          <h1>Data Master</h1>
+          <p>Kelola data referensi santri, alumni, ORDA, ekstrakurikuler, dan wisma.</p>
+        </header>
+      )}
       {successToast && <div className="success-toast" role="status" aria-live="polite">{successToast}</div>}
       {errorToast && <div className="error-toast" role="alert" aria-live="assertive">{errorToast}</div>}
       {message && <div className="warning-box" style={{ marginBottom: 16 }}>{message}</div>}
@@ -1341,27 +1690,92 @@ export function DataMasterPage() {
             <span className="schedule-label">{verificationTotal.toLocaleString('id')} perlu ditinjau</span>
           </div>
 
-          {missingFilterParam && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 14px', borderRadius: 8, marginBottom: 16 }}>
-              <span style={{ fontSize: 13, color: 'var(--tinta)' }}>
-                Menampilkan antrean khusus: <strong>{getMissingFilterLabel(missingFilterParam)}</strong>
+          {/* CONTAINER FILTER VERIFIKASI DATA */}
+          <div className="account-table-controls" style={{ marginBottom: 16 }}>
+            <div className="account-search-control" style={{ flex: 1 }}>
+              <label htmlFor="verification-search">Pencarian Santri</label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  style={{ position: 'absolute', left: 12, color: 'var(--tinta-pudar)', pointerEvents: 'none' }}
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  id="verification-search"
+                  value={verificationSearch}
+                  onChange={e => {
+                    setVerificationSearch(e.target.value);
+                    setVerificationPage(1);
+                  }}
+                  placeholder="Cari nama santri atau Nomor Induk Pondok..."
+                  style={{ paddingLeft: 36, width: '100%' }}
+                />
+              </div>
+            </div>
+            <VerificationMultiDropdown
+              id="verification-type-filter"
+              label="Tipe Kekosongan Data"
+              value={verificationTypeFilter}
+              onChange={selected => {
+                setVerificationTypeFilter(selected);
+                setVerificationPage(1);
+              }}
+              options={[
+                { key: 'tanpa_no_id', label: 'Nomor Induk Pondok / Nomor ID' },
+                { key: 'kamar', label: 'Kamar / Asrama' },
+                { key: 'kelas_formal', label: 'Kelas Formal' },
+                { key: 'roster_inkomplit', label: 'Roster Kegiatan' },
+                { key: 'no_hp_wali', label: 'Kontak Wali / Data Orang Tua' },
+                { key: 'kegiatan_kosong', label: 'Belum Terdaftar di 5 Kegiatan Absensi' },
+              ]}
+            />
+          </div>
+
+          {(missingFilterParam || verificationTypeFilter.length > 0 || verificationSearch) && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: 8, marginBottom: 16 }}>
+              <span style={{ fontSize: 13, color: 'var(--tinta-pudar)', fontWeight: 400 }}>
+                Filter aktif:{' '}
+                <span style={{ color: 'var(--tinta)', fontWeight: 500 }}>
+                  {verificationTypeFilter.length > 0
+                    ? verificationTypeFilter.map(k => getMissingFilterLabel(k)).join(', ')
+                    : (missingFilterParam ? getMissingFilterLabel(missingFilterParam) : 'Semua')}
+                </span>
+                {verificationSearch && <> — Pencarian: <span style={{ color: 'var(--tinta)', fontWeight: 500 }}>"{verificationSearch}"</span></>}
               </span>
-              <Link to="/verifikasi-data/santri" style={{ fontSize: 12, color: 'var(--aksen)', fontWeight: 600, textDecoration: 'none' }}>
-                ✕ Hapus Filter (Tampilkan Semua)
-              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setVerificationSearch('');
+                  setVerificationTypeFilter([]);
+                  setVerificationPage(1);
+                }}
+                style={{ fontSize: 12, color: 'var(--aksen)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                ✕ Hapus filter
+              </button>
             </div>
           )}
           <div className="table-scroll">
-            <table className="master-table">
+            <table className="master-table verifikasi-table">
               <thead><tr><th>No. ID</th><th>Santri</th><th>Unit</th><th>Mapping absensi yang perlu dilengkapi</th><th>Aksi</th></tr></thead>
               <tbody>
                 {verificationLoading ? <TableSkeleton columns={5} /> : verificationList.map(item => (
                   <tr key={item.santri_id}>
                     <td>{item.no_id_induk || '—'}</td>
-                    <td><strong>{item.nama}</strong><small>{item.status_verifikasi.replaceAll('_', ' ')}</small></td>
+                    <td><strong>{item.nama}</strong></td>
                     <td>{item.kode_unit || '—'}</td>
                     <td>{item.alasan.length ? item.alasan.join('; ') : 'Perlu keputusan admin'}</td>
-                    <td><button className="secondary-button" onClick={() => {
+                    <td><button type="button" className="table-btn-verifikasi" onClick={() => {
                       const santri = santriList.find(row => row.santri_id === item.santri_id);
                       if (santri) openSantriModal(santri);
                     }}>Verifikasi</button></td>
@@ -1418,16 +1832,16 @@ export function DataMasterPage() {
             <span className="schedule-label">{ordaTotal.toLocaleString('id')} perlu ditinjau</span>
           </div>
           <div className="table-scroll">
-            <table className="master-table">
+            <table className="master-table verifikasi-table">
               <thead><tr><th>No. ID</th><th>Santri</th><th>Unit</th><th>Status</th><th>Aksi</th></tr></thead>
               <tbody>
                 {ordaLoading ? <TableSkeleton columns={5} /> : ordaList.map(item => (
                   <tr key={item.santri_id}>
                     <td>{item.no_id_induk || '—'}</td>
-                    <td><strong>{item.nama}</strong><small>{item.status_verifikasi.replaceAll('_', ' ')}</small></td>
+                    <td><strong>{item.nama}</strong></td>
                     <td>{item.kode_unit || '—'}</td>
                     <td>{item.alasan.join('; ')}</td>
-                    <td><button className="secondary-button" onClick={() => {
+                    <td><button type="button" className="table-btn-verifikasi" onClick={() => {
                       const santri = santriList.find(row => row.santri_id === item.santri_id);
                       if (santri) openSantriModal(santri);
                     }}>Tentukan ORDA</button></td>
@@ -1480,7 +1894,7 @@ export function DataMasterPage() {
                     <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 4, display: 'block', color: '#1e293b' }}>Foto Profil Santri</label>
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept={SANTRI_PHOTO_ACCEPT}
                       onChange={handleFotoUpload}
                       disabled={fotoUploading}
                       style={{ fontSize: 12 }}
@@ -1504,7 +1918,7 @@ export function DataMasterPage() {
                         Coba Upload Ulang
                       </button>
                     )}
-                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Format JPG, PNG, WEBP (Maks 5 MB)</p>
+                    <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Hanya JPG, PNG, WEBP. Maksimal 1 MB. Browser tertentu bisa tetap menampilkan file lain, tetapi aplikasi akan menolak selain gambar yang didukung.</p>
                   </div>
                 </div>
               <div>
@@ -1686,7 +2100,7 @@ export function DataMasterPage() {
           <div><label>Nama kamar resmi</label><input value={namaKamarBaru} onChange={event => setNamaKamarBaru(event.target.value)} placeholder="Contoh: Kamar Kiai 201" required /></div>
           <button className="primary-button">Tambah kamar & mapping</button>
         </form>
-        {!mappings.length ? <div className="empty-state">Belum ada kode kamar yang perlu dipetakan.</div> : <div className="table-scroll"><table className="master-table"><thead><tr><th>Kode dari sumber</th><th>Jumlah review</th><th>Kamar saat ini</th><th>Ubah / konfirmasi kamar</th><th>Aksi</th></tr></thead><tbody>{mappings.map(item => <tr key={item.kode_sumber}><td><strong>{item.kode_sumber}</strong></td><td>{item.jumlah_review}</td><td>{item.nama_kamar || <span className="warning-text">Belum dipetakan</span>}</td><td><select value={mappingChoices[item.kode_sumber] ?? String(item.kamar_id ?? '')} onChange={event => setMappingChoices(current => ({ ...current, [item.kode_sumber]: event.target.value }))}><option value="">Pilih kamar resmi</option>{kamar.map(room => <option key={room.kamar_id} value={room.kamar_id}>{room.nama}</option>)}</select></td><td><button className="primary-button" onClick={() => void saveMapping(item)}>Simpan mapping</button></td></tr>)}</tbody></table></div>}
+        {!mappings.length ? <div className="empty-state">Belum ada kode kamar yang perlu dipetakan.</div> : <div className="table-scroll"><table className="master-table verifikasi-table"><thead><tr><th>Kode dari sumber</th><th>Jumlah review</th><th>Kamar saat ini</th><th>Ubah / konfirmasi kamar</th><th>Aksi</th></tr></thead><tbody>{mappings.map(item => <tr key={item.kode_sumber}><td><strong>{item.kode_sumber}</strong></td><td>{item.jumlah_review}</td><td>{item.nama_kamar || <span className="warning-text">Belum dipetakan</span>}</td><td><select value={mappingChoices[item.kode_sumber] ?? String(item.kamar_id ?? '')} onChange={event => setMappingChoices(current => ({ ...current, [item.kode_sumber]: event.target.value }))}><option value="">Pilih kamar resmi</option>{kamar.map(room => <option key={room.kamar_id} value={room.kamar_id}>{room.nama}</option>)}</select></td><td><button className="primary-button" onClick={() => void saveMapping(item)}>Simpan mapping</button></td></tr>)}</tbody></table></div>}
       </section>}
 
       {/* REVIEW KEMIRIPAN DATA TAB */}
@@ -1788,6 +2202,19 @@ export function DataMasterPage() {
               ]}
             />
             <AppDropdown
+              id="review-source-status"
+              label="Status sumber"
+              value={reviewSourceStatusFilter}
+              onChange={setReviewSourceStatusFilter}
+              placeholder="Semua status sumber"
+              options={[
+                { value: '', label: 'Semua status sumber' },
+                { value: 'REVIEW', label: 'REVIEW - Perlu evaluasi' },
+                { value: 'UNMATCHED', label: 'UNMATCHED - Belum cocok' },
+                { value: 'EXACT', label: 'EXACT - Cocok exact' },
+              ]}
+            />
+            <AppDropdown
               id="review-sheet"
               label="Sumber File/Sheet"
               value={reviewSheetFilter}
@@ -1795,24 +2222,24 @@ export function DataMasterPage() {
               placeholder="Semua Sumber"
               options={[
                 { value: '', label: 'Semua Sumber' },
-                { value: 'Database Siswa', label: 'Database Siswa' },
-                { value: 'Database Siswa Madin', label: 'Database Siswa Madin' },
-                { value: "Database Al-Qur'an", label: "Database Al-Qur'an" },
-                { value: 'Database Takhassus', label: 'Database Takhassus' },
+                { value: 'ABSENSI_KAMAR', label: 'ABSENSI_KAMAR' },
+                { value: 'PBM', label: 'PBM' },
+                { value: 'PBS', label: 'PBS' },
+                { value: 'MADIN', label: 'MADIN' },
               ]}
             />
           </div>
 
           <p className="account-result-count">
-            {reviewLoading ? <><Spinner size="sm" /> Memuat data review kemiripan...</> : `Menampilkan ${validReviewList.length} baris review kemiripan data yang memiliki kandidat.`}
+            {reviewLoading ? <><Spinner size="sm" /> Memuat hasil pencocokan...</> : `Menampilkan ${validReviewList.length} baris hasil pencocokan dari workbook canonical TA 2026/2027.`}
           </p>
 
           <div className="table-scroll">
-            <table className="master-table">
+            <table className="master-table verifikasi-table">
               <thead>
                 <tr>
                   <th>No</th>
-                  <th>Data Sumber Review</th>
+                  <th>Data Sumber Excel</th>
                   <th>Kandidat Santri Master</th>
                   <th>Kemiripan</th>
                   <th>Status & Informasi Kamar</th>
@@ -1822,8 +2249,11 @@ export function DataMasterPage() {
               <tbody>
                 {paginatedReviewList.map((item, idx) => {
                   const hasCandidate = Boolean(item.nama_kandidat || item.nama_santri_otomatis || item.kandidat_santri_id || item.santri_otomatis_id);
+                  const isAutoCreateReview = item.tipe_review === 'santri_auto_create' || Boolean(item.santri_otomatis_id);
+                  const isClosed = item.status === 'digabung' || item.status === 'terpisah';
                   const kamarMaster = item.kamar_kandidat || item.kamar_santri_otomatis || 'Belum terisi';
                   const isRoomMismatch = item.kode_kamar_sumber && (!item.kamar_kandidat && !item.kamar_santri_otomatis);
+                  const hasReviewScore = item.skor_kemiripan !== null && Number.isFinite(item.skor_kemiripan);
 
                   return (
                     <tr key={item.review_id}>
@@ -1831,7 +2261,16 @@ export function DataMasterPage() {
                       <td>
                         <strong style={{ fontSize: 14 }}>{item.nama_sumber}</strong>
                         <div style={{ fontSize: '0.85em', color: '#64748b', marginTop: 2 }}>
-                          Sumber: {item.sumber_sheet} | Kamar Impor: {item.kode_kamar_sumber ? <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>{item.kode_kamar_sumber}</code> : '—'}
+                          Jenis data: <strong>{item.sumber_sheet}</strong> | Kamar Impor: {item.kode_kamar_sumber ? <code style={{ background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>{item.kode_kamar_sumber}</code> : '—'}
+                        </div>
+                        <div style={{ fontSize: '0.78em', color: '#475569', marginTop: 3 }}>
+                          Data Excel: <strong>{item.sumber_file_excel || 'Belum terpetakan'}</strong>
+                        </div>
+                        <div style={{ fontSize: '0.78em', color: '#475569', marginTop: 2 }}>
+                          Sheet: <strong>{item.sumber_sheet_excel || '—'}</strong> · Baris {item.sumber_baris_excel ?? item.baris_sumber}
+                        </div>
+                        <div style={{ fontSize: '0.74em', color: '#64748b', marginTop: 2 }}>
+                          Referensi: {item.review_file_excel || '—'} / {item.review_sheet_excel || 'REVIEW_MATCH'}!{item.review_baris_excel ?? '—'} · Status matching: <strong>{item.status_sumber_review || 'REVIEW'}</strong>
                         </div>
                         {item.data_tambahan && (
                           <div style={{ fontSize: '0.8em', color: '#64748b', marginTop: 2 }}>
@@ -1852,21 +2291,25 @@ export function DataMasterPage() {
                         )}
                       </td>
                       <td>
-                        {hasCandidate && item.skor_kemiripan > 0 ? (
-                          <span style={{ color: item.skor_kemiripan >= 85 ? '#15803d' : '#b45309', fontWeight: 700 }}>
-                            {Math.round(item.skor_kemiripan)}%
+                        {hasCandidate && hasReviewScore ? (
+                          <span style={{ color: item.skor_kemiripan! >= 85 ? '#15803d' : '#b45309', fontWeight: 700 }}>
+                            {Math.round(item.skor_kemiripan!)}%
                           </span>
                         ) : (
-                          <span style={{ color: '#94a3b8' }}>—</span>
+                          <span style={{ color: '#94a3b8' }}>{hasCandidate ? 'Belum ada skor' : 'Tidak ada kandidat'}</span>
                         )}
                       </td>
                       <td>
                         <div style={{ marginBottom: 4 }}>
                           {item.status === 'perlu_tinjau' && <span style={{ color: '#b45309', fontWeight: 600 }}>Perlu Tinjau</span>}
                           {item.status === 'perlu_mapping_kamar' && <span style={{ color: '#b91c1c', fontWeight: 600 }}>Perlu Mapping Kamar</span>}
-                          {item.status === 'digabung' && <span style={{ color: '#15803d', fontWeight: 600 }}>Digabung</span>}
+                          {item.status === 'digabung' && <span style={{ color: '#15803d', fontWeight: 600 }}>{item.keputusan_admin === 'terkonfirmasi' ? 'Terkonfirmasi ke Master' : 'Digabung'}</span>}
                           {item.status === 'terpisah' && <span style={{ color: '#475569', fontWeight: 600 }}>Terpisah</span>}
                         </div>
+                        {item.keputusan_admin === 'terkonfirmasi' && <small style={{ color: '#15803d', display: 'block' }}>Terkonfirmasi ke master</small>}
+                        {item.perlu_review_ulang === true && <small style={{ color: '#b45309', display: 'block', fontWeight: 600 }}>Kandidat workbook berubah, perlu review ulang</small>}
+                        {item.status_provenance === 'PERLU_VERIFIKASI' && <small style={{ color: '#b91c1c', display: 'block' }}>Asal Excel belum dapat dibuktikan</small>}
+                        {item.status_tindak_lanjut === 'terpisah_belum_ada_di_master' && <small style={{ color: '#b45309', display: 'block' }}>Perlu tindak lanjut pembuatan master</small>}
                         {isRoomMismatch && (
                           <small style={{ color: '#d97706', display: 'block', marginTop: 2 }}>
                             Peringatan: Kamar di data lama ({item.kode_kamar_sumber}), tapi master belum terisi kamar.
@@ -1874,7 +2317,7 @@ export function DataMasterPage() {
                         )}
                       </td>
                       <td>
-                        {item.status !== 'digabung' && item.status !== 'terpisah' && (
+                        {!isClosed && (
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                             <button
                               type="button"
@@ -1882,7 +2325,7 @@ export function DataMasterPage() {
                               style={{ padding: '6px 12px', fontSize: '0.85em', fontWeight: 600 }}
                               onClick={() => openReviewModal(item)}
                             >
-                              Gabungkan
+                              {isAutoCreateReview ? 'Gabungkan' : hasCandidate ? 'Konfirmasi Kandidat' : 'Pilih Kandidat'}
                             </button>
                             <button
                               type="button"
@@ -1962,24 +2405,30 @@ export function DataMasterPage() {
             <header className="santri-modal-header review-modal-header">
               <div>
                 <h2 id="review-modal-title">Verifikasi & Penggabungan Data Santri</h2>
-                <p>Sumber Data: {activeReviewItem.sumber_sheet} • Baris ke-{activeReviewItem.baris_sumber}</p>
+                <p>Data sumber: {activeReviewItem.sumber_file_excel || 'Belum terpetakan'} • Sheet {activeReviewItem.sumber_sheet_excel || '—'} • Baris {activeReviewItem.sumber_baris_excel ?? activeReviewItem.baris_sumber}</p>
+                <p style={{ marginTop: 4, fontSize: 12, color: '#475569' }}>
+                  Referensi pencocokan: {activeReviewItem.review_file_excel || '—'} / {activeReviewItem.review_sheet_excel || 'REVIEW_MATCH'}!{activeReviewItem.review_baris_excel ?? '—'}
+                </p>
+                <p style={{ marginTop: 4, fontSize: 12, color: '#475569' }}>
+                  Status sumber: <strong>{activeReviewItem.status_sumber_review || 'REVIEW'}</strong> · Tipe row: <strong>{activeReviewItem.tipe_review === 'santri_auto_create' ? 'Santri auto-create' : activeReviewItem.tipe_review === 'kandidat_workbook' ? 'Kandidat workbook' : 'Perlu verifikasi manual'}</strong>
+                </p>
               </div>
               <button type="button" className="santri-modal-close" aria-label="Tutup modal" disabled={isMerging} onClick={closeReviewModal}>×</button>
             </header>
 
             <div className="santri-modal-body review-modal-body">
               {/* Score Banner */}
-              <div className={`review-match-banner ${activeReviewItem.skor_kemiripan >= 80 ? 'high-match' : ''}`}>
+              <div className={`review-match-banner ${activeReviewItem.skor_kemiripan !== null && activeReviewItem.skor_kemiripan >= 80 ? 'high-match' : ''}`}>
                 <div>
                   <span style={{ fontSize: 15, fontWeight: 700 }}>
-                    {activeReviewItem.skor_kemiripan >= 80 ? 'Kemiripan Sangat Tinggi' : 'Kemiripan Sedang (Perlu Evaluasi)'}
+                    {activeReviewItem.skor_kemiripan === null ? 'Skor Kemiripan Belum Tersedia' : activeReviewItem.skor_kemiripan >= 80 ? 'Kemiripan Sangat Tinggi' : 'Kemiripan Sedang (Perlu Evaluasi)'}
                   </span>
                   <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
-                    Tingkat kemiripan penulisan nama sebesar <strong>{Math.round(activeReviewItem.skor_kemiripan)}%</strong>
+                    {activeReviewItem.skor_kemiripan === null ? 'Workbook tidak memberikan skor kemiripan untuk baris ini.' : <>Tingkat kemiripan penulisan nama sebesar <strong>{Math.round(activeReviewItem.skor_kemiripan)}%</strong></>}
                   </div>
                 </div>
-                <span className="schedule-label" style={{ backgroundColor: activeReviewItem.skor_kemiripan >= 80 ? '#dcfce7' : '#fef3c7', color: activeReviewItem.skor_kemiripan >= 80 ? '#15803d' : '#b45309', fontWeight: 700, fontSize: 14 }}>
-                  {Math.round(activeReviewItem.skor_kemiripan)}% Match
+                <span className="schedule-label" style={{ backgroundColor: activeReviewItem.skor_kemiripan !== null && activeReviewItem.skor_kemiripan >= 80 ? '#dcfce7' : '#fef3c7', color: activeReviewItem.skor_kemiripan !== null && activeReviewItem.skor_kemiripan >= 80 ? '#15803d' : '#b45309', fontWeight: 700, fontSize: 14 }}>
+                  {activeReviewItem.skor_kemiripan === null ? 'Skor —' : `${Math.round(activeReviewItem.skor_kemiripan)}% Match`}
                 </span>
               </div>
 
@@ -1987,7 +2436,7 @@ export function DataMasterPage() {
               <div className="review-compare-grid">
                 {/* Source Box */}
                 <div className="review-compare-card source">
-                  <div className="review-card-title source-title">Data Sumber Review</div>
+                  <div className="review-card-title source-title">Data Sumber Excel Mentah</div>
                   <div className="review-field-group">
                     <div className="review-field-label">Nama Sumber</div>
                     <div className="review-field-value" style={{ fontSize: 15, color: '#1e293b' }}>{activeReviewItem.nama_sumber}</div>
@@ -2008,6 +2457,12 @@ export function DataMasterPage() {
                       <div className="review-field-value" style={{ fontSize: 12, color: '#475569' }}>{activeReviewItem.data_tambahan}</div>
                     </div>
                   )}
+                  {activeReviewItem.no_id_induk_kandidat_sumber && (
+                    <div className="review-field-group">
+                      <div className="review-field-label">ID Kandidat dari Workbook</div>
+                      <div className="review-field-value" style={{ fontSize: 12, fontFamily: 'monospace' }}>{activeReviewItem.no_id_induk_kandidat_sumber}</div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Target Master Box */}
@@ -2016,7 +2471,7 @@ export function DataMasterPage() {
                   
                   {/* Selected Target Preview */}
                   {(() => {
-                    const selectedSantri = santriList.find(s => s.santri_id === selectedCandidateId);
+                    const selectedSantri = reviewCandidates.find(s => s.santri_id === selectedCandidateId);
                     const defaultName = activeReviewItem.nama_kandidat || activeReviewItem.nama_santri_otomatis;
                     const displayName = selectedSantri ? selectedSantri.nama : (defaultName || 'Pilih Kandidat Master');
                     const displayKamar = selectedSantri ? (selectedSantri.nama_kamar || 'Belum terisi') : (activeReviewItem.kamar_kandidat || activeReviewItem.kamar_santri_otomatis || 'Belum terisi');
@@ -2061,8 +2516,14 @@ export function DataMasterPage() {
                           style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 6 }}
                         />
                         <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 4, background: 'white', border: '1px solid #cbd5e1', borderRadius: 6 }}>
-                          {santriList
-                            .filter(s => !candidateSearchText.trim() || s.nama.toLowerCase().includes(candidateSearchText.toLowerCase()))
+                          {reviewCandidates
+                            .filter(s => {
+                              const needle = candidateSearchText.trim().toLowerCase();
+                              return !needle
+                                || s.nama.toLowerCase().includes(needle)
+                                || String(s.no_id_induk || '').toLowerCase().includes(needle)
+                                || String(s.nis || '').toLowerCase().includes(needle);
+                            })
                             .slice(0, 20)
                             .map(s => (
                               <button
@@ -2094,10 +2555,29 @@ export function DataMasterPage() {
                 </div>
               </div>
 
-              {/* Info Notice */}
               <div style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: 10, fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
-                <strong>Dampak Penggabungan:</strong> Seluruh riwayat absensi, perizinan, dan pelanggaran dari santri otomatis akan dialihkan ke data santri master terpilih. Profil master yang masih kosong akan otomatis dilengkapi dari data sumber.
+                {activeReviewItem.santri_otomatis_id ? (
+                  <><strong>Dampak Penggabungan:</strong> Riwayat absensi, perizinan, dan pelanggaran dari source santri auto-create akan dialihkan ke data santri master terpilih. Source akan diarsipkan, bukan dihapus.</>
+                ) : (
+                  <><strong>Konfirmasi Kandidat:</strong> Row ini hanya berasal dari `REVIEW_MATCH`; sistem akan menautkan sumber ke santri master tanpa memindahkan transaksi atau membuat duplikat santri.</>
+                )}
               </div>
+              <div className="review-field-group" style={{ marginTop: 12 }}>
+                <label className="review-field-label" htmlFor="review-decision-note">Catatan keputusan (opsional)</label>
+                <textarea
+                  id="review-decision-note"
+                  value={decisionNote}
+                  onChange={event => setDecisionNote(event.target.value.slice(0, 255))}
+                  maxLength={255}
+                  rows={2}
+                  placeholder="Alasan atau konteks keputusan Admin..."
+                  style={{ width: '100%', resize: 'vertical', minHeight: 58, padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10, fontSize: 12, color: '#475569' }}>
+                <input type="checkbox" checked={separateMasterExists} onChange={event => setSeparateMasterExists(event.target.checked)} />
+                Jika memilih Terpisah, master kedua sudah tersedia di data master.
+              </label>
             </div>
 
             <footer className="santri-modal-footer review-modal-footer">
@@ -2113,7 +2593,7 @@ export function DataMasterPage() {
               <div className="review-modal-footer-right">
                 <button type="button" className="secondary-button" disabled={isMerging} onClick={closeReviewModal}>Batal</button>
                 <button type="button" className="primary-button" disabled={isMerging || !selectedCandidateId} onClick={() => void confirmMergeInModal()}>
-                  {isMerging ? 'Memproses Merge...' : 'Konfirmasi & Gabungkan Data'}
+                  {isMerging ? 'Memproses...' : activeReviewItem.santri_otomatis_id ? 'Konfirmasi & Gabungkan Data' : 'Konfirmasi Kandidat'}
                 </button>
               </div>
             </footer>

@@ -15,6 +15,24 @@ use Illuminate\Support\Str;
 
 class PelanggaranController extends Controller
 {
+    /**
+     * Sanitasi string input: menghapus script/style block, tag HTML, null byte, dan normalisasi spasi.
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $clean = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $value);
+        $clean = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', '', $clean);
+        $clean = strip_tags($clean);
+        $clean = str_replace(chr(0), '', $clean);
+        $clean = trim(preg_replace('/\s+/u', ' ', $clean));
+
+        return $clean === '' ? null : $clean;
+    }
+
     public function getKategori(Request $request)
     {
         if (Gate::forUser($request->user())->denies('viewAny', Pelanggaran::class)) {
@@ -35,6 +53,24 @@ class PelanggaranController extends Controller
     {
         abort_unless(in_array($request->user()->jabatan, ['Admin', 'Keamanan'], true), 403, 'Hanya Admin atau Keamanan yang dapat mengelola master pelanggaran.');
         $data = $request->validate(['kode_pasal' => 'required|string|max:30', 'kategori' => 'required|in:Ringan,Sedang,Berat,Kewajiban', 'uraian_pelanggaran' => 'required|string|max:1000', 'poin_maks' => 'required|integer|min:1|max:100', 'jenis' => 'required|in:Pelanggaran,Meninggalkan Kewajiban']);
+
+        $data['kode_pasal'] = $this->sanitizeInput($data['kode_pasal']);
+        $data['uraian_pelanggaran'] = $this->sanitizeInput($data['uraian_pelanggaran']);
+
+        if (!$data['kode_pasal']) {
+            return response()->json([
+                'message' => 'Kode pasal tidak boleh kosong atau hanya berisi tag HTML.',
+                'errors' => ['kode_pasal' => ['Kode pasal tidak valid.']],
+            ], 422);
+        }
+
+        if (!$data['uraian_pelanggaran']) {
+            return response()->json([
+                'message' => 'Uraian pelanggaran tidak boleh kosong atau hanya berisi tag HTML.',
+                'errors' => ['uraian_pelanggaran' => ['Uraian pelanggaran tidak valid.']],
+            ], 422);
+        }
+
         $id = DB::table('kategori_pelanggaran')->insertGetId([...$data, 'status_aktif' => 'Aktif', 'created_at' => now(), 'updated_at' => now()]);
         return response()->json(DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->first(), 201);
     }
@@ -50,6 +86,27 @@ class PelanggaranController extends Controller
             'jenis' => 'sometimes|in:Pelanggaran,Meninggalkan Kewajiban',
             'status_aktif' => 'sometimes|in:Aktif,Tidak Aktif',
         ]);
+
+        if (array_key_exists('kode_pasal', $data)) {
+            $data['kode_pasal'] = $this->sanitizeInput($data['kode_pasal']);
+            if (!$data['kode_pasal']) {
+                return response()->json([
+                    'message' => 'Kode pasal tidak boleh kosong atau hanya berisi tag HTML.',
+                    'errors' => ['kode_pasal' => ['Kode pasal tidak valid.']],
+                ], 422);
+            }
+        }
+
+        if (array_key_exists('uraian_pelanggaran', $data)) {
+            $data['uraian_pelanggaran'] = $this->sanitizeInput($data['uraian_pelanggaran']);
+            if (!$data['uraian_pelanggaran']) {
+                return response()->json([
+                    'message' => 'Uraian pelanggaran tidak boleh kosong atau hanya berisi tag HTML.',
+                    'errors' => ['uraian_pelanggaran' => ['Uraian pelanggaran tidak valid.']],
+                ], 422);
+            }
+        }
+
         DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->update([...$data, 'updated_at' => now()]);
         return response()->json(DB::table('kategori_pelanggaran')->where('kategori_pelanggaran_id', $id)->first());
     }
@@ -71,7 +128,15 @@ class PelanggaranController extends Controller
         $query = DB::table('pelanggaran')
             ->join('kategori_pelanggaran', 'pelanggaran.kategori_pelanggaran_id', '=', 'kategori_pelanggaran.kategori_pelanggaran_id')
             ->join('santri', 'pelanggaran.santri_id', '=', 'santri.santri_id')
-            ->select('pelanggaran.*', 'santri.nama as nama_santri', 'kategori_pelanggaran.uraian_pelanggaran', 'kategori_pelanggaran.kategori', 'kategori_pelanggaran.poin_maks');
+            ->select(
+                'pelanggaran.*',
+                'santri.nama as nama_santri',
+                'santri.foto_path',
+                'santri.foto_uploaded_at',
+                'kategori_pelanggaran.uraian_pelanggaran',
+                'kategori_pelanggaran.kategori',
+                'kategori_pelanggaran.poin_maks'
+            );
 
         if ($petugas->jabatan === 'Pembina Kamar') {
             SantriAccess::scopeAssigned($query, $petugas);
@@ -124,6 +189,8 @@ class PelanggaranController extends Controller
 
             $row->can_edit = $canEdit;
             $row->is_locked = $isLocked;
+            $row->foto_url = $row->foto_path ? MediaUrl::santriPhoto((int) $row->santri_id, $row->foto_uploaded_at) : null;
+            unset($row->foto_path, $row->foto_uploaded_at);
             return $row;
         });
 
@@ -153,7 +220,8 @@ class PelanggaranController extends Controller
             'file.file' => 'Bukti foto harus berupa file yang dapat diunggah.',
             'file.image' => 'Bukti pendukung harus berupa gambar yang valid.',
             'file.mimes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
-            'file.max' => 'Ukuran bukti foto maksimal 5 MB.',
+            'file.mimetypes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
+            'file.max' => 'Ukuran bukti foto maksimal 1 MB.',
         ]);
 
         $petugas = Auth::user();
@@ -164,6 +232,8 @@ class PelanggaranController extends Controller
         if (Gate::forUser($petugas)->denies('create', $model)) {
             return response()->json(['message' => 'Role kamu tidak memiliki akses ini.'], 403);
         }
+
+        $data['keterangan'] = $this->sanitizeInput($data['keterangan'] ?? null);
 
         // Handle Custom / Manual violation input
         if ((int) $data['kategori_pelanggaran_id'] === 0 || !empty($data['uraian_pelanggaran_custom'])) {
@@ -182,6 +252,14 @@ class PelanggaranController extends Controller
                 'poin.max' => 'Jumlah poin pelanggaran manual maksimal 100.',
             ]);
 
+            $cleanCustomDescription = $this->sanitizeInput($data['uraian_pelanggaran_custom'] ?? null);
+            if (!$cleanCustomDescription) {
+                return response()->json([
+                    'message' => 'Nama atau uraian pelanggaran baru tidak boleh kosong atau hanya berisi tag HTML.',
+                    'errors' => ['uraian_pelanggaran_custom' => ['Nama atau uraian pelanggaran baru tidak valid.']],
+                ], 422);
+            }
+
             $customCategory = strtolower(trim($data['kategori_custom']));
             if ($petugas->jabatan === 'Pembina Kamar' && $customCategory !== 'ringan') {
                 return response()->json(['message' => 'Pembina Kamar hanya dapat menginput pelanggaran Ringan'], 403);
@@ -194,7 +272,7 @@ class PelanggaranController extends Controller
             $kategoriId = DB::table('kategori_pelanggaran')->insertGetId([
                 'kode_pasal' => $kodePasal,
                 'kategori' => $data['kategori_custom'],
-                'uraian_pelanggaran' => trim($data['uraian_pelanggaran_custom']),
+                'uraian_pelanggaran' => $cleanCustomDescription,
                 'poin_maks' => (int) $data['poin'],
                 'jenis' => $data['kategori_custom'] === 'Kewajiban' ? 'Meninggalkan Kewajiban' : 'Pelanggaran',
                 'status_aktif' => 'Aktif',
@@ -327,6 +405,15 @@ class PelanggaranController extends Controller
             ->first();
 
         $poin = $kategori->poin_maks ?? 0;
+        $cleanKeterangan = $this->sanitizeInput($validated['keterangan'] ?? null);
+        $cleanAlasanKoreksi = $this->sanitizeInput($validated['alasan_koreksi']);
+
+        if (!$cleanAlasanKoreksi || mb_strlen($cleanAlasanKoreksi) < 5) {
+            return response()->json([
+                'message' => 'Alasan koreksi tidak boleh kosong atau hanya berisi tag HTML.',
+                'errors' => ['alasan_koreksi' => ['Alasan koreksi minimal 5 karakter setelah dibersihkan.']],
+            ], 422);
+        }
 
         DB::table('pelanggaran')
             ->where('pelanggaran_id', $id)
@@ -334,10 +421,10 @@ class PelanggaranController extends Controller
                 'santri_id' => $validated['santri_id'],
                 'kategori_pelanggaran_id' => $validated['kategori_pelanggaran_id'],
                 'tanggal' => $validated['tanggal'],
-                'keterangan' => $validated['keterangan'],
+                'keterangan' => $cleanKeterangan,
                 'poin' => $poin,
                 'diubah_oleh_petugas_id' => $request->user()->petugas_id,
-                'alasan_koreksi' => $validated['alasan_koreksi'],
+                'alasan_koreksi' => $cleanAlasanKoreksi,
                 'waktu_koreksi' => now(),
                 'jumlah_koreksi' => DB::raw('COALESCE(jumlah_koreksi, 0) + 1'),
                 'updated_at' => now(),
@@ -379,7 +466,8 @@ class PelanggaranController extends Controller
             'file.file' => 'Bukti foto harus berupa file yang dapat diunggah.',
             'file.image' => 'Bukti pendukung harus berupa gambar yang valid.',
             'file.mimes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
-            'file.max' => 'Ukuran bukti foto maksimal 5 MB.',
+            'file.mimetypes' => 'Bukti foto harus berformat JPG, PNG, atau WEBP.',
+            'file.max' => 'Ukuran bukti foto maksimal 1 MB.',
         ]);
 
         $file = $request->file('file');

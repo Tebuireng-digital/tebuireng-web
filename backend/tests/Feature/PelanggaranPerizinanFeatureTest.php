@@ -92,6 +92,8 @@ class PelanggaranPerizinanFeatureTest extends TestCase
             'keterangan' => 'Pelanggaran uji',
         ])->assertCreated()->assertJsonStructure(['message', 'pelanggaran_id']);
 
+        $this->assertDatabaseCount('lampiran_pelanggaran', 0);
+
         $pelanggaranId = $response->json('pelanggaran_id');
         $uploadResponse = $this->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
             'file' => UploadedFile::fake()->image('bukti.jpg'),
@@ -143,6 +145,173 @@ class PelanggaranPerizinanFeatureTest extends TestCase
             ->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
                 'file' => UploadedFile::fake()->create('bukti.pdf', 10, 'application/pdf'),
             ])->assertStatus(422);
+    }
+
+    public function test_violation_create_endpoint_accepts_attachment_on_initial_submit(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->post('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => 'Pelanggaran dengan bukti awal',
+            'file' => UploadedFile::fake()->image('bukti-awal.jpg'),
+        ])->assertCreated();
+
+        $pelanggaranId = $response->json('pelanggaran_id');
+        $lampiran = DB::table('lampiran_pelanggaran')
+            ->where('pelanggaran_id', $pelanggaranId)
+            ->first();
+
+        $this->assertNotNull($lampiran);
+        $this->assertSame('image/jpeg', $lampiran->mime_type);
+        $this->assertSame('bukti-awal.jpg', $lampiran->original_filename);
+        Storage::disk('local')->assertExists($lampiran->path_file);
+    }
+
+    public function test_violation_create_endpoint_rejects_invalid_attachment_contract(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $this->withHeaders(['Accept' => 'application/json'])
+            ->post('/api/pelanggaran', [
+                'santri_id' => $this->santriId,
+                'kategori_pelanggaran_id' => $this->kategoriId,
+                'tanggal' => now()->toDateString(),
+                'keterangan' => 'Pelanggaran dengan file tidak valid',
+                'file' => UploadedFile::fake()->create('bukti.pdf', 10, 'application/pdf'),
+            ])->assertStatus(422)
+            ->assertJsonValidationErrors(['file']);
+    }
+
+    public function test_violation_can_be_created_without_attachment_because_proof_is_optional(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => 'Pelanggaran tanpa bukti foto',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('pelanggaran', [
+            'pelanggaran_id' => $response->json('pelanggaran_id'),
+            'santri_id' => $this->santriId,
+        ]);
+        $this->assertDatabaseCount('lampiran_pelanggaran', 0);
+    }
+
+    public function test_violation_attachment_rejects_file_above_one_megabyte(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => 'Pelanggaran uji',
+        ])->assertCreated();
+
+        $pelanggaranId = $response->json('pelanggaran_id');
+
+        $this->withHeaders(['Accept' => 'application/json'])
+            ->post('/api/pelanggaran/'.$pelanggaranId.'/lampiran', [
+                'file' => UploadedFile::fake()->image('bukti-besar.jpg')->size(1025),
+            ])->assertStatus(422);
+    }
+
+    public function test_violation_store_sanitizes_keterangan_before_saving(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => $this->kategoriId,
+            'tanggal' => now()->toDateString(),
+            'keterangan' => "  <script>alert('x')</script><b>Tidak ikut apel</b>\n\n  ",
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('pelanggaran', [
+            'pelanggaran_id' => $response->json('pelanggaran_id'),
+            'keterangan' => 'Tidak ikut apel',
+        ]);
+    }
+
+    public function test_violation_store_sanitizes_custom_category_description_before_creating_master_record(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $response = $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => 0,
+            'uraian_pelanggaran_custom' => " <div>Keluar kamar tanpa izin</div><script>alert('x')</script> ",
+            'kategori_custom' => 'Ringan',
+            'poin' => 5,
+            'tanggal' => now()->toDateString(),
+        ])->assertCreated();
+
+        $pelanggaran = DB::table('pelanggaran')
+            ->where('pelanggaran_id', $response->json('pelanggaran_id'))
+            ->first();
+
+        $this->assertNotNull($pelanggaran);
+        $this->assertDatabaseHas('kategori_pelanggaran', [
+            'kategori_pelanggaran_id' => $pelanggaran->kategori_pelanggaran_id,
+            'uraian_pelanggaran' => 'Keluar kamar tanpa izin',
+        ]);
+    }
+
+    public function test_violation_store_rejects_custom_description_that_becomes_empty_after_sanitization(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $this->postJson('/api/pelanggaran', [
+            'santri_id' => $this->santriId,
+            'kategori_pelanggaran_id' => 0,
+            'uraian_pelanggaran_custom' => "<script>alert('x')</script><div>   </div>",
+            'kategori_custom' => 'Ringan',
+            'poin' => 5,
+            'tanggal' => now()->toDateString(),
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['uraian_pelanggaran_custom']);
+    }
+
+    public function test_master_violation_category_payload_is_sanitized_on_store_and_update(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+
+        $created = $this->postJson('/api/pelanggaran/kategori', [
+            'kode_pasal' => ' <b>Pasal X</b> ',
+            'kategori' => 'Ringan',
+            'uraian_pelanggaran' => " <p>Tidak piket</p><script>alert('x')</script> ",
+            'poin_maks' => 3,
+            'jenis' => 'Pelanggaran',
+        ])->assertCreated();
+
+        $kategoriId = $created->json('kategori_pelanggaran_id');
+
+        $this->assertDatabaseHas('kategori_pelanggaran', [
+            'kategori_pelanggaran_id' => $kategoriId,
+            'kode_pasal' => 'Pasal X',
+            'uraian_pelanggaran' => 'Tidak piket',
+        ]);
+
+        $this->patchJson('/api/pelanggaran/kategori/'.$kategoriId, [
+            'kode_pasal' => " <span>Pasal Y</span> ",
+            'uraian_pelanggaran' => " <strong>Tidak ikut kegiatan</strong><style>body{display:none}</style> ",
+        ])->assertOk();
+
+        $this->assertDatabaseHas('kategori_pelanggaran', [
+            'kategori_pelanggaran_id' => $kategoriId,
+            'kode_pasal' => 'Pasal Y',
+            'uraian_pelanggaran' => 'Tidak ikut kegiatan',
+        ]);
     }
 
     public function test_violation_accepts_actual_points_up_to_category_maximum(): void

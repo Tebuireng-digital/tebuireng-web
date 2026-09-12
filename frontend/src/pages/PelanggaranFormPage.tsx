@@ -59,6 +59,10 @@ const focusableFieldIds: Record<string, string> = {
   catatan: 'violation-notes',
 };
 
+const PELANGGARAN_PHOTO_MAX_BYTES = 1024 * 1024;
+const PELANGGARAN_PHOTO_ACCEPT = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp';
+const PELANGGARAN_PHOTO_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/pjpeg', 'image/jpg', 'image/png', 'image/webp']);
+
 const getReadableValidationMessage = (error: any): string => {
   const responseData = error.response?.data;
   const validationErrors = responseData?.errors as Record<string, string[]> | undefined;
@@ -68,14 +72,14 @@ const getReadableValidationMessage = (error: any): string => {
     : responseData?.message || error.message;
   const normalizedMessage = String(rawMessage || '').toLowerCase();
 
-  if (firstValidationField === 'file' || normalizedMessage.includes('file field must be a file')) {
-    return 'Bukti foto tidak terbaca. Silakan pilih ulang foto JPG, PNG, atau WEBP dengan ukuran maksimal 5 MB.';
+  if (normalizedMessage.includes('harus berupa file') || normalizedMessage.includes('file field must be a file')) {
+    return 'Bukti foto tidak terbaca. Silakan pilih ulang foto JPG, PNG, atau WEBP dengan ukuran maksimal 1 MB.';
   }
-  if (normalizedMessage.includes('mimes') || normalizedMessage.includes('must be a file of type')) {
+  if (normalizedMessage.includes('mimes') || normalizedMessage.includes('mimetypes') || normalizedMessage.includes('must be a file of type') || normalizedMessage.includes('berformat')) {
     return 'Format bukti foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
   }
-  if (normalizedMessage.includes('may not be greater than') || normalizedMessage.includes('maximum')) {
-    return 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 5 MB.';
+  if (normalizedMessage.includes('may not be greater than') || normalizedMessage.includes('maximum') || normalizedMessage.includes('maksimal')) {
+    return 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 1 MB.';
   }
   if (firstValidationField && validationFieldMessages[firstValidationField]) {
     return validationFieldMessages[firstValidationField];
@@ -190,7 +194,7 @@ export function PelanggaranFormPage() {
 
     const file = event.target.files[0];
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    if (!PELANGGARAN_PHOTO_ALLOWED_MIME_TYPES.has(file.type.toLowerCase())) {
       const message = 'Format bukti foto belum sesuai. Gunakan file JPG, PNG, atau WEBP.';
       setFieldErrors(previous => ({ ...previous, file: message }));
       setFormFeedback({ type: 'error', title: 'Bukti foto belum sesuai', message });
@@ -198,8 +202,8 @@ export function PelanggaranFormPage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      const message = 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 5 MB.';
+    if (file.size > PELANGGARAN_PHOTO_MAX_BYTES) {
+      const message = 'Ukuran bukti foto terlalu besar. Gunakan foto dengan ukuran maksimal 1 MB.';
       setFieldErrors(previous => ({ ...previous, file: message }));
       setFormFeedback({ type: 'error', title: 'Bukti foto belum sesuai', message });
       event.target.value = '';
@@ -978,13 +982,13 @@ export function PelanggaranFormPage() {
                 <div className="form-section-header">
                   <div>
                     <h3 id="section-evidence-title" className="form-section-title">Bukti & Keterangan</h3>
-                    <p className="form-section-desc">Tambahkan foto bila ada, lalu tulis kronologi singkat agar petugas lain bisa meninjau dengan cepat.</p>
+                    <p className="form-section-desc">Tambahkan foto bila ada, atau lanjut tanpa foto lalu tulis kronologi singkat agar petugas lain bisa meninjau dengan cepat.</p>
                   </div>
                 </div>
 
                 <div className="violation-field-stack">
-                  <label htmlFor="violation-photo">Bukti Foto (Kamera HP / File)</label>
-                  <small className="field-hint violation-photo-hint">Foto pendukung dianjurkan bila ada konteks insiden atau barang bukti. Jika tidak ada foto, pastikan catatan kronologi cukup jelas.</small>
+                  <label htmlFor="violation-photo">Bukti Foto (Opsional)</label>
+                  <small className="field-hint violation-photo-hint">Foto pendukung dianjurkan bila ada konteks insiden atau barang bukti. Jika tidak ada foto, data pelanggaran tetap bisa disimpan selama catatan kronologi cukup jelas.</small>
                   <div className="file-dropzone-custom">
                     {fotoPreview ? (
                       <div className="photo-preview-container">
@@ -1014,12 +1018,12 @@ export function PelanggaranFormPage() {
                         </div>
                         <div className="photo-dropzone-text">
                           <strong>Tambahkan Foto Pendukung</strong>
-                          <span>JPG, PNG, atau WEBP. Maksimal 5 MB.</span>
+                          <span>Opsional. JPG, PNG, atau WEBP. Maksimal 1 MB.</span>
                         </div>
                         <input
                           id="violation-photo"
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept={PELANGGARAN_PHOTO_ACCEPT}
                           onChange={handleFotoChange}
                           ref={photoInputRef}
                           className="photo-input-hidden"

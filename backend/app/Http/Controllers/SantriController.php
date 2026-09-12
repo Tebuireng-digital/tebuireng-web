@@ -44,6 +44,10 @@ class SantriController extends Controller
             });
         }
 
+        if ($request->has('santri_id')) {
+            $query->where('santri.santri_id', $request->santri_id);
+        }
+
         if ($request->has('kamar_id')) {
             $query->where('santri.kamar_id', $request->kamar_id);
         }
@@ -94,9 +98,11 @@ class SantriController extends Controller
             'foto' => MediaStorage::validationRules('santri_photo', true),
         ], [
             'foto.required' => 'File foto wajib diunggah.',
+            'foto.file' => 'File foto harus berupa berkas yang dapat diunggah.',
             'foto.image' => 'File yang diunggah harus berupa gambar.',
             'foto.mimes' => 'Format foto harus berupa JPG, JPEG, PNG, atau WEBP.',
-            'foto.max' => 'Ukuran foto maksimal 5 MB.',
+            'foto.mimetypes' => 'Format foto harus berupa JPG, JPEG, PNG, atau WEBP.',
+            'foto.max' => 'Ukuran foto maksimal 1 MB.',
         ]);
 
         $file = $request->file('foto');
@@ -138,11 +144,11 @@ class SantriController extends Controller
     public function showFoto(Request $request, int $id)
     {
         $petugas = $request->user();
-        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar'], true)) {
+        if (!in_array($petugas->jabatan, ['Admin', 'Keamanan', 'Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'], true)) {
             return response()->json(['message' => 'Role Anda tidak dapat membuka foto santri.'], 403);
         }
 
-        if ($petugas->jabatan === 'Pembina Kamar' && !SantriAccess::canAccess($petugas, $id)) {
+        if (in_array($petugas->jabatan, ['Pembina Kamar', 'Wali Kelas', 'Piket Pengajian'], true) && !SantriAccess::canAccess($petugas, $id)) {
             return response()->json(['message' => 'Anda tidak memiliki akses untuk melihat foto santri ini.'], 403);
         }
 

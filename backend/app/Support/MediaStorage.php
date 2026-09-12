@@ -10,8 +10,20 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MediaStorage
 {
+    /** @var array<string, string> */
+    private const MIME_EXTENSION_MAP = [
+        'image/jpeg' => 'jpg',
+        'image/pjpeg' => 'jpg',
+        'image/jpg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+
+    private const DEFAULT_FILENAME = 'media-file';
+    private const MAX_FILENAME_LENGTH = 120;
+
     /**
-     * @return array{disk:string,directory:string,image:bool,mimes:array<int,string>,max_kilobytes:int,fallback_read_disks:array<int,string>}
+     * @return array{disk:string,directory:string,image:bool,mimes:array<int,string>,mime_types:array<int,string>,max_kilobytes:int,fallback_read_disks:array<int,string>}
      */
     public static function profile(string $profile): array
     {
@@ -26,6 +38,7 @@ class MediaStorage
             'directory' => trim((string) ($config['directory'] ?? ''), '/'),
             'image' => (bool) ($config['image'] ?? false),
             'mimes' => array_values(array_filter((array) ($config['mimes'] ?? []), 'is_string')),
+            'mime_types' => array_values(array_filter((array) ($config['mime_types'] ?? []), 'is_string')),
             'max_kilobytes' => (int) ($config['max_kilobytes'] ?? 5120),
             'fallback_read_disks' => array_values(array_filter((array) ($config['fallback_read_disks'] ?? []), 'is_string')),
         ];
@@ -45,6 +58,10 @@ class MediaStorage
 
         if ($config['mimes'] !== []) {
             $rules[] = 'mimes:'.implode(',', $config['mimes']);
+        }
+
+        if ($config['mime_types'] !== []) {
+            $rules[] = 'mimetypes:'.implode(',', $config['mime_types']);
         }
 
         if ($config['max_kilobytes'] > 0) {
@@ -68,7 +85,8 @@ class MediaStorage
     {
         $config = self::profile($profile);
         $disk = $config['disk'];
-        $extension = strtolower((string) ($file->guessExtension() ?: $file->extension() ?: $file->getClientOriginalExtension() ?: 'bin'));
+        $storedMimeType = self::detectMimeType($file);
+        $extension = self::resolveStorageExtension($storedMimeType, $file);
         $fileName = Str::uuid().'.'.$extension;
         $path = $file->storeAs($config['directory'], $fileName, $disk);
 
@@ -76,19 +94,66 @@ class MediaStorage
             throw new RuntimeException('File gagal disimpan ke media storage.');
         }
 
-        $storedMimeType = $file->getMimeType()
-            ?: $file->getClientMimeType()
-            ?: (Storage::disk($disk)->mimeType($path) ?: 'application/octet-stream');
-        $storedSize = (int) ($file->getSize() ?? Storage::disk($disk)->size($path) ?? 0);
+        $storedSize = (int) (Storage::disk($disk)->size($path) ?? $file->getSize() ?? 0);
 
         return [
             'disk' => $disk,
             'path' => $path,
-            'original_filename' => $file->getClientOriginalName(),
-            'mime_type' => (string) $storedMimeType,
+            'original_filename' => self::sanitizeOriginalFilename($file->getClientOriginalName(), $extension),
+            'mime_type' => $storedMimeType,
             'size_bytes' => $storedSize,
-            'sha256' => hash_file('sha256', $file->getRealPath()) ?: '',
+            'sha256' => self::resolveSha256($file, $disk, $path),
         ];
+    }
+
+    private static function detectMimeType(UploadedFile $file): string
+    {
+        $mimeType = trim((string) ($file->getMimeType() ?: $file->getClientMimeType() ?: ''));
+
+        return $mimeType !== '' ? strtolower($mimeType) : 'application/octet-stream';
+    }
+
+    private static function resolveStorageExtension(string $mimeType, UploadedFile $file): string
+    {
+        $mappedExtension = self::MIME_EXTENSION_MAP[$mimeType] ?? null;
+        if ($mappedExtension !== null) {
+            return $mappedExtension;
+        }
+
+        $guessedExtension = self::normalizeExtension($file->guessExtension());
+
+        return $guessedExtension !== '' ? $guessedExtension : 'bin';
+    }
+
+    private static function sanitizeOriginalFilename(string $filename, string $extension): string
+    {
+        $baseName = basename(str_replace('\\', '/', $filename));
+        $stem = (string) pathinfo($baseName, PATHINFO_FILENAME);
+
+        return self::buildSanitizedFilename($stem !== '' ? $stem : $baseName, $extension);
+    }
+
+    private static function resolveSha256(UploadedFile $file, string $disk, string $path): string
+    {
+        $realPath = $file->getRealPath();
+        if (is_string($realPath) && $realPath !== '' && is_file($realPath)) {
+            $hash = hash_file('sha256', $realPath);
+            if (is_string($hash) && $hash !== '') {
+                return $hash;
+            }
+        }
+
+        try {
+            $storedAbsolutePath = Storage::disk($disk)->path($path);
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if (!is_string($storedAbsolutePath) || $storedAbsolutePath === '' || !is_file($storedAbsolutePath)) {
+            return '';
+        }
+
+        return hash_file('sha256', $storedAbsolutePath) ?: '';
     }
 
     public static function delete(?string $disk, ?string $path): void
@@ -184,8 +249,46 @@ class MediaStorage
 
     public static function sanitizeDownloadFilename(string $filename): string
     {
-        $clean = trim(str_replace(["\r", "\n", '"', '\\'], ' ', $filename));
+        $baseName = basename(str_replace('\\', '/', $filename));
+        $stem = (string) pathinfo($baseName, PATHINFO_FILENAME);
+        $extension = (string) pathinfo($baseName, PATHINFO_EXTENSION);
 
-        return $clean !== '' ? $clean : 'media-file';
+        return self::buildSanitizedFilename($stem !== '' ? $stem : $baseName, $extension !== '' ? $extension : null);
+    }
+
+    private static function buildSanitizedFilename(string $stem, ?string $extension = null): string
+    {
+        $cleanStem = self::sanitizeFilenameStem($stem);
+        $cleanExtension = self::normalizeExtension($extension);
+
+        if ($cleanExtension === '') {
+            $trimmed = mb_strimwidth($cleanStem, 0, self::MAX_FILENAME_LENGTH, '');
+
+            return $trimmed !== '' ? $trimmed : self::DEFAULT_FILENAME;
+        }
+
+        $maxStemLength = max(1, self::MAX_FILENAME_LENGTH - strlen($cleanExtension) - 1);
+        $trimmedStem = mb_strimwidth($cleanStem, 0, $maxStemLength, '');
+
+        return ($trimmedStem !== '' ? $trimmedStem : self::DEFAULT_FILENAME).'.'.$cleanExtension;
+    }
+
+    private static function sanitizeFilenameStem(string $value): string
+    {
+        $clean = Str::of($value)
+            ->replaceMatches('/[\x00-\x1F\x7F]+/u', ' ')
+            ->replace(['.', '/', '\\', '"'], ' ')
+            ->ascii()
+            ->replaceMatches('/[^A-Za-z0-9 _-]+/', ' ')
+            ->squish()
+            ->trim(' _-')
+            ->value();
+
+        return $clean !== '' ? $clean : self::DEFAULT_FILENAME;
+    }
+
+    private static function normalizeExtension(?string $extension): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', strtolower((string) $extension)) ?: '';
     }
 }

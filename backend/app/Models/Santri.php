@@ -25,6 +25,7 @@ class Santri extends Authenticatable
 
     protected $fillable = [
         'nis',
+        'no_id_induk',
         'nama',
         'unit_id',
         'kamar_id',

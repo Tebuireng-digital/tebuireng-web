@@ -13,6 +13,72 @@ class ImportMasterPutraCommand extends Command
 
     protected $description = 'Import master santri putra, roster, dan antrean REVIEW_MATCH secara idempoten';
 
+    private const REVIEW_SHEET = 'REVIEW_MATCH';
+
+    private const FIXED_REVIEW_PROVENANCE = [
+        'MADIN' => [
+            'file' => 'xlsx/Database_Kelas_Madin_2026_2027.xlsx',
+            'sheet' => 'Database Siswa Madin',
+        ],
+        'PBM' => [
+            'file' => 'xlsx/Database_Takhassus (belajar habis maghrib)_2026_2027.xlsx',
+            'sheet' => 'Database Takhassus',
+        ],
+        'PBS' => [
+            'file' => "xlsx/Database_Kelompok_AlQuran (belajar habis subuh)_2026_2027.xlsx",
+            'sheet' => "Database Al-Qur'an",
+        ],
+    ];
+
+    /**
+     * Attendance files are split by unit and room. The map is explicit so a
+     * REVIEW_MATCH row can be traced to one concrete workbook and sheet.
+     *
+     * @var array<string, array{file: string, sheet: string}>
+     */
+    private const ABSENSI_KAMAR_PROVENANCE = [
+        'AB 201' => ['file' => 'data/26-ABSENSI MTS .xlsx', 'sheet' => 'AB 201'],
+        'AB 202' => ['file' => 'data/26-ABSENSI SMP.xlsx', 'sheet' => 'AB 202'],
+        'AB 204' => ['file' => 'data/26-ABSENSI SMP.xlsx', 'sheet' => 'AB 204'],
+        'AB 307' => ['file' => 'data/26-ABSENSI MTS .xlsx', 'sheet' => 'AB 307'],
+        'AB 308' => ['file' => 'data/26-ABSENSI MTS .xlsx', 'sheet' => 'AB 308'],
+        'K BAWAH' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'K BAWAH'],
+        'KI 102' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'KI 102'],
+        'KI 307' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'KI 307'],
+        'KI 309' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'KI 309'],
+        'MA 101' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 101'],
+        'MA 102' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 102'],
+        'MA 103' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 103'],
+        'MA 204' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 204'],
+        'MA 205' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 205'],
+        'MA 206' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 206'],
+        'MA 207' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 207'],
+        'MA 208' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => 'MA 208'],
+        'MA 209' => ['file' => 'data/26-ABSENSI MASS.xlsx', 'sheet' => 'MA 209'],
+        'MA 316' => ['file' => 'data/26-ABSENSI MASS.xlsx', 'sheet' => 'MA 316'],
+        'MA 317' => ['file' => 'data/26-ABSENSI MASS.xlsx', 'sheet' => 'MA 317'],
+        'MA 318' => ['file' => 'data/26-ABSENSI MASS.xlsx', 'sheet' => 'MA 318'],
+        'MU 201' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '201'],
+        'MU 202' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '202'],
+        'MU 203' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '203'],
+        'MU 301' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '301'],
+        'MU 302' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '302'],
+        'MU 303' => ['file' => 'data/26 - ABSENSI MMHA.xlsx', 'sheet' => '303'],
+        'RD 101' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'RD 101'],
+        'RD 203' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'RD 203'],
+        'RD 204' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'RD 204'],
+        'SH 306' => ['file' => 'data/26-ABSENSI SMP.xlsx', 'sheet' => 'SH 306'],
+        'SK 103' => ['file' => 'data/26-ABSENSI MTS .xlsx', 'sheet' => 'SK 103'],
+        'SMK 102' => ['file' => 'data/26-ABSENSI SMK.xlsx', 'sheet' => 'SMK 102'],
+        'SMK 104' => ['file' => 'data/26-ABSENSI SMK.xlsx', 'sheet' => 'SMK 104'],
+        'SMK 201' => ['file' => 'data/26-ABSENSI SMK.xlsx', 'sheet' => 'SMK 201'],
+        'SMK 202' => ['file' => 'data/26-ABSENSI SMK.xlsx', 'sheet' => 'SMK 202'],
+        'SZ 305' => ['file' => 'data/26-ABSENSI SMP.xlsx', 'sheet' => 'SZ 305'],
+        'Y BAWAH' => ['file' => 'data/26-ABSENSI SMA .xlsx', 'sheet' => 'Y BAWAHh'],
+    ];
+
+    private string $reviewWorkbookReference = 'data/MASTER_DATA_SANTRI_PUTRA_2026_2027.xlsx';
+
     public function handle(): int
     {
         $path = $this->option('file') ?: base_path('../data/MASTER_DATA_SANTRI_PUTRA_2026_2027.xlsx');
@@ -20,6 +86,8 @@ class ImportMasterPutraCommand extends Command
             $this->error("Workbook master putra tidak ditemukan: {$path}");
             return self::FAILURE;
         }
+
+        $this->reviewWorkbookReference = $this->relativeWorkbookPath($path);
 
         $sheets = $this->readSheets($path);
         $master = $sheets['MASTER_PUTRA'] ?? [];
@@ -241,18 +309,144 @@ class ImportMasterPutraCommand extends Command
     private function upsertReview(array $row, int $sourceRow): void
     {
         $sheet = strtoupper(trim($row['jenis_data'] ?? 'REVIEW_MATCH'));
-        DB::table('santri_import_reviews')->updateOrInsert(
-            ['sumber_sheet' => $sheet, 'baris_sumber' => (int) ($row['baris_sumber'] ?? $sourceRow)],
-            [
-                'nama_sumber' => $this->clean($row['nama_sumber'] ?? ''),
-                'kode_kamar_sumber' => $this->clean($row['kamar_sumber'] ?? '') ?: null,
-                'data_tambahan' => $this->clean($row['kelompok_atau_kelas'] ?? '') ?: null,
-                'kandidat_santri_id' => DB::table('santri')->where('no_id_induk', trim($row['no_id_induk_kandidat'] ?? ''))->value('santri_id'),
-                'skor_kemiripan' => is_numeric($row['similarity_percent'] ?? null) ? (float) $row['similarity_percent'] : null,
-                'status' => in_array(strtoupper(trim($row['status'] ?? '')), ['UNMATCHED', 'REVIEW'], true) ? 'perlu_tinjau' : 'perlu_tinjau',
-                'updated_at' => now(),
-            ]
+        $sourceRowNumber = (int) ($row['baris_sumber'] ?? $sourceRow);
+        $sourceStatus = strtoupper(trim($row['status'] ?? ''));
+        if (!in_array($sourceStatus, ['EXACT', 'REVIEW', 'UNMATCHED'], true)) {
+            $sourceStatus = 'REVIEW';
+        }
+
+        $candidateNoId = trim($row['no_id_induk_kandidat'] ?? '');
+        $candidateId = $candidateNoId === ''
+            ? null
+            : DB::table('santri')->where('no_id_induk', $candidateNoId)->value('santri_id');
+        $sourceName = $this->clean($row['nama_sumber'] ?? '');
+        $sourceRoom = $this->clean($row['kamar_sumber'] ?? '') ?: null;
+        $candidateName = $this->clean($row['nama_kandidat'] ?? '') ?: null;
+        $candidateRoom = $this->clean($row['kamar_kandidat'] ?? '') ?: null;
+        $score = is_numeric($row['similarity_percent'] ?? null) ? (float) $row['similarity_percent'] : null;
+        $provenance = $this->resolveReviewProvenance($sheet, $sourceRoom);
+        $provenanceStatus = $provenance ? 'TERVERIFIKASI' : 'PERLU_VERIFIKASI';
+        $sourceIdentity = $this->buildSourceIdentity($sheet, $sourceRoom, $sourceRowNumber, $provenance);
+
+        $existing = DB::table('santri_import_reviews')
+            ->where('identitas_sumber', $sourceIdentity)
+            ->first();
+        if (!$existing) {
+            // Reuse a legacy row only when its source content is the same.
+            // This preserves an existing decision without reintroducing the
+            // old collision between repeated row numbers across room sheets.
+            $existing = DB::table('santri_import_reviews')
+                ->where('sumber_sheet', $sheet)
+                ->where('baris_sumber', $sourceRowNumber)
+                ->where('nama_sumber', $sourceName)
+                ->where(function ($query) use ($sourceRoom): void {
+                    $sourceRoom === null
+                        ? $query->whereNull('kode_kamar_sumber')
+                        : $query->where('kode_kamar_sumber', $sourceRoom);
+                })
+                ->where('identitas_sumber', 'like', 'LEGACY|%')
+                ->first();
+        }
+        $isFinalDecision = $existing && in_array($existing->status, ['digabung', 'terpisah'], true);
+        $sourceChangedAfterDecision = $isFinalDecision && (
+            (string) ($existing->no_id_induk_kandidat_sumber ?? '') !== $candidateNoId
+            || (string) ($existing->nama_kandidat_sumber ?? '') !== (string) ($candidateName ?? '')
+            || (string) ($existing->kamar_kandidat_sumber ?? '') !== (string) ($candidateRoom ?? '')
+            || (string) ($existing->status_sumber_review ?? '') !== $sourceStatus
+            || (float) ($existing->skor_kemiripan ?? 0) !== (float) ($score ?? 0)
+            || (string) ($existing->sumber_file_excel ?? '') !== (string) ($provenance['file'] ?? '')
+            || (string) ($existing->sumber_sheet_excel ?? '') !== (string) ($provenance['sheet'] ?? '')
+            || (int) ($existing->sumber_baris_excel ?? 0) !== $sourceRowNumber
+            || (string) ($existing->status_provenance ?? '') !== $provenanceStatus
         );
+
+        $reviewType = $existing?->santri_otomatis_id
+            ? 'santri_auto_create'
+            : ($candidateId ? 'kandidat_workbook' : 'verifikasi_manual');
+
+        $payload = [
+            'nama_sumber' => $sourceName,
+            'kode_kamar_sumber' => $sourceRoom,
+            'data_tambahan' => $this->clean($row['kelompok_atau_kelas'] ?? '') ?: null,
+            'skor_kemiripan' => $score,
+            'status_sumber_review' => $sourceStatus,
+            'tipe_review' => $reviewType,
+            'no_id_induk_kandidat_sumber' => $candidateNoId ?: null,
+            'nama_kandidat_sumber' => $candidateName,
+            'kamar_kandidat_sumber' => $candidateRoom,
+            'sumber_file_excel' => $provenance['file'] ?? null,
+            'sumber_sheet_excel' => $provenance['sheet'] ?? null,
+            'sumber_baris_excel' => $sourceRowNumber,
+            'review_file_excel' => $this->reviewWorkbookReference,
+            'review_sheet_excel' => self::REVIEW_SHEET,
+            'review_baris_excel' => $sourceRow,
+            'status_provenance' => $provenanceStatus,
+            'identitas_sumber' => $sourceIdentity,
+            'perlu_review_ulang' => (bool) ($existing?->perlu_review_ulang || $sourceChangedAfterDecision),
+            'updated_at' => now(),
+        ];
+
+        if (!$existing) {
+            $payload += [
+                'kandidat_santri_id' => $candidateId,
+                'status' => 'perlu_tinjau',
+                'keputusan_admin' => 'belum_diputuskan',
+                'created_at' => now(),
+            ];
+            DB::table('santri_import_reviews')->insert([
+                'sumber_sheet' => $sheet,
+                'baris_sumber' => $sourceRowNumber,
+                ...$payload,
+            ]);
+            return;
+        }
+
+        // Sync hanya memperbarui konteks sumber. Keputusan final dan kandidat
+        // yang dipilih Admin tetap dipertahankan agar tidak tertimpa workbook.
+        if (!$isFinalDecision) {
+            $payload['kandidat_santri_id'] = $candidateId;
+            $payload['status'] = $existing->status === 'perlu_mapping_kamar'
+                ? 'perlu_mapping_kamar'
+                : 'perlu_tinjau';
+        }
+
+        DB::table('santri_import_reviews')
+            ->where('review_id', $existing->review_id)
+            ->update($payload);
+    }
+
+    /** @return array{file: string, sheet: string}|null */
+    private function resolveReviewProvenance(string $sourceType, ?string $sourceRoom): ?array
+    {
+        if ($sourceType !== 'ABSENSI_KAMAR') {
+            return self::FIXED_REVIEW_PROVENANCE[$sourceType] ?? null;
+        }
+
+        $room = strtoupper(trim(preg_replace('/\s+/', ' ', (string) $sourceRoom) ?? ''));
+        return self::ABSENSI_KAMAR_PROVENANCE[$room] ?? null;
+    }
+
+    private function buildSourceIdentity(string $sourceType, ?string $sourceRoom, int $sourceRow, ?array $provenance): string
+    {
+        if ($provenance) {
+            return implode('|', [$provenance['file'], $provenance['sheet'], $sourceRow]);
+        }
+
+        return implode('|', ['UNRESOLVED', $sourceType, $sourceRoom ?: '-', $sourceRow]);
+    }
+
+    private function relativeWorkbookPath(string $path): string
+    {
+        $absolutePath = realpath($path) ?: $path;
+        $projectRoot = realpath(base_path('..')) ?: dirname(base_path());
+        $absolutePath = str_replace('\\', '/', $absolutePath);
+        $projectRoot = rtrim(str_replace('\\', '/', $projectRoot), '/');
+
+        if (str_starts_with($absolutePath, $projectRoot.'/')) {
+            return ltrim(substr($absolutePath, strlen($projectRoot)), '/');
+        }
+
+        return basename($absolutePath);
     }
 
     private function closeLegacyAttendanceAssignments(): void

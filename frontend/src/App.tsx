@@ -206,6 +206,7 @@ function Layout() {
     if (!el) return;
 
     const handleMouseEnter = () => {
+      if (window.matchMedia('(max-width: 768px)').matches) return;
       if (unhoverTimerRef.current) {
         window.clearTimeout(unhoverTimerRef.current);
         unhoverTimerRef.current = null;
@@ -532,9 +533,9 @@ function Layout() {
       <div className={`sidebar-overlay ${isMobileMenuOpen ? 'open' : ''}`} onClick={closeMenu}></div>
 
       {/* Sidebar Rail / Layout Container for Desktop */}
-      <aside ref={railRef} className="sidebar-rail collapsed">
+      <aside ref={railRef} className={`sidebar-rail ${isMobileViewport ? '' : 'collapsed'}`}>
         <div
-          className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''} collapsed`}
+          className={`premium-sidebar ${isMobileMenuOpen ? 'open' : ''} ${isMobileViewport ? '' : 'collapsed'}`}
           aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
           inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
         >
